@@ -1,7 +1,24 @@
+import re
+
 from allauth.account.signals import user_signed_up
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
+
+
+def _default_owner_label(user):
+    """Label for the auto-created org/workspace names.
+
+    "My Workspace" for every account makes workspace switchers and the admin
+    ambiguous once a second account or workspace exists. Personalize from the
+    user's name, falling back to the email local-part, then to "My".
+    """
+    name = (getattr(user, "name", "") or "").strip()
+    if name:
+        return name.split()[0]
+    local_part = user.email.split("@", 1)[0].split("+", 1)[0]
+    local = re.sub(r"[._\-]+", " ", local_part).strip()
+    return local.title() if local else "My"
 
 
 def provision_organization_and_workspace(user):
@@ -18,8 +35,9 @@ def provision_organization_and_workspace(user):
     if OrgMembership.objects.filter(user=user).exists():
         return
 
+    label = _default_owner_label(user)
     org = Organization.objects.create(
-        name="My Organization",
+        name=f"{label}'s Organization",
         default_timezone="UTC",
     )
 
@@ -32,7 +50,7 @@ def provision_organization_and_workspace(user):
     # Create a default workspace so the user can start immediately
     workspace = Workspace.objects.create(
         organization=org,
-        name="My Workspace",
+        name=f"{label}'s Workspace",
         description="Your default workspace. Rename it anytime.",
     )
 
