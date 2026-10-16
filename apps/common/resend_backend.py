@@ -55,6 +55,8 @@ class ResendAPIBackend(BaseEmailBackend):
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
+                # Resend's edge 403s the default Python-urllib UA.
+                "User-Agent": "NahaLabs/1.0 (+https://nahalabs.co.za)",
             },
             method="POST",
         )
