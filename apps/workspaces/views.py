@@ -104,6 +104,27 @@ def workspace_settings(request, workspace_id):
             messages.success(request, f'Workspace "{workspace_name}" has been permanently deleted.')
             return redirect("organizations:workspaces")
 
+        if action == "content_agent" and is_owner_or_manager:
+            from apps.content_agent.models import AgentConfig
+
+            config, _ = AgentConfig.objects.get_or_create(workspace=workspace)
+            config.enabled = request.POST.get("agent_enabled") == "1"
+            config.niche = request.POST.get("niche", "").strip()[:255]
+            raw_topics = request.POST.get("topics", "")
+            config.topics = [t.strip() for t in raw_topics.replace(",", "\n").splitlines() if t.strip()][:20]
+            try:
+                config.posts_per_run = min(10, max(1, int(request.POST.get("posts_per_run", 3))))
+            except (TypeError, ValueError):
+                config.posts_per_run = 3
+            try:
+                config.min_interval_hours = min(168, max(1, int(request.POST.get("min_interval_hours", 20))))
+            except (TypeError, ValueError):
+                config.min_interval_hours = 20
+            config.save()
+            state = "enabled" if config.enabled else "disabled"
+            messages.success(request, f"Content agent {state} for this workspace.")
+            return redirect("workspaces:settings", workspace_id=workspace.id)
+
         name = request.POST.get("name", "").strip()
 
         if name:
@@ -143,6 +164,8 @@ def workspace_settings(request, workspace_id):
     can_archive = is_owner_or_manager and not workspace.is_archived and not is_last_active
     can_delete = is_owner_or_manager and not is_last_active
 
+    agent_config = getattr(workspace, "content_agent_config", None)
+
     return render(
         request,
         "workspaces/settings.html",
@@ -152,6 +175,8 @@ def workspace_settings(request, workspace_id):
             "is_owner_or_manager": is_owner_or_manager,
             "can_archive": can_archive,
             "can_delete": can_delete,
+            "agent_config": agent_config,
+            "agent_topics_text": "\n".join(agent_config.topics) if agent_config else "",
         },
     )
 
