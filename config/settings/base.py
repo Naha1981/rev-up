@@ -335,7 +335,10 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@localhost")
 # its own — so this is the only point where a runaway loop can be stopped.
 EMAIL_BACKEND = "apps.common.mail.BudgetedEmailBackend"
 
-if EMAIL_BACKEND_TYPE == "smtp":
+if EMAIL_BACKEND_TYPE == "resend":
+    EMAIL_INNER_BACKEND = "apps.common.resend_backend.ResendAPIBackend"
+    RESEND_API_KEY = env("RESEND_API_KEY", default="")
+elif EMAIL_BACKEND_TYPE == "smtp":
     EMAIL_INNER_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     EMAIL_HOST = env("EMAIL_HOST", default="localhost")
     EMAIL_PORT = env.int("EMAIL_PORT", default=587)
