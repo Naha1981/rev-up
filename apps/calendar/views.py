@@ -375,9 +375,20 @@ def _publish_tab_counts(workspace, request):
     if tag:
         approvals = approvals.filter(tags__contains=[tag])
 
+    # Channel-less drafts (no PlatformPost yet) count as drafts too - see
+    # `_get_tab_context`. Hidden when a channel filter is active, mirroring
+    # the tab list.
+    orphan_drafts_count = 0
+    if not channels:
+        orphan_qs = Post.objects.for_workspace(workspace.id).filter(platform_posts__isnull=True)
+        tag = request.GET.get("tag")
+        if tag:
+            orphan_qs = orphan_qs.filter(tags__contains=[tag])
+        orphan_drafts_count = orphan_qs.count()
+
     return {
         "queue_count": _pp(status="scheduled"),
-        "drafts_count": _pp(status="draft"),
+        "drafts_count": _pp(status="draft") + orphan_drafts_count,
         "approvals_count": approvals.distinct().count(),
         "sent_count": _pp(status__in=["published", "failed"]),
     }
@@ -519,7 +530,28 @@ def _get_tab_context(request, workspace, tab: str) -> dict:
             .order_by("-post__updated_at")
         )
         platform_posts = _apply_pp_publish_filters(platform_posts, request)
-        return {**base_ctx, "platform_posts": platform_posts[:200]}
+        # Drafts saved before any channel is selected have no PlatformPost rows
+        # at all, so the query above can never surface them. derive_post_status
+        # treats zero children as "draft", so list them here as channel-less
+        # rows. A channel filter can't match them (they have no channel), so
+        # they drop out whenever one is active - same as the badge count.
+        orphan_drafts = Post.objects.none()
+        if not _get_channel_filters(request):
+            orphan_drafts = (
+                Post.objects.for_workspace(workspace.id)
+                .filter(platform_posts__isnull=True)
+                .select_related("author")
+                .prefetch_related("media_attachments__media_asset")
+                .order_by("-updated_at")
+            )
+            tag = request.GET.get("tag")
+            if tag:
+                orphan_drafts = orphan_drafts.filter(tags__contains=[tag])
+        return {
+            **base_ctx,
+            "platform_posts": platform_posts[:200],
+            "orphan_drafts": orphan_drafts[:100],
+        }
 
     if tab == "sent":
         platform_posts = (

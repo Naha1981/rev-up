@@ -2511,9 +2511,12 @@ def drafts_list(request, workspace_id):
     # A post is a "draft" when at least one of its PlatformPost children is in
     # the draft state and none have moved into a more advanced workflow stage.
     # Easiest correct query: any post whose only child statuses are "draft".
+    # A draft is any post that has NOT advanced past the draft stage on any
+    # channel - including posts saved with no channel selected yet (zero
+    # PlatformPost children), which derive_post_status([]) reports as "draft".
+    # Requiring a draft child hid those posts from every list.
     drafts = (
         Post.objects.for_workspace(workspace.id)
-        .filter(platform_posts__status="draft")
         .exclude(
             platform_posts__status__in=[
                 "pending_review",
@@ -2522,6 +2525,10 @@ def drafts_list(request, workspace_id):
                 "scheduled",
                 "publishing",
                 "published",
+                "failed",
+                "rejected",
+                "changes_requested",
+                "on_hold",
             ]
         )
         .distinct()
