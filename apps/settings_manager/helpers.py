@@ -52,3 +52,17 @@ def get_setting(workspace_id, key, workspace_org_id=None, default=_UNSET):
 
     # 3. Fall back to the deployment default, then the application default
     return _fallback()
+
+
+GENERATED_POST_MODES = frozenset({"draft", "approval", "auto"})
+
+
+def get_generated_post_mode(workspace_id, workspace_org_id=None):
+    """Return the workspace's disposition for upstream-generated content.
+
+    One of "draft" | "approval" | "auto", from the
+    ``publishing.generated_post_mode`` setting cascade. Unknown values
+    fall back to "approval" - the human-in-the-loop default.
+    """
+    mode = get_setting(workspace_id, "publishing.generated_post_mode", workspace_org_id)
+    return mode if mode in GENERATED_POST_MODES else "approval"

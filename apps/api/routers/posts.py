@@ -22,6 +22,7 @@ import uuid
 
 from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from ninja import Router
 from ninja.errors import HttpError
 
@@ -35,6 +36,7 @@ from apps.api.middleware import (
 )
 from apps.api.schemas import (
     CreatePostRequest,
+    IngestPostRequest,
     PostResponse,
     ScheduleRequest,
     UpdatePostRequest,
@@ -280,6 +282,105 @@ def create(request, payload: CreatePostRequest):
         # round-3 flagged that the previous ``payload.idempotency_key``
         # was None on header-only requests and left the claim wedged in
         # PENDING until the 24h sweep.
+        release_idempotent_claim(api_key=request.api_key, idempotency_key=idempotency_key)
+        raise HttpError(422, str(exc)) from exc
+    except Exception:
+        release_idempotent_claim(api_key=request.api_key, idempotency_key=idempotency_key)
+        raise
+    return status_code, body
+
+
+@router.post("/ingest", response={201: PostResponse}, summary="Ingest one upstream-generated post")
+def ingest(request, payload: IngestPostRequest):
+    """Hand-off endpoint for the pipeline stages above BrightBean
+    (content agent, demand-radar/WhatsApp aggregation): push one finished
+    post, and the workspace's ``publishing.generated_post_mode`` setting
+    decides whether it lands in Approvals, Drafts, or the publisher.
+
+    Same guard rails as ``POST /posts/`` - rate limits, idempotency,
+    allowlist scoping, per-platform quota on the auto path, audit log.
+    """
+    from apps.composer.services import approval_gate_allows_schedule, transition_platform_post
+    from apps.settings_manager.helpers import get_generated_post_mode
+
+    enforce_http_rate_limits(request, is_write=True)
+    _require_perm(request, "create_posts")
+
+    workspace = request.api_key.workspace
+    mode = get_generated_post_mode(workspace.id, workspace.organization_id)
+
+    if mode == "auto":
+        # Scheduling implies "ready to publish without further human
+        # review" - the same contract ``publish_directly`` gates
+        # everywhere else. A workspace approval workflow that blocks
+        # direct scheduling degrades auto -> approval instead.
+        _require_perm(request, "publish_directly")
+        if not approval_gate_allows_schedule(workspace, None):
+            mode = "approval"
+
+    social_account = _resolve_account(request, payload.social_account_id)
+    if mode == "auto" and payload.scheduled_at is not None and payload.scheduled_at <= timezone.now():
+        # A past time fires on the next publisher tick anyway, but a
+        # caller passing one almost certainly made a timezone mistake.
+        raise HttpError(422, "scheduled_at must be in the future when supplied.")
+
+    fingerprint = fingerprint_request(request.method or "POST", request.path, payload.dict(by_alias=True))
+    idempotency_key = payload.idempotency_key or request.headers.get("Idempotency-Key") or None
+    try:
+        disposition, replay_status, replay_body = claim_idempotency_slot(
+            api_key=request.api_key,
+            idempotency_key=idempotency_key,
+            fingerprint=fingerprint,
+        )
+    except ValueError as exc:
+        raise HttpError(422, str(exc)) from exc
+    if disposition == "replay":
+        return replay_status, replay_body
+    if disposition == "in_flight":
+        raise HttpError(
+            409,
+            "An identical request with this idempotency_key is still in flight; retry shortly.",
+        )
+
+    if mode == "auto":
+        try:
+            check_platform_quota(social_account)
+        except HttpError:
+            release_idempotent_claim(api_key=request.api_key, idempotency_key=idempotency_key)
+            raise
+
+    try:
+        scheduled = mode == "auto"
+        post = create_post(
+            workspace=workspace,
+            social_account=social_account,
+            caption=payload.caption,
+            media_asset_ids=payload.media_asset_ids,
+            title=payload.title,
+            first_comment=payload.first_comment,
+            internal_notes=payload.internal_notes,
+            scheduled_at=(payload.scheduled_at or timezone.now()) if scheduled else None,
+            author=request.user if not request.user.is_anonymous else None,
+            status="scheduled" if scheduled else "draft",
+        )
+        if mode == "approval":
+            for pp in post.platform_posts.all():
+                transition_platform_post(pp, "pending_review")
+        body = _post_to_response(request, post)
+        status_code = 201
+        log_audit_entry(
+            request,
+            action=f"post.ingest.{mode}",
+            target_id=post.id,
+            status_code=status_code,
+        )
+        finalize_idempotent_response(
+            api_key=request.api_key,
+            idempotency_key=idempotency_key,
+            status_code=status_code,
+            body=body.model_dump(mode="json"),
+        )
+    except ValueError as exc:
         release_idempotent_claim(api_key=request.api_key, idempotency_key=idempotency_key)
         raise HttpError(422, str(exc)) from exc
     except Exception:

@@ -241,6 +241,45 @@ class CreatePostRequest(Schema):
     )
 
 
+class IngestPostRequest(Schema):
+    """One generated post pushed by an upstream pipeline stage.
+
+    The workspace's ``publishing.generated_post_mode`` setting decides the
+    disposition - the caller never picks it:
+
+    * ``approval`` (default) - children land in ``pending_review``.
+    * ``draft`` - children stay ``draft`` for manual finishing.
+    * ``auto`` - children are ``scheduled`` at ``scheduled_at`` (default:
+      immediately) and the publisher picks them up on its next tick.
+      Requires the key to hold ``publish_directly``; degrades to
+      ``approval`` when the workspace's approval workflow mode blocks
+      direct scheduling.
+    """
+
+    social_account_id: uuid.UUID = Field(
+        ...,
+        description="ID of the SocialAccount to target. Must be in the key's allowlist.",
+    )
+    caption: str = Field(..., max_length=10_000)
+    title: str = Field(
+        "",
+        max_length=255,
+        description="Required on platforms where ``needs_title=true`` (YouTube, Pinterest, DEV.to). Ignored otherwise.",
+    )
+    first_comment: str = Field("", max_length=10_000)
+    internal_notes: str = Field("", max_length=10_000)
+    media_asset_ids: list[uuid.UUID] = Field(default_factory=list)
+    scheduled_at: dt.datetime | None = Field(
+        None,
+        description="UTC timestamp used only when the workspace mode resolves to ``auto``. Omit for publish-on-next-tick.",
+    )
+    idempotency_key: str | None = Field(
+        None,
+        max_length=128,
+        description="Optional client-chosen retry key. Same key + same body -> replay first response.",
+    )
+
+
 class UpdatePostRequest(Schema):
     caption: str | None = Field(None, max_length=10_000)
     title: str | None = Field(None, max_length=255)

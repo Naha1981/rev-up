@@ -11,9 +11,9 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import dataclass, field
-
 import time
+from dataclasses import dataclass, field
+from datetime import timedelta
 
 import httpx
 from django.conf import settings
@@ -146,27 +146,49 @@ def draft_posts(config, topics: list[str], *, client=None) -> list[Draft]:
 
 
 def queue_drafts_for_review(config, drafts: list[Draft], *, now=None) -> list[str]:
-    """Create composer Posts with one pending_review PlatformPost per
-    connected social account in the workspace. Returns created post ids."""
+    """Create composer Posts with one PlatformPost per connected social
+    account, dispositioned by the workspace's ``publishing.generated_post_mode``:
+
+    * ``approval`` (default) - children land in ``pending_review``.
+    * ``draft`` - children stay ``draft`` for manual finishing.
+    * ``auto`` - children are ``scheduled`` an hour apart starting one hour
+      from now, so the publisher picks them up in turn. Degrades to
+      ``approval`` when the workspace's approval workflow mode blocks
+      direct scheduling.
+
+    Returns created post ids."""
 
     from apps.composer.models import PlatformPost, Post
+    from apps.composer.services import approval_gate_allows_schedule
+    from apps.settings_manager.helpers import get_generated_post_mode
     from apps.social_accounts.models import SocialAccount
 
     now = now or timezone.now()
+    mode = get_generated_post_mode(config.workspace_id, config.workspace.organization_id)
+    if mode == "auto" and not approval_gate_allows_schedule(config.workspace, None):
+        mode = "approval"
+
     accounts = list(
         SocialAccount.objects.filter(
             workspace=config.workspace,
             connection_status=SocialAccount.ConnectionStatus.CONNECTED,
         )
     )
+    child_status = {
+        "draft": PlatformPost.Status.DRAFT,
+        "approval": PlatformPost.Status.PENDING_REVIEW,
+        "auto": PlatformPost.Status.SCHEDULED,
+    }[mode]
     created: list[str] = []
-    for draft in drafts:
+    for position, draft in enumerate(drafts):
         hashtags = " ".join(draft.hashtags)
         caption = f"{draft.caption}\n\n{hashtags}".strip() if hashtags else draft.caption
+        scheduled_at = now + timedelta(hours=position + 1) if mode == "auto" else None
         post = Post.objects.create(
             workspace=config.workspace,
             caption=caption,
             tags=["content-agent"],
+            scheduled_at=scheduled_at,
             internal_notes=(
                 f"Drafted by content-agent from topic: {draft.topic}\n"
                 "Verify facts before approving - agent drafts are unverified."
@@ -177,13 +199,14 @@ def queue_drafts_for_review(config, drafts: list[Draft], *, now=None) -> list[st
                 PlatformPost.objects.create(
                     post=post,
                     social_account=account,
-                    status=PlatformPost.Status.PENDING_REVIEW,
+                    status=child_status,
+                    scheduled_at=scheduled_at,
                 )
         created.append(str(post.id))
     return created
 
 
-def run_for_config(config, *, client=None) -> "object":
+def run_for_config(config, *, client=None) -> object:
     """Run the pipeline for one workspace config and record the outcome."""
 
     from .models import GenerationRun
