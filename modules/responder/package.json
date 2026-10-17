@@ -4,10 +4,14 @@
   "private": true,
   "description": "Vendored WhatsApp responder module (leadmachine-property) for nahalabs-growth-service. Dry-run default.",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "test": "node --test --import tsx __tests__/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
@@ -15,5 +19,7 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   },
-  "dependencies": { "pg": "^8.13.1" }
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
 }

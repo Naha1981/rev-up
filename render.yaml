@@ -49,3 +49,16 @@ services:
 databases:
   - name: brightbean-db
     plan: free
+  - type: web
+    name: nahalabs-responder
+    runtime: node
+    plan: free
+    buildCommand: cd modules/responder && npm ci && npm run build
+    startCommand: cd modules/responder && node dist/server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # WHATSAPP_MODE stays unset = dry-run. Live sends need Thabiso's explicit go.
+      # DATABASE_URL / WA_CLOUD_* / EVOLUTION_* / GOOGLE_* added in the dashboard
+      # when each stage is approved to go live. See modules/responder/.env.example.

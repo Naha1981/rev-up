@@ -10,5 +10,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src", "test"]
+  "include": ["server.ts", "pipeline.ts", "parser", "flow", "store", "transport", "webhooks", "intake", "__tests__"]
 }
