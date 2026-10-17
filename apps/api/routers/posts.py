@@ -292,7 +292,7 @@ def create(request, payload: CreatePostRequest):
 
 @router.post("/ingest", response={201: PostResponse}, summary="Ingest one upstream-generated post")
 def ingest(request, payload: IngestPostRequest):
-    """Hand-off endpoint for the pipeline stages above BrightBean
+    """Hand-off endpoint for the pipeline stages above RevUp
     (content agent, demand-radar/WhatsApp aggregation): push one finished
     post, and the workspace's ``publishing.generated_post_mode`` setting
     decides whether it lands in Approvals, Drafts, or the publisher.

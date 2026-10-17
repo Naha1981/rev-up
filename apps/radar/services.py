@@ -1,4 +1,4 @@
-"""Demand-radar -> BrightBean hand-off.
+"""Demand-radar -> RevUp hand-off.
 
 Polls a workspace's configured radar feed (the stage-2 demand radar, e.g.
 https://naha1981.github.io/nahalabs-radar/feed/pilot-7f3a.json), dedups by

@@ -179,7 +179,7 @@ def analytics_account(request: HttpRequest, workspace_id, account_id) -> HttpRes
         "range_choices": RANGE_CHOICES,
         "primary_color": primary_color,
         "platform_color": PLATFORM_COLOR.get(account.platform, "var(--primary)"),
-        # Copy for the "calculated by BrightBean" labels on derived metrics.
+        # Copy for the "calculated by RevUp" labels on derived metrics.
         "platform_name": services.platform_name(account),
         "content_noun": services.content_noun(account),
         "is_fresh": is_fresh,

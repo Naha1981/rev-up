@@ -1,1 +1,1 @@
-{% autoescape off %}Confirm your email for NahaLabs{% endautoescape %}
+{% autoescape off %}Confirm your email for RevUp{% endautoescape %}
