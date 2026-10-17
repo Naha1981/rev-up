@@ -1,0 +1,38 @@
+From: Property24 <alerts@property24.com>
+To: agent@exampleagency.co.za
+Subject: New enquiry from Property24 - 4 Bedroom House for Sale in Bryanston
+Date: Fri, 9 Oct 2026 09:55:10 +0200
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="p24boundary42"
+
+--p24boundary42
+Content-Type: text/plain; charset=UTF-8
+
+Please view this message in an HTML-capable mail client.
+
+--p24boundary42
+Content-Type: text/html; charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<html><body>
+<p>You=20have=20received=20a=20new=20enquiry=20from=20Property24.</p>
+<table>
+<tr><td>Listing:</td><td>4=20Bedroom=20House=20for=20Sale=20in=20Bryanston<=
+/td></tr>
+<tr><td>Listing=20number:</td><td>115222333</td></tr>
+<tr><td>Price:</td><td>R4,250,000</td></tr>
+</table>
+<p><b>Name:</b>=20Ayanda=20Ngcobo<br>
+<b>Email:</b>=20ayanda.ngcobo@example.co.za<br>
+<b>Contact=20number:</b>=20083=20555=206642</p>
+<p>Message:<br>
+We=20are=20relocating=20from=20Durban=20in=20December=20and=20would=20love=
+=20to=20view=20this=20weekend=20if=20possible.</p>
+<hr>
+<p>View=20the=20listing:=20<a=20href=3D"https://www.property24.com/for-sale=
+/bryanston/sandton/gauteng/115222333">https://www.property24.com/for-sale/b=
+ryanston/sandton/gauteng/115222333</a></p>
+<p>To=20stop=20receiving=20these=20alerts,=20update=20your=20settings.</p>
+</body></html>
+
+--p24boundary42--
