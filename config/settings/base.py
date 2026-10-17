@@ -220,7 +220,7 @@ if STORAGE_BACKEND.lower() == "s3":
     # serves MEDIA_ROOT, so the env var is deliberately ignored here.
     SERVE_MEDIA = False
     STORAGES["default"] = {
-        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+        "BACKEND": "config.storages.SupabaseS3Storage",
     }
     AWS_S3_ENDPOINT_URL = env("S3_ENDPOINT_URL", default="")
     AWS_ACCESS_KEY_ID = env("S3_ACCESS_KEY_ID", default="")
