@@ -88,3 +88,11 @@ class TestRadarIngest:
     def test_feed_without_account_warns_and_skips(self, workspace):
         WorkspaceSetting.objects.create(workspace=workspace, key="radar.feed_url", value="https://feed.example/pilot.json")
         assert ingest_feed_for_workspace(workspace, fetcher=_fetch(FEED))["mode"] == "no-account"
+
+    def test_account_needs_reconnect_skips_cleanly(self, workspace, radar_account):
+        _wire_workspace(workspace, radar_account)
+        radar_account.connection_status = SocialAccount.ConnectionStatus.ERROR
+        radar_account.save(update_fields=["connection_status"])
+        result = ingest_feed_for_workspace(workspace, fetcher=_fetch(FEED))
+        assert result == {"created": 0, "skipped": 0, "mode": "account-needs-reconnect"}
+        assert RadarIngestedItem.objects.filter(workspace=workspace).count() == 0

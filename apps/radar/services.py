@@ -72,6 +72,14 @@ def ingest_feed_for_workspace(workspace: Workspace, *, fetcher=fetch_feed) -> di
     except (SocialAccount.DoesNotExist, ValueError):
         logger.warning("radar: workspace %s radar account %s not found", workspace.id, account_id)
         return {"created": 0, "skipped": 0, "mode": "bad-account"}
+    if social_account.needs_reconnect:
+        logger.warning(
+            "radar: workspace %s radar account %s needs reconnect (status %s); skipping feed ingest",
+            workspace.id,
+            account_id,
+            social_account.connection_status,
+        )
+        return {"created": 0, "skipped": 0, "mode": "account-needs-reconnect"}
 
     max_items = int(get_setting(workspace.id, "radar.max_items_per_run", workspace.organization_id) or DEFAULT_MAX_ITEMS)
     mode = get_generated_post_mode(workspace.id, workspace.organization_id)
