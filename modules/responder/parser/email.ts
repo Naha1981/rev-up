@@ -93,9 +93,16 @@ function splitParts(raw: string, headers: Record<string, string>): Part[] {
 
 export function parseEmail(raw: string): ParsedEmail {
   const sep = raw.search(/\r?\n\r?\n/);
-  const headerBlock = sep === -1 ? raw : raw.slice(0, sep);
-  const bodyRaw = sep === -1 ? "" : raw.slice(sep).replace(/^(\r?\n){2}/, "");
-  const headers = parseHeaders(headerBlock);
+  let headerBlock = sep === -1 ? raw : raw.slice(0, sep);
+  let bodyRaw = sep === -1 ? "" : raw.slice(sep).replace(/^(\r?\n){2}/, "");
+  let headers = parseHeaders(headerBlock);
+  const KNOWN_HEADERS = ["from", "to", "subject", "date", "cc", "bcc", "reply-to", "message-id", "content-type", "content-transfer-encoding", "mime-version"];
+  if (!KNOWN_HEADERS.some((k) => k in headers)) {
+    // No real header block - console paste or plain-text snippet: everything is body.
+    headerBlock = "";
+    bodyRaw = raw;
+    headers = {};
+  }
 
   const parts = splitParts(bodyRaw, headers);
   const plain = parts.find((p) => /^text\/plain/i.test(p.contentType));
