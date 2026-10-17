@@ -89,11 +89,14 @@ class TestBackfillViewAnalyticsMigration:
 
     def test_reverse_drops_view_analytics_from_backfilled_keys(self, workspace):
         # A key that's exactly "full-scope catalog + view_analytics" matches
-        # the reverse predicate.
+        # the reverse predicate. The catalog is the migration's frozen
+        # pre-analytics set, NOT the live PERMISSION_KEYS: permissions added
+        # after the migration ran (e.g. use_responder) are not part of the
+        # backfill signature.
         key = _make_key(
             workspace,
             name="backfilled",
-            permissions=sorted(set(PERMISSION_KEYS)),
+            permissions=sorted(set(migration_module._PRE_ANALYTICS_FULL_SCOPE) | {"view_analytics"}),
         )
 
         migration_module.remove_view_analytics_from_backfilled_keys(_StubApps(), None)

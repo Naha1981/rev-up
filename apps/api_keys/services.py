@@ -167,7 +167,7 @@ def issue_api_key(
     requested = set(permissions or [])
     # Keys that only call social-account-free endpoints (e.g. the responder)
     # may be issued without an account allowlist.
-    if not sa_list and not requested <= {"use_responder"}:
+    if not sa_list and not (requested and requested <= {"use_responder"}):
         raise ValueError("An API key must allowlist at least one connected account.")
     for sa in sa_list:
         if sa.workspace_id != workspace.id:
@@ -272,7 +272,7 @@ def update_api_key(api_key: ApiKey, *, editor, permissions: list[str], social_ac
     requested = set(permissions or [])
     # Keys that only call social-account-free endpoints (e.g. the responder)
     # may be issued without an account allowlist.
-    if not sa_list and not requested <= {"use_responder"}:
+    if not sa_list and not (requested and requested <= {"use_responder"}):
         raise ValueError("An API key must allowlist at least one connected account.")
     for sa in sa_list:
         if sa.workspace_id != workspace.id:

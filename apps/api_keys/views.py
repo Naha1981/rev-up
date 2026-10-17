@@ -384,7 +384,10 @@ def issue_key(request):
         errors.append("Name is required.")
     if not workspace_id:
         errors.append("Workspace is required.")
-    if not account_ids:
+    # Keys whose grants are limited to account-free permissions (e.g.
+    # ``use_responder``) need no social accounts - mirrors the services
+    # layer's empty-allowlist rule so the UI doesn't force a bogus account.
+    if not account_ids and not (permission_keys and set(permission_keys) <= {"use_responder"}):
         errors.append("Select at least one connected account.")
 
     workspace = None
@@ -544,7 +547,7 @@ def edit_key(request, key_id):
     expires_at, exp_err = _parse_expires_at((request.POST.get("expires_at") or "").strip())
 
     errors: list[str] = []
-    if not account_ids:
+    if not account_ids and not (permission_keys and set(permission_keys) <= {"use_responder"}):
         errors.append("Select at least one connected account.")
     accounts, acct_err = _resolve_account_allowlist(account_ids, key.workspace)
     if acct_err:
