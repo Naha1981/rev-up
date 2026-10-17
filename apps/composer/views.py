@@ -24,13 +24,13 @@ from django.utils.html import strip_tags
 from django.utils.text import get_text_list
 from django.views.decorators.http import require_GET, require_POST
 
-from apps.composer.services import approval_gate_allows_schedule
 from apps.common.validators import (
     is_safe_url,
     parse_and_truncate_tag_string,
     parse_and_truncate_youtube_tag_string,
     safe_xml_fromstring,
 )
+from apps.composer.services import approval_gate_allows_schedule
 from apps.media_library.models import MediaAsset
 from apps.members.decorators import require_permission
 from apps.members.models import WorkspaceMembership
@@ -449,6 +449,51 @@ def _validate_required_media(request, post, workspace, action):
     which = "that account" if len(blocked) == 1 else "those accounts"
     sentences.append(f"Add {wanted} to this post, or deselect {which}.")
     return JsonResponse({"errors": {"media": " ".join(sentences)}}, status=400)
+
+
+# Platforms whose providers refuse to publish without a title.
+_TITLE_REQUIRED_PLATFORMS = frozenset({"devto"})
+
+
+def _validate_required_title(request, post, workspace, action):
+    """Refuse to commit a post when a selected platform needs a title it lacks.
+
+    DEV.to rejects titleless articles at publish time, so committing one can
+    only fail later - after the user has walked away, and after any other
+    platforms on the post may already have gone out. Mirror the provider's
+    rule here, while the composer can still surface the fix.
+    """
+    if action not in _PUBLISH_COMMITTING_ACTIONS:
+        return None
+    selected_ids = _parse_selected_account_ids(request.POST.get("selected_accounts", ""))
+    if not selected_ids:
+        return None
+
+    accounts = SocialAccount.objects.filter(
+        id__in=selected_ids, workspace=workspace, platform__in=_TITLE_REQUIRED_PLATFORMS
+    )
+    missing = []
+    for account in accounts:
+        override = request.POST.get(f"override_title_{account.id}", "").strip()
+        stored = ""
+        if post.pk:
+            stored = (
+                PlatformPost.objects.filter(post=post, social_account=account)
+                .values_list("platform_specific_title", flat=True)
+                .first()
+                or ""
+            )
+        if not (override or stored.strip() or (post.title or "").strip()):
+            missing.append(account)
+    if not missing:
+        return None
+
+    names = get_text_list(sorted({a.get_platform_display() for a in missing}), "and")
+    verb = "require" if len({a.platform for a in missing}) > 1 else "requires"
+    return JsonResponse(
+        {"errors": {"title": f"{names} {verb} a title. Set the post title before publishing."}},
+        status=400,
+    )
 
 
 def _save_version(post, user):
@@ -1052,6 +1097,10 @@ def save_post(request, workspace_id, post_id=None):
     media_error = _validate_required_media(request, post, workspace, action)
     if media_error is not None:
         return media_error
+
+    title_error = _validate_required_title(request, post, workspace, action)
+    if title_error is not None:
+        return title_error
 
     # Handle action — note that Post itself no longer carries an editorial
     # status: every transition below operates on the PlatformPost children,
