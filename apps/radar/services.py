@@ -1,5 +1,7 @@
 """Demand-radar -> RevUp hand-off.
 
+from apps.common.industry_presets import get_preset
+
 Polls a workspace's configured radar feed (the stage-2 demand radar, e.g.
 https://naha1981.github.io/nahalabs-radar/feed/pilot-7f3a.json), dedups by
 item link, and pushes new items through the same ``create_post`` service
@@ -79,6 +81,18 @@ def ingest_feed_for_workspace(workspace: Workspace, *, fetcher=fetch_feed) -> di
     feed = fetcher(feed_url)
     business_name = (feed.get("business_name") or "").strip()
     items = (feed.get("radar") or {}).get("items") or []
+
+    # Industry preset filter: only ingest signals relevant to the workspace's
+    # industry. "general" (empty keyword list) ingests everything.
+    keywords = [k.lower() for k in get_preset(getattr(workspace, "industry", None)).get("radar_keywords", [])]
+    if keywords:
+        def _relevant(it):
+            hay = " ".join(str(it.get(k) or "") for k in ("title", "group", "source", "summary")).lower()
+            return any(k in hay for k in keywords)
+        before = len(items)
+        items = [it for it in items if _relevant(it)]
+        if before != len(items):
+            logger.info("radar: industry filter kept %d/%d items for workspace %s", len(items), before, workspace.id)
 
     created = skipped = 0
     for item in items:

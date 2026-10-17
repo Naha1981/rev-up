@@ -15,6 +15,7 @@ import http from "node:http";
 import { clientFromEnv, type WhatsAppClient } from "./transport/operatorClient.js";
 import { StubCalendarProvider } from "./flow/slots.js";
 import { processEnquiryEmail, handleLeadReply, type PipelineDeps } from "./pipeline.js";
+import { presetFor } from "./presets.js";
 import { GoogleAuth, googleConfigFromEnv } from "./intake/auth.js";
 import { GoogleCalendarProvider } from "./intake/googleCalendar.js";
 import { GmailIntake, intakeConfigFromEnv } from "./intake/gmailIntake.js";
@@ -125,7 +126,12 @@ export async function startService(env: NodeJS.ProcessEnv = process.env): Promis
           // Dry-run console: in-memory store so test leads never touch the prod DB
           // (the postgres store is for live intake only).
           const testStore = new InMemoryLeadStore();
-          const result = await processEnquiryEmail(raw, { whatsApp: capture, store: testStore, convoOpts: deps.convoOpts });
+          const industry = (req.headers["x-industry"] as string | undefined) ?? "general";
+          const result = await processEnquiryEmail(raw, {
+            whatsApp: capture,
+            store: testStore,
+            convoOpts: { ...deps.convoOpts, preset: presetFor(industry) },
+          });
           res.writeHead(200, { "content-type": "application/json" });
           res.end(JSON.stringify({ status: result.status, reason: result.reason ?? null, replies: sends }));
         } catch (err) {

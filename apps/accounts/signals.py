@@ -161,3 +161,18 @@ def create_organization_on_user_create(sender, instance, created, **kwargs):
     """
     if created:
         provision_organization_and_workspace(instance)
+
+
+@receiver(user_signed_up)
+def apply_industry_choice_on_signup(sender, request, user, **kwargs):
+    """Persist the signup industry pick onto the default workspace."""
+    from apps.common.industry_presets import INDUSTRY_PRESETS
+    from apps.workspaces.models import Workspace
+
+    industry = (request.POST.get("industry") or "").strip()
+    if industry not in INDUSTRY_PRESETS:
+        return
+    workspace = Workspace.objects.filter(memberships__user=user).order_by("created_at").first()
+    if workspace and workspace.industry != industry:
+        workspace.industry = industry
+        workspace.save(update_fields=["industry"])

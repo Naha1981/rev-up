@@ -33,6 +33,7 @@ export interface ReplyResult {
 export interface ConversationOptions {
   agentName: string;
   calendar: BookingCalendar;
+  preset?: import("../presets.js").IndustryPreset;
 }
 
 /** Extracts whatever qualification facts appear in free text. Tolerant: answers can arrive in any order, in one message or many. */
@@ -79,7 +80,7 @@ export class LeadConversation {
 
   /** The instant first reply sent seconds after the enquiry arrives. */
   initialMessages(): string[] {
-    return [msg.instantReply(this.enquiry, this.opts.agentName)];
+    return [msg.instantReply(this.enquiry, this.opts.agentName, this.opts.preset)];
   }
 
   async handleReply(text: string): Promise<ReplyResult> {

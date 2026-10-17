@@ -1,3 +1,4 @@
+import { presetFor, type IndustryPreset } from "../presets.js";
 import type { ParsedEnquiry } from "../parser/types.js";
 import type { ViewingSlot } from "./slots.js";
 
@@ -6,15 +7,17 @@ export function firstName(name?: string): string {
   return name.trim().split(/\s+/)[0]!;
 }
 
-export function instantReply(enquiry: ParsedEnquiry, agentName: string): string {
+export function instantReply(enquiry: ParsedEnquiry, agentName: string, preset?: IndustryPreset): string {
   const listing = enquiry.listingTitle ?? (enquiry.listingRef ? `listing ${enquiry.listingRef}` : "the property");
+  const p = preset ?? presetFor("real_estate"); // historical default copy
+  const [q1, q2, q3] = p.questions;
   return [
     `Hi ${firstName(enquiry.leadName)}, thanks for your enquiry about ${listing}${enquiry.price ? ` (${enquiry.price})` : ""}.`,
-    `I'm ${agentName}'s assistant - I can book you in for a viewing right away.`,
+    `I'm ${agentName}'s assistant - ${p.cta}`,
     `Three quick questions so we line up the right place and time:`,
-    `1) What price range are you working with?`,
-    `2) Are you pre-approved for a bond, or buying cash?`,
-    `3) Would a weekday late afternoon or a Saturday morning suit you better?`,
+    `1) ${q1}`,
+    `2) ${q2}`,
+    `3) ${q3}`,
   ].join("\n");
 }
 

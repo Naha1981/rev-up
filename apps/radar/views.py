@@ -8,6 +8,7 @@ from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
+from apps.common.industry_presets import INDUSTRY_CHOICES, INDUSTRY_PRESETS, get_preset
 from apps.members.models import WorkspaceMembership
 from apps.settings_manager.helpers import get_setting
 from apps.settings_manager.models import WorkspaceSetting
@@ -43,6 +44,10 @@ def dashboard(request, workspace_id):
         feed_url = (request.POST.get("feed_url") or "").strip()
         account_id = (request.POST.get("social_account_id") or "").strip()
         max_items = (request.POST.get("max_items_per_run") or "").strip()
+        industry = (request.POST.get("industry") or "").strip()
+        if industry in INDUSTRY_PRESETS and workspace.industry != industry:
+            workspace.industry = industry
+            workspace.save(update_fields=["industry"])
         _set_workspace_value(workspace, "radar.feed_url", feed_url or None)
         _set_workspace_value(workspace, "radar.social_account_id", account_id or None)
         _set_workspace_value(workspace, "radar.max_items_per_run", int(max_items) if max_items.isdigit() else None)
@@ -63,9 +68,12 @@ def dashboard(request, workspace_id):
             logger.warning("radar dashboard: fetch failed for %s: %s", feed_url, exc)
 
     ingested_links = set(RadarIngestedItem.objects.filter(workspace=workspace).values_list("link", flat=True))
+    keywords = [k.lower() for k in get_preset(workspace.industry).get("radar_keywords", [])]
     items = []
     for item in ((feed or {}).get("radar") or {}).get("items") or []:
-        items.append({**item, "ingested": item.get("link") in ingested_links})
+        hay = " ".join(str(item.get(k) or "") for k in ("title", "group", "source", "summary")).lower()
+        relevant = not keywords or any(k in hay for k in keywords)
+        items.append({**item, "ingested": item.get("link") in ingested_links, "relevant": relevant})
 
     drafts = (
         RadarIngestedItem.objects.filter(workspace=workspace, post__isnull=False)
@@ -85,6 +93,8 @@ def dashboard(request, workspace_id):
             "feed": feed,
             "feed_error": feed_error,
             "items": items,
+            "industry_choices": INDUSTRY_CHOICES,
+            "preset": get_preset(workspace.industry),
             "drafts": drafts,
             "accounts": accounts,
         },

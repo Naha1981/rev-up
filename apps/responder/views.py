@@ -16,6 +16,7 @@ from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
+from apps.common.industry_presets import get_preset
 from apps.members.models import WorkspaceMembership
 from apps.workspaces.models import Workspace
 
@@ -37,8 +38,12 @@ def _sidecar_get(path):
         return None, str(exc)
 
 
-def _sidecar_post(path, body: bytes):
-    req = urllib.request.Request(_sidecar_url(path), data=body, headers={"Content-Type": "text/plain"})
+def _sidecar_post(path, body: bytes, industry: str = "general"):
+    req = urllib.request.Request(
+        _sidecar_url(path),
+        data=body,
+        headers={"Content-Type": "text/plain", "X-Industry": industry},
+    )
     with urllib.request.urlopen(req, timeout=SIDECAR_TIMEOUT) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
@@ -63,7 +68,7 @@ def dashboard(request, workspace_id):
             messages.error(request, "Paste a fuller test enquiry (at least 20 characters).")
             return redirect("responder:dashboard", workspace_id=workspace.id)
         try:
-            result = _sidecar_post("/selftest/enquiry", enquiry.encode("utf-8"))
+            result = _sidecar_post("/selftest/enquiry", enquiry.encode("utf-8"), workspace.industry)
         except Exception as exc:
             messages.error(request, f"Sidecar call failed: {exc}")
             return redirect("responder:dashboard", workspace_id=workspace.id)
@@ -84,4 +89,5 @@ def _context(workspace):
         "status_error": status_error,
         "enquiry": "",
         "result": None,
+        "preset": get_preset(workspace.industry),
     }
