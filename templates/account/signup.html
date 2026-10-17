@@ -78,7 +78,16 @@
                 <label for="{{ field.id_for_label }}" class="block text-sm font-semibold mb-1.5" style="color: var(--text-primary);">
                     {{ field.label }}
                 </label>
-                {% if field.field.widget.input_type == "password" %}
+                {% if field.field.widget.input_type == None and field.field.choices %}
+                <select name="{{ field.html_name }}"
+                        id="{{ field.id_for_label }}"
+                        {% if field.field.required %}required{% endif %}
+                        class="form-input-styled {% if field.errors %}is-error{% endif %}">
+                    {% for value, label in field.field.choices %}
+                    <option value="{{ value }}" {% if field.value == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                {% elif field.field.widget.input_type == "password" %}
                 <input type="password"
                        name="{{ field.html_name }}"
                        id="{{ field.id_for_label }}"
