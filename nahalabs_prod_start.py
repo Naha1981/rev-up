@@ -26,6 +26,15 @@ EmailAddress.objects.update_or_create(user=user,email=email,defaults={'verified'
 
 
 
+# WhatsApp responder sidecar (modules/responder): dry-run by default, no
+# transport secrets configured in production yet, so it only serves /health
+# on an internal port and never sends to real numbers. Dies with the
+# container; Render restarts the whole service on failure.
+subprocess.Popen(
+    ['node', 'modules/responder/dist/server.js'],
+    env={**os.environ, 'PORT': os.environ.get('RESPONDER_PORT', '3100')},
+)
+
 # The studio worker now starts inside the gunicorn worker via config/wsgi.py
 # (worker_supervisor). A thread started here would die the moment execvp
 # replaces this process image.

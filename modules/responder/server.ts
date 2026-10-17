@@ -90,6 +90,13 @@ export async function startService(env: NodeJS.ProcessEnv = process.env): Promis
   });
   const port = Number(env.PORT ?? 3100);
   await new Promise<void>((resolve) => server.listen(port, resolve));
+  if (env.RESPONDER_SELFTEST === "1") {
+    try {
+      await import("./selftest.js");
+    } catch (err) {
+      console.error(`[selftest] failed: ${(err as Error).message}`);
+    }
+  }
   console.log(`[webhook] listening on :${port} (${activePaths.length > 0 ? activePaths.join(", ") : "no transports configured - /health only"})`);
 
   return {

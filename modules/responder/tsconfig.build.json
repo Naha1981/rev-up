@@ -7,5 +7,5 @@
     "sourceMap": false,
     "declaration": false
   },
-  "include": ["server.ts", "pipeline.ts", "parser", "flow", "store", "transport", "webhooks", "intake"]
+  "include": ["server.ts", "selftest.ts", "pipeline.ts", "parser", "flow", "store", "transport", "webhooks", "intake"]
 }

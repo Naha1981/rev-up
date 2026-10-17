@@ -23,6 +23,9 @@ COPY . .
 # Build Tailwind CSS
 RUN cd theme/static_src && npm ci && npm run build
 
+# Build the vendored WhatsApp responder sidecar (modules/responder)
+RUN cd modules/responder && npm ci && npm run build
+
 # Collect static files
 RUN DJANGO_SETTINGS_MODULE=config.settings.production \
     SECRET_KEY=build-placeholder \
