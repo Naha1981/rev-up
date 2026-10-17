@@ -122,7 +122,10 @@ export async function startService(env: NodeJS.ProcessEnv = process.env): Promis
             mode: "dry-run",
             sendText: async (to, text) => { sends.push({ to, text }); },
           };
-          const result = await processEnquiryEmail(raw, { whatsApp: capture, store, convoOpts: deps.convoOpts });
+          // Dry-run console: in-memory store so test leads never touch the prod DB
+          // (the postgres store is for live intake only).
+          const testStore = new InMemoryLeadStore();
+          const result = await processEnquiryEmail(raw, { whatsApp: capture, store: testStore, convoOpts: deps.convoOpts });
           res.writeHead(200, { "content-type": "application/json" });
           res.end(JSON.stringify({ status: result.status, reason: result.reason ?? null, replies: sends }));
         } catch (err) {
