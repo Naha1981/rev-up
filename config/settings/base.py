@@ -330,7 +330,7 @@ EMAIL_BACKEND_TYPE = env("EMAIL_BACKEND_TYPE")
 # Legacy deployments 301 to the canonical host when this is set (see
 # apps/common/host_redirect.py). Empty = serve normally.
 CANONICAL_HOST_REDIRECT = env("CANONICAL_HOST_REDIRECT", default="")
-DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@localhost")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="RevUp <ai-solutions@nahalabs.co.za>")
 
 # Everything outbound goes through the budget wrapper, which then hands the
 # message to EMAIL_INNER_BACKEND. There is no send_email() helper in this
