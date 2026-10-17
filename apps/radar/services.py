@@ -1,7 +1,5 @@
 """Demand-radar -> RevUp hand-off.
 
-from apps.common.industry_presets import get_preset
-
 Polls a workspace's configured radar feed (the stage-2 demand radar, e.g.
 https://naha1981.github.io/nahalabs-radar/feed/pilot-7f3a.json), dedups by
 item link, and pushes new items through the same ``create_post`` service
@@ -17,6 +15,8 @@ Workspace settings (settings_manager):
 import json
 import logging
 import urllib.request
+
+from apps.common.industry_presets import get_preset
 import uuid as uuid_mod
 
 from django.db import IntegrityError, transaction
