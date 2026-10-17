@@ -261,7 +261,16 @@ SITE_ID = 1
 # django-allauth
 ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*"]
-ACCOUNT_EMAIL_VERIFICATION = "none"
+ACCOUNT_EMAIL_VERIFICATION = env("ACCOUNT_EMAIL_VERIFICATION", default="mandatory")
+# Abuse protection: throttle credential stuffing, signup spam and email-bombing.
+# Format is allauth's "<count>/<window>[/scope]" (m/h/d windows, ip/user/key scopes).
+ACCOUNT_RATE_LIMITS = {
+    "login_failed": "5/5m",
+    "signup": "10/h/ip",
+    "confirm_email": "10/h/ip",
+    "reset_password": "5/h/ip",
+    "change_password": "5/h",
+}
 ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
 ACCOUNT_FORMS = {"signup": "apps.accounts.forms.RevUpSignupForm"}
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None

@@ -12,6 +12,24 @@ def health_check(request):
     return JsonResponse({"status": "ok"})
 
 
+def home(request):
+    """Root route: authenticated users go to their dashboard; everyone else
+    gets the public RevUp landing page (open self-signup)."""
+    if request.user.is_authenticated:
+        return dashboard(request)
+    return render(request, "landing.html")
+
+
+def terms_of_service(request):
+    """Public Terms of Service page."""
+    return render(request, "legal/terms.html")
+
+
+def privacy_policy(request):
+    """Public Privacy Policy page."""
+    return render(request, "legal/privacy.html")
+
+
 @login_required
 def dashboard(request):
     """Main dashboard - redirects to last used workspace or shows org overview."""

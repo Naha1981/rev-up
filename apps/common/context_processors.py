@@ -64,14 +64,21 @@ def sidebar_context(request):
             .order_by("platform", "account_name")
         )
 
-        # Connectable platforms: not yet connected in this workspace.
-        # Show all known platforms (configured or not) so the sidebar
-        # always surfaces what can be connected. The connect page itself
-        # handles the "not configured" case with an admin prompt, and shares
-        # PlatformVisibility.visible_choices() with us so the two can't disagree.
+        # Connectable platforms: not yet connected in this workspace AND
+        # actually configured — a self-serve customer must never be teased
+        # with a channel that cannot be connected. Shares the connect grid's
+        # configured-set logic so the two can't disagree.
+        from apps.social_accounts.views import _get_configured_platforms
+
+        org = getattr(request, "org", None)
+        configured = _get_configured_platforms(org.id) if org else set()
         connected_platforms = {ch.platform for ch in sidebar_channels}
         sidebar_connectable_platforms = sorted(
-            ((p, label) for p, label in PlatformVisibility.visible_choices() if p not in connected_platforms),
+            (
+                (p, label)
+                for p, label in PlatformVisibility.visible_choices()
+                if p not in connected_platforms and p in configured
+            ),
             key=_connect_suggestion_rank,
         )
 

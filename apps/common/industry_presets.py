@@ -21,6 +21,19 @@ INDUSTRY_PRESETS = {
         "responder_questions": [],
         "responder_faqs": [],
     },
+    "restaurant": {
+        "label": "Restaurants & Food",
+        "radar_keywords": ["restaurant", "food", "menu", "chef", "eatery", "takeaway", "braai", "cuisine", "dining", "coffee", "bakery", "catering", "halaal", "vegan"],
+        "post_themes": ["Today's specials and limited-time dishes", "Behind the pass: meet the kitchen", "Customer favourites and reviews", "Weekend and payday promos", "Local food culture and events"],
+        "hashtags": ["#JoburgEats", "#SAFoodie"],
+        "responder_tone": "warm and welcoming",
+        "responder_questions": [
+            "Would you like a table, and for how many people?",
+            "Is this for today or another day - and what time suits you?",
+            "Any dietary needs we should know about (halaal, vegetarian, allergies)?",
+        ],
+        "responder_faqs": ["Do I need to book, or can I walk in?", "What's on the menu today?", "Do you deliver or offer collection?"],
+    },
     "real_estate": {
         "label": "Real Estate",
         "radar_keywords": ["property", "housing", "bond", "mortgage", "transfer", "estate", "rental", "conveyancing", "suburb"],

@@ -230,7 +230,7 @@ def connect_platform(request, workspace_id):
     if platform not in configured_platforms:
         messages.error(
             request,
-            f"Platform credentials for {platform} are not configured. Please contact your administrator.",
+            f"Connecting {platform} is not available yet. Email sales@nahalabs.co.za and we will set it up for you.",
         )
         return redirect("social_accounts:connect", workspace_id=workspace_id)
 

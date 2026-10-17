@@ -341,13 +341,6 @@ def portal_activity(request):
 @portal_auth_required
 @require_GET
 def portal_reports(request):
-    """Placeholder reports page."""
-    workspace = request.portal_workspace
-
-    return render(
-        request,
-        "client_portal/reports.html",
-        {
-            "workspace": workspace,
-        },
-    )
+    """Reports live on the published list for now - redirect so no
+    placeholder page is ever shown."""
+    return redirect("client_portal:published")
