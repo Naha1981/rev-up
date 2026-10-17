@@ -50,6 +50,15 @@
     {% if row.status == "active" %}
     <div class="flex items-center gap-2">
 
+    <form method="POST" action="{% url 'api_keys:rotate' row.id %}">
+        {% csrf_token %}
+        <button type="submit"
+                class="btn-neutral px-4 py-1.5 text-xs font-medium rounded-full cursor-pointer whitespace-nowrap"
+                style="background: var(--surface-1, #F3F4F6); color: var(--text-secondary); border: 1px solid var(--border);">
+            Rotate
+        </button>
+    </form>
+
     {% comment %}
     Edit flow. Same CSP-safe pattern as Revoke (Alpine directives only, no
     inline on* handlers), but built on the issuance modal's scrollable shell

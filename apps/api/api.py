@@ -21,6 +21,7 @@ from apps.api.auth import ApiKeyAuth, McpAuth
 from apps.api.routers.accounts import router as accounts_router
 from apps.api.routers.analytics import router as analytics_router
 from apps.api.routers.inbox import router as inbox_router
+from apps.api.routers.responder import router as responder_router
 from apps.api.routers.me import router as me_router
 from apps.api.routers.media import router as media_router
 from apps.api.routers.posts import router as posts_router
@@ -36,14 +37,14 @@ class NoncedSwagger(Swagger):
 
 
 api = NinjaAPI(
-    title="Brightbean Agent API",
+    title="RevUp Agent API",
     version="1.0.0",
     description=(
         "Programmatic access for external AI agents. Authentication is via "
         "scoped bearer tokens; create one from the Organization → API Keys "
-        "page in the Brightbean Studio settings.\n\n"
+        "page in the RevUp settings.\n\n"
         "**User-Agent.** Send a `User-Agent` header naming your client "
-        "(e.g. `my-agent/1.0`). The hosted Studio sits behind Cloudflare, "
+        "(e.g. `my-agent/1.0`). The hosted app sits behind Cloudflare, "
         "which rejects Python's standard-library default "
         "(`Python-urllib/3.x`) with 403 and a plain-text `error code: 1010` "
         "body before the request reaches the API. Any value of your own "
@@ -98,6 +99,7 @@ api.add_router("/posts", posts_router)
 api.add_router("/media", media_router)
 api.add_router("/analytics", analytics_router)
 api.add_router("/inbox", inbox_router)
+api.add_router("/responder", responder_router)
 # MCP Streamable HTTP transport. Same audit + rate limits as REST, but a
 # wider auth class: ``McpAuth`` accepts both bb_studio_ keys AND OAuth 2.1
 # access tokens (Claude Desktop's native connector flow). Mounted last so

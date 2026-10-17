@@ -185,6 +185,7 @@ PERMISSION_KEYS = [
     "edit_media",
     "delete_media",
     "manage_media",
+    "use_responder",
 ]
 
 BUILTIN_ROLE_PERMISSIONS = {

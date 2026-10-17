@@ -164,7 +164,10 @@ def issue_api_key(
     from apps.members.models import OrgMembership, WorkspaceMembership, has_org_permission
 
     sa_list = list(social_accounts)
-    if not sa_list:
+    requested = set(permissions or [])
+    # Keys that only call social-account-free endpoints (e.g. the responder)
+    # may be issued without an account allowlist.
+    if not sa_list and not requested <= {"use_responder"}:
         raise ValueError("An API key must allowlist at least one connected account.")
     for sa in sa_list:
         if sa.workspace_id != workspace.id:
@@ -189,7 +192,6 @@ def issue_api_key(
             f"User {issued_by} has no membership in workspace {workspace}; cannot issue an API key on their behalf."
         ) from exc
 
-    requested = set(permissions or [])
     ungrantable = requested - granter_perms
     if ungrantable:
         raise ValueError(f"Issuer cannot grant permissions they don't hold: {sorted(ungrantable)}")
@@ -267,7 +269,10 @@ def update_api_key(api_key: ApiKey, *, editor, permissions: list[str], social_ac
 
     # Accounts: non-empty, all in the key's workspace (mirrors issue_api_key).
     sa_list = list(social_accounts)
-    if not sa_list:
+    requested = set(permissions or [])
+    # Keys that only call social-account-free endpoints (e.g. the responder)
+    # may be issued without an account allowlist.
+    if not sa_list and not requested <= {"use_responder"}:
         raise ValueError("An API key must allowlist at least one connected account.")
     for sa in sa_list:
         if sa.workspace_id != workspace.id:

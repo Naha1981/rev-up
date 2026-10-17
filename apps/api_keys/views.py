@@ -472,6 +472,45 @@ def revoke_key(request, key_id):
     return redirect("api_keys:list")
 
 
+@_require_manage_api_keys
+@require_http_methods(["POST"])
+def rotate_key(request, key_id):
+    """Rotate: revoke the key and issue a replacement with identical grants.
+
+    The new plaintext is shown exactly once, in the same flash-once pattern
+    as issuance. The old token dies immediately via revoke_api_key's cache
+    bust, so a leaked token stops working the moment rotation completes.
+    """
+    key = get_object_or_404(
+        ApiKey.objects.select_related("workspace", "workspace__organization"),
+        id=key_id,
+    )
+    if key.workspace.organization_id != request.org.id:
+        raise Http404()
+    if key.revoked_at is not None:
+        messages.info(request, f"Key “{key.name}” is already revoked; issue a new one instead.")
+        return redirect("api_keys:list")
+    try:
+        issued = services.issue_api_key(
+            workspace=key.workspace,
+            social_accounts=list(key.social_accounts.all()),
+            issued_by=request.user,
+            name=key.name,
+            permissions=list(key.permissions or []),
+            expires_at=key.expires_at,
+        )
+    except ValueError as exc:
+        messages.error(request, f"Could not rotate key: {exc}")
+        return redirect("api_keys:list")
+    services.revoke_api_key(key)
+    messages.success(
+        request,
+        f"Rotated key “{key.name}” - the old token is dead. "
+        f"New token (shown once): {issued.plaintext_token}",
+    )
+    return redirect("api_keys:list")
+
+
 # ---------------------------------------------------------------------------
 # Edit
 # ---------------------------------------------------------------------------
