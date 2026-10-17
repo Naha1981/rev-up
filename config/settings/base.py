@@ -77,6 +77,7 @@ LOCAL_APPS = [
     "apps.api",
     "apps.mcp",
     "apps.radar",
+    "apps.responder",
     "apps.oauth_server",
     "apps.analytics",
     "theme",

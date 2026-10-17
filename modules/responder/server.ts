@@ -11,7 +11,8 @@
  *   npm run build && node dist/server.js   (production)
  *   npx tsx server.ts                      (dev)
  */
-import { clientFromEnv } from "./transport/operatorClient.js";
+import http from "node:http";
+import { clientFromEnv, type WhatsAppClient } from "./transport/operatorClient.js";
 import { StubCalendarProvider } from "./flow/slots.js";
 import { processEnquiryEmail, handleLeadReply, type PipelineDeps } from "./pipeline.js";
 import { GoogleAuth, googleConfigFromEnv } from "./intake/auth.js";
@@ -79,7 +80,7 @@ export async function startService(env: NodeJS.ProcessEnv = process.env): Promis
     env.EVOLUTION_WEBHOOK_TOKEN ? "/webhooks/evolution" : null,
     cloudApi ? "/webhooks/cloud-api" : null,
   ].filter(Boolean);
-  const server = createOperatorWebhookServer({
+  const inner = createOperatorWebhookServer({
     secret: env.WEBHOOK_SECRET,
     evolutionToken: env.EVOLUTION_WEBHOOK_TOKEN,
     cloudApi,
@@ -87,6 +88,51 @@ export async function startService(env: NodeJS.ProcessEnv = process.env): Promis
       const r = await handleLeadReply(phone, text, { ...deps, agentPhone: env.AGENT_PHONE });
       if ("error" in r) console.log(`[webhook] ${phone}: ${r.error}`);
     },
+  });
+  const innerHandler = inner.listeners("request")[0] as http.RequestListener;
+
+  // Outer server: adds the dry-run selftest endpoints the app's Responder
+  // screen talks to, then delegates everything else to the webhook receiver.
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url ?? "/", "http://localhost");
+    if (req.method === "GET" && url.pathname === "/selftest/status") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        ok: true,
+        transport: whatsApp.mode,
+        selftest: env.RESPONDER_SELFTEST === "1",
+        store: env.DATABASE_URL ? "postgres" : "in-memory",
+        webhookPaths: activePaths,
+      }));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/selftest/enquiry" && env.RESPONDER_SELFTEST === "1") {
+      void (async () => {
+        try {
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) chunks.push(chunk as Buffer);
+          const raw = Buffer.concat(chunks).toString("utf8");
+          if (raw.length < 20 || raw.length > 200_000) {
+            res.writeHead(422, { "content-type": "application/json" });
+            res.end(JSON.stringify({ error: "body must be a raw enquiry email (20-200k chars)" }));
+            return;
+          }
+          const sends: { to: string; text: string }[] = [];
+          const capture: WhatsAppClient = {
+            mode: "dry-run",
+            sendText: async (to, text) => { sends.push({ to, text }); },
+          };
+          const result = await processEnquiryEmail(raw, { whatsApp: capture, store, convoOpts: deps.convoOpts });
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ status: result.status, reason: result.reason ?? null, replies: sends }));
+        } catch (err) {
+          res.writeHead(500, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: (err as Error).message }));
+        }
+      })();
+      return;
+    }
+    innerHandler(req, res);
   });
   const port = Number(env.PORT ?? 3100);
   await new Promise<void>((resolve) => server.listen(port, resolve));
