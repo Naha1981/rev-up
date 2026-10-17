@@ -78,7 +78,7 @@
                 <label for="{{ field.id_for_label }}" class="block text-sm font-semibold mb-1.5" style="color: var(--text-primary);">
                     {{ field.label }}
                 </label>
-                {% if field.field.widget.input_type == None and field.field.choices %}
+                {% if field.field.widget.template_name == "django/forms/widgets/select.html" %}
                 <select name="{{ field.html_name }}"
                         id="{{ field.id_for_label }}"
                         {% if field.field.required %}required{% endif %}
