@@ -228,6 +228,7 @@ if STORAGE_BACKEND.lower() == "s3":
     AWS_STORAGE_BUCKET_NAME = env("S3_BUCKET_NAME", default="")
     AWS_S3_CUSTOM_DOMAIN = env("S3_CUSTOM_DOMAIN", default="")
     AWS_S3_REGION_NAME = env("S3_REGION_NAME", default="auto")
+    AWS_S3_SIGNATURE_VERSION = env("S3_SIGNATURE_VERSION", default="s3v4")
     AWS_S3_FILE_OVERWRITE = False
     AWS_DEFAULT_ACL = "private"
     AWS_QUERYSTRING_AUTH = True
