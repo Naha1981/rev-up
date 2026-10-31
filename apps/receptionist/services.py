@@ -54,8 +54,11 @@ _INDUSTRY_BRIEFS: dict[str, str] = {
 
 _RULES = (
     "Rules: reply in under 120 words; plain WhatsApp language; prices in South African rand (R); "
-    "never invent prices, dates or policies not given below; if you do not know, say a person will "
-    "confirm; never mention you are an AI unless asked."
+    "no emojis; never mention you are an AI unless asked. "
+    "IMPORTANT: the business information above is the COMPLETE list of what this business offers. "
+    "If the customer asks about a service, product, price or policy that is not listed there, "
+    "do NOT say yes and do NOT say no - say a person from the team will confirm. "
+    "If you do not know, say a person will confirm."
 )
 
 
