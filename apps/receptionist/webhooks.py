@@ -9,8 +9,10 @@ until live sending is enabled and approved.
 
 from __future__ import annotations
 
+import datetime as _dt
 import logging
 
+from django.conf import settings
 from django.db import transaction
 
 from .models import Contact, Message, ZernioChannel
@@ -79,6 +81,41 @@ def handle_inbox_message(payload: dict) -> None:
             zernio_message_id=zernio_message_id,
         )
 
+    # A customer who wrote again is the safest moment to clear any held
+    # replies (send budget was exhausted, or the provider was down).
+    from django.utils import timezone as _tz
+
+    from .sending import send_draft
+
+    pending = contact.messages.filter(
+        direction=Message.Direction.OUTBOUND,
+        is_draft=True,
+        created_at__gte=_tz.now() - _dt.timedelta(hours=48),
+    ).order_by("created_at")[:5]
+    for held in pending:
+        try:
+            send_draft(channel, contact, held)
+        except Exception:
+            logger.exception("receptionist: held reply retry failed for contact %s", contact.id)
+            break
+
+    # Per-tenant draft budget: one abusive or runaway tenant must not burn the
+    # shared free AI quota. Past the cap the conversation stays in the inbox
+    # flagged for a human instead of getting an AI reply.
+    max_drafts = int(getattr(settings, "RECEPTIONIST_MAX_DRAFTS_PER_DAY", 300))
+    today_count = Message.objects.filter(
+        workspace=workspace,
+        direction=Message.Direction.OUTBOUND,
+        sender_type=Message.SenderType.AI,
+        created_at__gte=_tz.now() - _dt.timedelta(days=1),
+    ).count()
+    if today_count >= max_drafts:
+        if not contact.needs_human:
+            contact.needs_human = True
+            contact.save(update_fields=["needs_human", "updated_at"])
+        logger.warning("receptionist: workspace %s over draft budget, human flagged", workspace.id)
+        return
+
     history = [(m.sender_type, m.body) for m in contact.messages.order_by("-created_at")[:12]]
     history.reverse()
     try:
@@ -101,12 +138,10 @@ def handle_inbox_message(payload: dict) -> None:
         )
         _apply_intake(workspace, contact, profile.industry, draft.intake)
 
-    from .sending import send_draft
-
     try:
         send_draft(channel, contact, outbound)
     except Exception:
-        logger.exception("receptionist: sandbox send failed for contact %s", contact.id)
+        logger.exception("receptionist: send failed for contact %s", contact.id)
 
 
 def _apply_intake(workspace, contact, industry: str, intake: dict) -> None:

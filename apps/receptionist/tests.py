@@ -74,6 +74,10 @@ REPLY = {"reply": "Good morning! Yes, we are open Saturdays 8:00-13:00.", "intak
 
 class ReceptionistFlowTests(TestCase):
     def setUp(self):
+        # Flow tests verify drafting and storage; sending is covered separately.
+        send_patcher = patch("apps.receptionist.sending.send_draft", return_value=False)
+        self.addCleanup(send_patcher.stop)
+        send_patcher.start()
         self.ws_a = _workspace("aa-funerals")
         self.ws_b = _workspace("bb-dental")
         self.profile_a = BusinessProfile.objects.create(
@@ -328,6 +332,7 @@ class SandboxSendTests(TestCase):
         ws = self._fixtures()
         channel = self._channel(ws, SANDBOX_ACCOUNT_ID)
         contact = Contact.objects.create(workspace=ws, wa_id="27672347593", zernio_conversation_id="conv1")
+        self._inbound(ws, contact)
         draft = self._draft(ws, contact)
         self.assertTrue(send_draft(channel, contact, draft))
         draft.refresh_from_db()
@@ -342,23 +347,78 @@ class SandboxSendTests(TestCase):
         ws = self._fixtures()
         channel = self._channel(ws, SANDBOX_ACCOUNT_ID)
         contact = Contact.objects.create(workspace=ws, wa_id="27820001122", zernio_conversation_id="conv1")
+        self._inbound(ws, contact)
         draft = self._draft(ws, contact)
         self.assertFalse(send_draft(channel, contact, draft))
         mock_post.assert_not_called()
         draft.refresh_from_db()
         self.assertTrue(draft.is_draft)
 
+    def _inbound(self, ws, contact):
+        return Message.objects.create(
+            workspace=ws,
+            contact=contact,
+            direction=Message.Direction.INBOUND,
+            sender_type=Message.SenderType.USER,
+            body="Hi, are you open?",
+        )
+
     @override_settings(ZERNIO_API_KEY="k", ZERNIO_BASE_URL="https://zernio.test/api/v1")
     @patch("apps.receptionist.sending.httpx.post")
-    def test_guard_refuses_non_sandbox_account(self, mock_post):
+    def test_guard_allows_tenant_own_number_after_inbound(self, mock_post):
+        """A tenant's own connected number may answer customers who wrote first."""
+        from apps.receptionist.sending import send_draft
+
+        mock_post.return_value = Mock(
+            status_code=200, content=b'{"message":{"id":"zm2"}}', json=lambda: {"message": {"id": "zm2"}}
+        )
+        ws = self._fixtures()
+        channel = self._channel(ws, "some-real-account")
+        contact = Contact.objects.create(workspace=ws, wa_id="27820001133", zernio_conversation_id="conv9")
+        self._inbound(ws, contact)
+        draft = self._draft(ws, contact)
+        self.assertTrue(send_draft(channel, contact, draft))
+
+    @override_settings(ZERNIO_API_KEY="k", ZERNIO_BASE_URL="https://zernio.test/api/v1")
+    @patch("apps.receptionist.sending.httpx.post")
+    def test_guard_refuses_without_inbound_first(self, mock_post):
+        """No cold outbound, ever: no inbound from this customer, no send."""
         from apps.receptionist.sending import send_draft
 
         ws = self._fixtures()
         channel = self._channel(ws, "some-real-account")
-        contact = Contact.objects.create(workspace=ws, wa_id="27672347593", zernio_conversation_id="conv1")
+        contact = Contact.objects.create(workspace=ws, wa_id="27820001144", zernio_conversation_id="conv10")
         draft = self._draft(ws, contact)
         self.assertFalse(send_draft(channel, contact, draft))
         mock_post.assert_not_called()
+        draft.refresh_from_db()
+        self.assertTrue(draft.is_draft)
+
+    @override_settings(
+        ZERNIO_API_KEY="k", ZERNIO_BASE_URL="https://zernio.test/api/v1", RECEPTIONIST_MAX_SENDS_PER_HOUR=3
+    )
+    @patch("apps.receptionist.sending.httpx.post")
+    def test_hourly_budget_holds_draft(self, mock_post):
+        from apps.receptionist.sending import send_draft
+
+        ws = self._fixtures()
+        channel = self._channel(ws, "some-real-account")
+        contact = Contact.objects.create(workspace=ws, wa_id="27820001155", zernio_conversation_id="conv11")
+        self._inbound(ws, contact)
+        for _ in range(3):
+            Message.objects.create(
+                workspace=ws,
+                contact=contact,
+                direction=Message.Direction.OUTBOUND,
+                sender_type=Message.SenderType.AI,
+                body="earlier",
+                is_draft=False,
+            )
+        draft = self._draft(ws, contact)
+        self.assertFalse(send_draft(channel, contact, draft))
+        mock_post.assert_not_called()
+        draft.refresh_from_db()
+        self.assertTrue(draft.is_draft)  # held, not dropped: retried on the next inbound
 
     @override_settings(ZERNIO_API_KEY="k", ZERNIO_BASE_URL="https://zernio.test/api/v1")
     @patch("apps.receptionist.sending.httpx.post")
@@ -398,6 +458,136 @@ class ZernioChannelTests(TestCase):
         ws = _workspace("chan")
         ch = ZernioChannel.objects.create(workspace=ws, zernio_account_id="a1", phone_number="+12029087457")
         self.assertEqual(ch.phone_number, "12029087457")
+
+
+class HeldDraftRetryTests(TestCase):
+    """A draft held by budget or provider failure sends on the customer's next message."""
+
+    @patch("apps.receptionist.sending.send_draft")
+    @patch("apps.receptionist.webhooks.draft_reply")
+    def test_held_draft_retries_before_new_reply(self, mock_draft, mock_send):
+        from apps.receptionist.services import ReplyDraft
+
+        mock_draft.return_value = ReplyDraft(body="new reply")
+        ws = _workspace("retry-ws")
+        BusinessProfile.objects.create(workspace=ws, business_name="R", is_active=True)
+        ZernioChannel.objects.create(workspace=ws, zernio_account_id="acct-retry")
+        contact = Contact.objects.create(workspace=ws, wa_id="27820001166", zernio_conversation_id="conv-r")
+        Message.objects.create(
+            workspace=ws, contact=contact, direction="inbound", sender_type="user", body="first question"
+        )
+        held = Message.objects.create(
+            workspace=ws,
+            contact=contact,
+            direction="outbound",
+            sender_type="ai",
+            body="held reply",
+            is_draft=True,
+        )
+        handle_inbox_message(
+            {
+                "event": "message.received",
+                "message": {
+                    "id": "m-retry-1",
+                    "direction": "incoming",
+                    "text": "following up",
+                    "sender": {"phoneNumber": "+27820001166"},
+                },
+                "conversation": {"id": "conv-r"},
+                "account": {"accountId": "acct-retry"},
+            }
+        )
+        sent_ids = [c.args[2].id for c in mock_send.call_args_list]
+        self.assertEqual(sent_ids[0], held.id)  # oldest held reply goes first
+        self.assertEqual(mock_send.call_count, 2)  # held + new reply
+
+
+class VolumeIsolationTests(TestCase):
+    """25 tenants x 6 customers through the webhook: no leaks, dedup, per-tenant caps."""
+
+    TENANTS = 25
+    CUSTOMERS = 6
+
+    def _payload(self, account_id, wa, text, mid):
+        return {
+            "event": "message.received",
+            "message": {
+                "id": mid,
+                "direction": "incoming",
+                "text": text,
+                "sender": {"phoneNumber": f"+{wa}", "name": f"C{wa}"},
+            },
+            "conversation": {"id": f"conv-{wa}", "participantName": f"C{wa}"},
+            "account": {"accountId": account_id},
+        }
+
+    @patch("apps.receptionist.sending.send_draft", return_value=True)
+    @patch("apps.receptionist.webhooks.draft_reply")
+    def test_volume_no_cross_tenant_leaks(self, mock_draft, _send):
+        from apps.receptionist.services import ReplyDraft
+
+        mock_draft.side_effect = lambda profile, history, incoming: ReplyDraft(
+            body=f"reply for {profile.business_name}"
+        )
+        workspaces = []
+        for i in range(self.TENANTS):
+            ws = _workspace(f"vol-{i}")
+            BusinessProfile.objects.create(workspace=ws, business_name=f"Biz {i}", is_active=True)
+            ZernioChannel.objects.create(workspace=ws, zernio_account_id=f"acct-{i}")
+            workspaces.append(ws)
+        for i, _ws in enumerate(workspaces):
+            for j in range(self.CUSTOMERS):
+                handle_inbox_message(
+                    self._payload(f"acct-{i}", f"2782000{i:03d}{j}", f"question {j} from {i}", f"m-{i}-{j}")
+                )
+        # every tenant got its own customers, drafts and nothing else
+        self.assertEqual(Contact.objects.count(), self.TENANTS * self.CUSTOMERS)
+        for i, check_ws in enumerate(workspaces):
+            contacts = Contact.objects.filter(workspace=check_ws)
+            self.assertEqual(contacts.count(), self.CUSTOMERS)
+            self.assertTrue(all(c.wa_id.startswith(f"2782000{i:03d}") for c in contacts))
+            drafts = Message.objects.filter(workspace=check_ws, direction="outbound")
+            self.assertEqual(drafts.count(), self.CUSTOMERS)
+            self.assertTrue(all(f"Biz {i}" in m.body for m in drafts))
+        # total rows: inbound + outbound per customer
+        self.assertEqual(Message.objects.count(), self.TENANTS * self.CUSTOMERS * 2)
+
+    @patch("apps.receptionist.sending.send_draft", return_value=True)
+    @patch("apps.receptionist.webhooks.draft_reply")
+    def test_volume_duplicate_deliveries_deduped(self, mock_draft, _send):
+        from apps.receptionist.services import ReplyDraft
+
+        mock_draft.return_value = ReplyDraft(body="hi")
+        ws = _workspace("vol-dup")
+        BusinessProfile.objects.create(workspace=ws, business_name="Dup", is_active=True)
+        ZernioChannel.objects.create(workspace=ws, zernio_account_id="acct-dup")
+        for _ in range(10):  # provider retries the same delivery
+            handle_inbox_message(self._payload("acct-dup", "27820009999", "same message", "m-dup-1"))
+        self.assertEqual(Message.objects.filter(direction="inbound").count(), 1)
+        self.assertEqual(Message.objects.filter(direction="outbound").count(), 1)
+
+    @override_settings(RECEPTIONIST_MAX_DRAFTS_PER_DAY=4)
+    @patch("apps.receptionist.sending.send_draft", return_value=True)
+    @patch("apps.receptionist.webhooks.draft_reply")
+    def test_draft_cap_flags_human_and_spares_other_tenants(self, mock_draft, _send):
+        from apps.receptionist.services import ReplyDraft
+
+        mock_draft.return_value = ReplyDraft(body="hi")
+        ws_a = _workspace("cap-a")
+        BusinessProfile.objects.create(workspace=ws_a, business_name="A", is_active=True)
+        ZernioChannel.objects.create(workspace=ws_a, zernio_account_id="acct-cap-a")
+        ws_b = _workspace("cap-b")
+        BusinessProfile.objects.create(workspace=ws_b, business_name="B", is_active=True)
+        ZernioChannel.objects.create(workspace=ws_b, zernio_account_id="acct-cap-b")
+        for j in range(6):  # tenant A blows past its daily cap
+            handle_inbox_message(self._payload("acct-cap-a", "27820007777", f"q{j}", f"m-cap-{j}"))
+        contact_a = Contact.objects.get(workspace=ws_a)
+        self.assertTrue(contact_a.needs_human)
+        self.assertEqual(Message.objects.filter(workspace=ws_a, direction="outbound").count(), 4)
+        # tenant B is unaffected by tenant A's abuse
+        handle_inbox_message(self._payload("acct-cap-b", "27820008888", "q", "m-capb-1"))
+        self.assertEqual(Message.objects.filter(workspace=ws_b, direction="outbound").count(), 1)
+        self.assertFalse(Contact.objects.get(workspace=ws_b).needs_human)
 
 
 class PricingParserTests(TestCase):
