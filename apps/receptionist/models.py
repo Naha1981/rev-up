@@ -93,6 +93,34 @@ class Contact(models.Model):
         return f"{self.name or self.wa_id}"
 
 
+class Booking(models.Model):
+    """One customer booking request, from WhatsApp intake or the owner."""
+
+    class Status(models.TextChoices):
+        REQUESTED = "requested", "Requested"
+        CONFIRMED = "confirmed", "Confirmed"
+        CANCELLED = "cancelled", "Cancelled"
+        DONE = "done", "Done"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        "workspaces.Workspace", on_delete=models.CASCADE, related_name="receptionist_bookings"
+    )
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="bookings")
+    service = models.CharField(max_length=200, blank=True)
+    preferred_time = models.CharField(max_length=200, blank=True)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.REQUESTED)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["workspace", "status", "created_at"], name="booking_ws_status_ts")]
+
+    def __str__(self) -> str:
+        return f"{self.service or 'Booking'} - {self.contact.wa_id} ({self.status})"
+
+
 class Message(models.Model):
     class Direction(models.TextChoices):
         INBOUND = "inbound", "Inbound"

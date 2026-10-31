@@ -6,6 +6,7 @@ replies, intake records, and contacts waiting on a human.
 """
 
 import json
+import logging
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -17,14 +18,18 @@ from apps.members.models import WorkspaceMembership
 from apps.workspaces.models import Workspace
 
 from .models import (
+    Booking,
     BusinessProfile,
     Contact,
     DentalAppointment,
     FuneralClaim,
     Industry,
+    Message,
     TradeDispatch,
     ZernioChannel,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_pricing(raw: str) -> dict | None:
@@ -177,6 +182,48 @@ def conversation(request, workspace_id, contact_id):
         "receptionist/conversation.html",
         {"workspace": workspace, "contact": contact, "msgs": contact.messages.all()},
     )
+
+
+@login_required
+@require_GET
+def bookings(request, workspace_id):
+    workspace = _get_workspace(request, workspace_id)
+    rows = Booking.objects.filter(workspace=workspace).select_related("contact")
+    return render(request, "receptionist/bookings.html", {"workspace": workspace, "bookings": rows})
+
+
+@login_required
+@require_http_methods(["POST"])
+def booking_action(request, workspace_id, booking_id, action):
+    workspace = _get_workspace(request, workspace_id)
+    booking = get_object_or_404(Booking, id=booking_id, workspace=workspace)
+    if action == "confirm" and booking.status == Booking.Status.REQUESTED:
+        booking.status = Booking.Status.CONFIRMED
+        booking.save(update_fields=["status"])
+        when = booking.preferred_time or "the requested time"
+        what = booking.service or "your booking"
+        reply = Message.objects.create(
+            workspace=workspace,
+            contact=booking.contact,
+            direction=Message.Direction.OUTBOUND,
+            sender_type=Message.SenderType.HUMAN_AGENT,
+            body=f"Good news - {what} is confirmed for {when}. Reply here if anything changes.",
+            is_draft=True,
+        )
+        channel = ZernioChannel.objects.filter(workspace=workspace).first()
+        if channel is not None:
+            from .sending import send_draft
+
+            try:
+                send_draft(channel, booking.contact, reply)
+            except Exception:
+                logger.exception("receptionist: booking confirmation send failed for %s", booking.contact.id)
+        messages.success(request, "Booking confirmed and the customer has been told on WhatsApp.")
+    elif action == "cancel" and booking.status in (Booking.Status.REQUESTED, Booking.Status.CONFIRMED):
+        booking.status = Booking.Status.CANCELLED
+        booking.save(update_fields=["status"])
+        messages.success(request, "Booking cancelled.")
+    return redirect("receptionist:bookings", workspace_id=workspace.id)
 
 
 @login_required

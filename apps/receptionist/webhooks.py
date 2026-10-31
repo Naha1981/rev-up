@@ -148,7 +148,14 @@ def _apply_intake(workspace, contact, industry: str, intake: dict) -> None:
     """Create an industry intake record when the customer gave usable detail."""
     if not intake or not any(intake.values()):
         return
-    from .models import DentalAppointment, FuneralClaim, TradeDispatch
+    from .models import Booking, DentalAppointment, FuneralClaim, TradeDispatch
+
+    detail = (intake.get("detail") or "").strip()
+    preferred = (intake.get("preferred_time") or "").strip()
+    if detail or preferred:
+        Booking.objects.create(
+            workspace=workspace, contact=contact, service=detail[:200], preferred_time=preferred[:200]
+        )
 
     name = (intake.get("name") or "").strip()
     detail = (intake.get("detail") or "").strip()

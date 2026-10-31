@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mx-auto w-full max-w-2xl px-4 py-6">
+  <div class="flex items-center justify-between">
+    <h1 class="text-xl font-semibold text-gray-900">Bookings</h1>
+    <a href="{% url 'receptionist:inbox' workspace.id %}" class="text-sm font-medium text-blue-600">Inbox</a>
+  </div>
+  {% if bookings %}
+  <div class="mt-5 space-y-2">
+    {% for b in bookings %}
+    <div class="rounded-2xl border border-gray-200 bg-white px-4 py-3">
+      <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <p class="font-medium text-gray-900">{{ b.contact.name|default:b.contact.wa_id }}</p>
+          <p class="text-sm text-gray-500">{{ b.service|default:"Booking request" }}{% if b.preferred_time %} &middot; {{ b.preferred_time }}{% endif %}</p>
+          <p class="mt-1 text-xs text-gray-400">{{ b.created_at|date:"j M Y, H:i" }}</p>
+        </div>
+        <div class="flex shrink-0 items-center gap-2">
+          {% if b.status == "requested" %}
+          <form method="post" action="{% url 'receptionist:booking_action' workspace.id b.id 'confirm' %}">{% csrf_token %}
+            <button type="submit" class="rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-medium text-white">Confirm</button>
+          </form>
+          <form method="post" action="{% url 'receptionist:booking_action' workspace.id b.id 'cancel' %}">{% csrf_token %}
+            <button type="submit" class="rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-500">Cancel</button>
+          </form>
+          {% elif b.status == "confirmed" %}
+          <span class="rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800">Confirmed</span>
+          <form method="post" action="{% url 'receptionist:booking_action' workspace.id b.id 'cancel' %}">{% csrf_token %}
+            <button type="submit" class="rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-500">Cancel</button>
+          </form>
+          {% elif b.status == "cancelled" %}
+          <span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-500">Cancelled</span>
+          {% else %}
+          <span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">Done</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="mt-6 rounded-2xl border border-gray-200 bg-white p-6 text-center">
+    <p class="text-gray-600">No bookings yet. When a customer asks for a time on WhatsApp, the request lands here for you to confirm.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

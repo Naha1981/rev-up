@@ -10,7 +10,7 @@ from django.utils import timezone
 from apps.organizations.models import Organization
 from apps.workspaces.models import Workspace
 
-from .models import BusinessProfile, Contact, FuneralClaim, Message, TradeDispatch, ZernioChannel
+from .models import Booking, BusinessProfile, Contact, FuneralClaim, Message, TradeDispatch, ZernioChannel
 from .services import needs_human
 from .webhooks import handle_inbox_message
 
@@ -257,6 +257,109 @@ class ViewTests(TestCase):
         resp = self.client.get(f"/workspace/{self.ws.id}/receptionist/")
         self.assertContains(resp, "Patient One")
         self.assertNotContains(resp, "Stranger")
+
+
+class BookingTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        from apps.members.models import WorkspaceMembership
+
+        user_model = get_user_model()
+        self.ws = _workspace("gg-plumbing")
+        self.user = user_model.objects.create_user(
+            email="plumber@example.com", password="x" * 20, tos_accepted_at=timezone.now()
+        )
+        self.outsider = user_model.objects.create_user(
+            email="stranger2@example.com", password="x" * 20, tos_accepted_at=timezone.now()
+        )
+        WorkspaceMembership.objects.create(user=self.user, workspace=self.ws)
+        self.profile = BusinessProfile.objects.create(workspace=self.ws, industry="trades", business_name="GG Plumbing")
+        self.channel = ZernioChannel.objects.create(workspace=self.ws, zernio_account_id="acct-gg")
+
+    def _booking(self, ws=None, contact=None, status="requested"):
+        ws = ws or self.ws
+        contact = contact or Contact.objects.create(workspace=ws, wa_id="27823334444", name="Lucky")
+        return Booking.objects.create(
+            workspace=ws, contact=contact, service="Fix leaking geyser", preferred_time="Tuesday morning", status=status
+        )
+
+    @patch("apps.receptionist.webhooks.draft_reply")
+    def test_intake_creates_booking(self, mock_draft):
+        from apps.receptionist.services import ReplyDraft
+
+        mock_draft.return_value = ReplyDraft(
+            body="I can help with that.",
+            intake={"name": "Lucky", "detail": "Fix leaking geyser", "preferred_time": "Tuesday morning"},
+        )
+        handle_inbox_message(_payload("acct-gg", text="My geyser is leaking, can you come Tuesday morning?"))
+        booking = Booking.objects.get(workspace=self.ws)
+        self.assertEqual(booking.service, "Fix leaking geyser")
+        self.assertEqual(booking.preferred_time, "Tuesday morning")
+        self.assertEqual(booking.status, "requested")
+        self.assertEqual(booking.contact.wa_id, "27821234567")
+
+    @patch("apps.receptionist.webhooks.draft_reply")
+    def test_empty_intake_creates_no_booking(self, mock_draft):
+        from apps.receptionist.services import ReplyDraft
+
+        mock_draft.return_value = ReplyDraft(body="Hello!", intake={})
+        handle_inbox_message(_payload("acct-gg"))
+        self.assertEqual(Booking.objects.count(), 0)
+
+    def test_bookings_page_lists_own_bookings_only(self):
+        self.client.force_login(self.user)
+        self._booking()
+        other_ws = _workspace("hh-other")
+        other_contact = Contact.objects.create(workspace=other_ws, wa_id="27999999999", name="Stranger")
+        Booking.objects.create(workspace=other_ws, contact=other_contact, service="Other job")
+        resp = self.client.get(f"/workspace/{self.ws.id}/receptionist/bookings/")
+        self.assertContains(resp, "Fix leaking geyser")
+        self.assertNotContains(resp, "Other job")
+
+    def test_bookings_requires_membership(self):
+        self.client.force_login(self.outsider)
+        resp = self.client.get(f"/workspace/{self.ws.id}/receptionist/bookings/")
+        self.assertEqual(resp.status_code, 403)
+
+    @patch("apps.receptionist.sending.send_draft", return_value=True)
+    def test_confirm_marks_booking_and_sends_whatsapp(self, mock_send):
+        self.client.force_login(self.user)
+        booking = self._booking()
+        resp = self.client.post(f"/workspace/{self.ws.id}/receptionist/bookings/{booking.id}/confirm/")
+        self.assertEqual(resp.status_code, 302)
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, "confirmed")
+        reply = Message.objects.get(contact=booking.contact, direction="outbound")
+        self.assertIn("Fix leaking geyser", reply.body)
+        self.assertIn("Tuesday morning", reply.body)
+        self.assertEqual(reply.sender_type, "human_agent")
+        mock_send.assert_called_once_with(self.channel, booking.contact, reply)
+
+    @patch("apps.receptionist.sending.send_draft", return_value=True)
+    def test_confirm_ignored_when_not_requested(self, mock_send):
+        self.client.force_login(self.user)
+        booking = self._booking(status="cancelled")
+        self.client.post(f"/workspace/{self.ws.id}/receptionist/bookings/{booking.id}/confirm/")
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, "cancelled")
+        mock_send.assert_not_called()
+        self.assertEqual(Message.objects.filter(direction="outbound").count(), 0)
+
+    def test_cancel_marks_booking(self):
+        self.client.force_login(self.user)
+        booking = self._booking()
+        self.client.post(f"/workspace/{self.ws.id}/receptionist/bookings/{booking.id}/cancel/")
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, "cancelled")
+
+    def test_outsider_cannot_confirm(self):
+        self.client.force_login(self.outsider)
+        booking = self._booking()
+        resp = self.client.post(f"/workspace/{self.ws.id}/receptionist/bookings/{booking.id}/confirm/")
+        self.assertEqual(resp.status_code, 403)
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, "requested")
 
 
 class RealPayloadShapeTests(TestCase):
