@@ -23,7 +23,38 @@ from .models import (
     FuneralClaim,
     Industry,
     TradeDispatch,
+    ZernioChannel,
 )
+
+
+def _parse_pricing(raw: str) -> dict | None:
+    """One service per line: 'Check-up and clean: R850'. JSON objects still accepted."""
+    raw = raw.strip()
+    if not raw:
+        return {}
+    if raw.startswith("{"):
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            return None
+        return data if isinstance(data, dict) else None
+    pricing: dict[str, str] = {}
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if ":" not in line:
+            return None
+        name, price = line.rsplit(":", 1)
+        name, price = name.strip(), price.strip()
+        if not name or not price:
+            return None
+        pricing[name] = price
+    return pricing
+
+
+def _pricing_lines(pricing: dict) -> str:
+    return "\n".join(f"{name}: {price}" for name, price in pricing.items())
 
 
 def _get_workspace(request, workspace_id):
@@ -44,15 +75,10 @@ def setup(request, workspace_id):
         if industry not in Industry.values:
             industry = Industry.GENERAL
         pricing_raw = (request.POST.get("pricing_data") or "").strip()
-        pricing = {}
-        if pricing_raw:
-            try:
-                pricing = json.loads(pricing_raw)
-                if not isinstance(pricing, dict):
-                    raise ValueError
-            except ValueError:
-                messages.error(request, 'Price list must be JSON like {"Standard service": "R15,000"}.')
-                return redirect("receptionist:setup", workspace_id=workspace.id)
+        pricing = _parse_pricing(pricing_raw)
+        if pricing is None:
+            messages.error(request, "Price list: one service per line, like Check-up and clean: R850")
+            return redirect("receptionist:setup", workspace_id=workspace.id)
         hours = (request.POST.get("operating_hours") or "").strip()
         defaults = {
             "industry": industry,
@@ -69,10 +95,34 @@ def setup(request, workspace_id):
         messages.success(request, "Receptionist settings saved.")
         return redirect("receptionist:inbox", workspace_id=workspace.id)
 
-    pricing_text = json.dumps(profile.pricing_data) if profile and profile.pricing_data else ""
+    pricing_text = _pricing_lines(profile.pricing_data) if profile and profile.pricing_data else ""
     hours_text = ""
     if profile and profile.operating_hours:
         hours_text = profile.operating_hours.get("text", "")
+    channel = ZernioChannel.objects.filter(workspace=workspace).first()
+    wa_accounts: list[dict] = []
+    connect_ready = False
+    if channel is None:
+        from apps.social_accounts.zernio_connect import zernio_ready
+
+        connect_ready = zernio_ready()
+        from apps.social_accounts.models import WorkspaceProviderProfile
+
+        provider = WorkspaceProviderProfile.objects.filter(workspace=workspace, provider="zernio").first()
+        if provider:
+            from providers.zernio import ZernioClient, ZernioError
+
+            try:
+                with ZernioClient() as client:
+                    wa_accounts = [
+                        {
+                            "id": a.get("_id") or a.get("id"),
+                            "label": a.get("username") or a.get("phoneNumber") or a.get("name") or "WhatsApp number",
+                        }
+                        for a in client.list_accounts(profile_id=provider.profile_id, platform="whatsapp")
+                    ]
+            except ZernioError:
+                wa_accounts = []
     return render(
         request,
         "receptionist/setup.html",
@@ -82,6 +132,9 @@ def setup(request, workspace_id):
             "industries": Industry.choices,
             "pricing_text": pricing_text,
             "hours_text": hours_text,
+            "channel": channel,
+            "wa_accounts": wa_accounts,
+            "connect_ready": connect_ready,
         },
     )
 
@@ -124,3 +177,60 @@ def conversation(request, workspace_id, contact_id):
         "receptionist/conversation.html",
         {"workspace": workspace, "contact": contact, "msgs": contact.messages.all()},
     )
+
+
+@login_required
+@require_http_methods(["POST"])
+def bind_whatsapp(request, workspace_id):
+    """Bind a WhatsApp number already connected to this workspace's provider profile."""
+    workspace = _get_workspace(request, workspace_id)
+    account_id = (request.POST.get("account_id") or "").strip()
+    if not account_id:
+        messages.error(request, "Choose a number first.")
+        return redirect("receptionist:setup", workspace_id=workspace.id)
+    from apps.social_accounts.models import WorkspaceProviderProfile
+    from providers.zernio import ZernioClient, ZernioError
+
+    provider = WorkspaceProviderProfile.objects.filter(workspace=workspace, provider="zernio").first()
+    if provider is None:
+        messages.error(request, "Connect a WhatsApp number first.")
+        return redirect("receptionist:setup", workspace_id=workspace.id)
+    try:
+        with ZernioClient() as client:
+            accounts = client.list_accounts(profile_id=provider.profile_id, platform="whatsapp")
+    except ZernioError:
+        messages.error(request, "Could not reach the connection service. Please try again.")
+        return redirect("receptionist:setup", workspace_id=workspace.id)
+    match = next((a for a in accounts if (a.get("_id") or a.get("id")) == account_id), None)
+    if match is None:
+        messages.error(request, "That number is not connected to this workspace.")
+        return redirect("receptionist:setup", workspace_id=workspace.id)
+    ZernioChannel.objects.update_or_create(
+        workspace=workspace,
+        defaults={
+            "zernio_account_id": account_id,
+            "zernio_profile_id": provider.profile_id,
+            "phone_number": (match.get("username") or match.get("phoneNumber") or "").lstrip("+"),
+            "label": match.get("name") or "WhatsApp",
+        },
+    )
+    messages.success(request, "WhatsApp connected. Your receptionist is live on this number.")
+    return redirect("receptionist:setup", workspace_id=workspace.id)
+
+
+@login_required
+@require_http_methods(["POST"])
+def connect_whatsapp(request, workspace_id):
+    """Start the hosted WhatsApp connect flow for this workspace."""
+    workspace = _get_workspace(request, workspace_id)
+    from apps.social_accounts.zernio_connect import start_zernio_connect, zernio_ready
+    from providers.zernio import ZernioError
+
+    if not zernio_ready():
+        messages.error(request, "Connecting is temporarily unavailable. Please try again later.")
+        return redirect("receptionist:setup", workspace_id=workspace.id)
+    try:
+        return start_zernio_connect(request, workspace, "whatsapp")
+    except ZernioError:
+        messages.error(request, "Could not start the connection. Please try again.")
+        return redirect("receptionist:setup", workspace_id=workspace.id)

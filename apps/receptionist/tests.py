@@ -361,3 +361,74 @@ class SandboxSendTests(TestCase):
         self.assertFalse(outbound.is_draft)
         self.assertEqual(outbound.zernio_message_id, "zm9")
         mock_post.assert_called_once()
+
+
+class PricingParserTests(TestCase):
+    def test_lines_format(self):
+        from apps.receptionist.views import _parse_pricing
+
+        self.assertEqual(
+            _parse_pricing("Check-up and clean: R850\nFilling: R1,200"),
+            {"Check-up and clean": "R850", "Filling": "R1,200"},
+        )
+
+    def test_json_still_accepted(self):
+        from apps.receptionist.views import _parse_pricing
+
+        self.assertEqual(_parse_pricing('{"Check-up": "R850"}'), {"Check-up": "R850"})
+
+    def test_blank_and_garbage(self):
+        from apps.receptionist.views import _parse_pricing
+
+        self.assertEqual(_parse_pricing(""), {})
+        self.assertIsNone(_parse_pricing("no colon here"))
+        self.assertIsNone(_parse_pricing("{not json"))
+
+
+class WhatsAppConnectTests(TestCase):
+    def _member_client(self):
+        from django.contrib.auth import get_user_model
+
+        from apps.members.models import WorkspaceMembership
+
+        user = get_user_model().objects.create_user(
+            email="owner@example.com", password="x", tos_accepted_at=timezone.now()
+        )
+        ws = _workspace("Connect WS")
+        WorkspaceMembership.objects.create(user=user, workspace=ws, workspace_role="owner")
+        self.client.force_login(user)
+        return ws
+
+    def test_setup_shows_connected_channel(self):
+        ws = self._member_client()
+        ZernioChannel.objects.create(workspace=ws, zernio_account_id="acc1", phone_number="12029087457")
+        resp = self.client.get(f"/workspace/{ws.id}/receptionist/setup/")
+        self.assertContains(resp, "Connected")
+        self.assertContains(resp, "+12029087457")
+
+    @patch("providers.zernio.ZernioClient")
+    def test_bind_creates_channel_for_own_account(self, mock_client_cls):
+        ws = self._member_client()
+        from apps.social_accounts.models import WorkspaceProviderProfile
+
+        WorkspaceProviderProfile.objects.create(workspace=ws, provider="zernio", profile_id="prof1")
+        mock_client_cls.return_value.__enter__.return_value.list_accounts.return_value = [
+            {"_id": "acc1", "username": "+2711000111", "name": "My Business"}
+        ]
+        resp = self.client.post(f"/workspace/{ws.id}/receptionist/setup/bind-whatsapp/", {"account_id": "acc1"})
+        self.assertEqual(resp.status_code, 302)
+        channel = ZernioChannel.objects.get(workspace=ws)
+        self.assertEqual(channel.zernio_account_id, "acc1")
+        self.assertEqual(channel.phone_number, "2711000111")
+
+    @patch("providers.zernio.ZernioClient")
+    def test_bind_refuses_account_not_on_profile(self, mock_client_cls):
+        ws = self._member_client()
+        from apps.social_accounts.models import WorkspaceProviderProfile
+
+        WorkspaceProviderProfile.objects.create(workspace=ws, provider="zernio", profile_id="prof1")
+        mock_client_cls.return_value.__enter__.return_value.list_accounts.return_value = [
+            {"_id": "acc1", "username": "+2711000111"}
+        ]
+        self.client.post(f"/workspace/{ws.id}/receptionist/setup/bind-whatsapp/", {"account_id": "acc-other"})
+        self.assertFalse(ZernioChannel.objects.filter(workspace=ws).exists())
