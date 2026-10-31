@@ -49,6 +49,7 @@ class PlatformPublishCeilingTest(TransactionTestCase):
             account_platform_id="li-1",
             account_name="acct",
             connection_status=SocialAccount.ConnectionStatus.CONNECTED,
+            provider="direct",
         )
         past = timezone.now() - timedelta(minutes=5)
         # One platform post per post, so every group contributes exactly one

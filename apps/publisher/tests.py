@@ -346,6 +346,7 @@ class NonRetryableFailureTest(TestCase):
             account_platform_id="tt-1",
             account_name="janschmitz51",
             connection_status=SocialAccount.ConnectionStatus.CONNECTED,
+            provider="direct",
         )
         self.post = Post.objects.create(workspace=self.workspace, caption="hi")
         self.platform_post = PlatformPost.objects.create(
@@ -552,6 +553,7 @@ class PublishedPostLeavesQueueTest(TestCase):
             account_platform_id="li-1",
             account_name="LI",
             connection_status=SocialAccount.ConnectionStatus.CONNECTED,
+            provider="direct",
         )
         self.queue = Queue.objects.create(workspace=self.workspace, name="Q", social_account=self.account)
         self.post = Post.objects.create(workspace=self.workspace, caption="hi")
@@ -642,6 +644,7 @@ class PublishErrorIsNeverRawTest(TestCase):
             account_platform_id="ig-1",
             account_name="IG",
             connection_status=SocialAccount.ConnectionStatus.CONNECTED,
+            provider="direct",
         )
         post = Post.objects.create(workspace=workspace, caption="hi")
         self.platform_post = PlatformPost.objects.create(

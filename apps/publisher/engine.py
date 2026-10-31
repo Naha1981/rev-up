@@ -688,6 +688,198 @@ class PublishEngine:
                 exc_info=True,
             )
 
+    def _dispatch_to_zernio(self, platform_post):
+        """Publish one PlatformPost through Zernio - the only social path.
+
+        Zernio holds the platform tokens and fetches media from public URLs,
+        so nothing here touches a token or downloads a byte. One API call
+        carries one platform target (one PlatformPost = one account); retries
+        reuse the row's stored idempotency key, so a worker crash mid-request
+        can never double-post - the replay comes back as the original post.
+        """
+        from uuid import uuid4
+
+        from apps.social_accounts.zernio_connect import zernio_ready, zernio_slug_for
+        from providers.zernio import ZernioClient
+
+        account = platform_post.social_account
+        workspace = platform_post.post.workspace
+
+        if account.platform not in ("facebook", "instagram", "tiktok", "linkedin_personal", "linkedin_company"):
+            raise PublishError(
+                f"{account.get_platform_display()} is not one RevUp publishes through Zernio.",
+                platform=account.get_platform_display(),
+                retryable=False,
+            )
+
+        # Server-enforced test mode: no live endpoint is ever called. The row
+        # is marked with a recognisable simulated provider id so reporting can
+        # tell a rehearsed publish from a real one.
+        if getattr(workspace, "publish_test_mode", False):
+            platform_post.provider = "zernio"
+            platform_post.provider_post_id = f"test-{platform_post.id}"
+            platform_post.last_provider_status = "simulated"
+            platform_post.last_status_synced_at = timezone.now()
+            platform_post.save(
+                update_fields=[
+                    "provider",
+                    "provider_post_id",
+                    "last_provider_status",
+                    "last_status_synced_at",
+                    "updated_at",
+                ]
+            )
+            return {
+                "success": True,
+                "platform_post_id": "",
+                "url": "",
+                "response": {"test_mode": True, "simulated": True},
+                "async_publish": False,
+            }
+
+        if not zernio_ready():
+            # The off-switch pauses publishing: retryable, so due rows resume
+            # when it is switched back on rather than failing in a heap.
+            raise PublishError(
+                "Publishing is paused right now. Please try again later.",
+                platform=account.get_platform_display(),
+                retryable=True,
+            )
+
+        # One key per logical publish, minted once and stored before the first
+        # call: every retry of THIS row resends it, and Zernio's 24h replay
+        # window turns a duplicate attempt into the original post (HTTP 200).
+        if not platform_post.idempotency_key:
+            platform_post.idempotency_key = str(uuid4())
+            platform_post.save(update_fields=["idempotency_key"])
+
+        app_url = getattr(settings, "APP_URL", "").rstrip("/")
+        media_items = []
+        for pm in platform_post.post.media_attachments.select_related("media_asset").order_by("position"):
+            asset = pm.media_asset
+            if not asset.file:
+                continue
+            url = asset.file.url
+            if url.startswith("/"):
+                url = f"{app_url}{url}"
+            media_type = {"image": "image", "video": "video", "gif": "gif"}.get(asset.media_type)
+            if media_type:
+                media_items.append({"type": media_type, "url": url})
+
+        slug = zernio_slug_for(account.platform)
+        with ZernioClient() as client:
+            outcome = client.create_post(
+                platforms=[{"platform": slug, "accountId": account.provider_account_id}],
+                content=platform_post.effective_caption or "",
+                media_items=media_items or None,
+                publish_now=True,
+                idempotency_key=platform_post.idempotency_key,
+                metadata={"platform_post_id": str(platform_post.id)},
+            )
+
+        post = outcome["post"]
+        platform_post.provider = "zernio"
+        platform_post.provider_post_id = post.get("_id", "")
+        platform_post.last_status_synced_at = timezone.now()
+
+        targets = post.get("platforms") or []
+        ours = [t for t in targets if t.get("accountId") == account.provider_account_id] or targets
+        failed = [t for t in ours if t.get("status") == "failed"]
+        if failed:
+            err = failed[0].get("error") or "The platform refused this post."
+            platform_post.last_provider_status = "failed"
+            platform_post.last_provider_error = str(err)[:2000]
+            platform_post.save()
+            raise PublishError(str(err), platform=account.get_platform_display(), retryable=False)
+
+        statuses = [t.get("status", "") for t in ours]
+        platform_post.last_provider_status = ",".join(s for s in statuses if s)
+        platform_post.last_provider_error = ""
+        platform_post.save()
+
+        published = ours and all(t.get("status") == "published" for t in ours)
+        first = ours[0] if ours else {}
+        return {
+            "success": True,
+            "platform_post_id": (first.get("platformPostId") or "") if published else "",
+            "url": first.get("postUrl") or first.get("url") or "",
+            "response": {
+                "zernio_post_id": platform_post.provider_post_id,
+                "idempotent_replay": outcome["idempotent_replay"],
+            },
+            # Zernio accepted the post but is still handing it to the platform;
+            # confirm_pending_publishes settles it from GET /v1/posts/{id}.
+            "async_publish": not published,
+        }
+
+    def _confirm_one_zernio_publish(self, platform_post, *, stale_before, confirm_before) -> bool:
+        """Settle one in-flight Zernio publish from GET /v1/posts/{id}."""
+        from providers.zernio import ZernioClient, ZernioError, normalise_status
+
+        account = platform_post.social_account
+        handle = platform_post.provider_post_id
+        if not handle:
+            if platform_post.updated_at < stale_before:
+                self._fail_permanently(
+                    platform_post,
+                    "Worker stopped mid-publish; no provider handle was recorded.",
+                    user_message=PUBLISH_INTERRUPTED_MESSAGE,
+                    reason="interrupted",
+                )
+                return True
+            return False
+
+        try:
+            with ZernioClient() as client:
+                post = client.get_post(handle)
+        except ZernioError as exc:
+            if exc.status_code == 404:
+                # Zernio no longer has the post at all - we cannot learn the
+                # outcome, and re-publishing risks a duplicate.
+                self._give_up_unconfirmed(platform_post, "Zernio no longer has a record of this post.")
+                return True
+            logger.warning("Zernio confirm failed for PlatformPost %s: %s", platform_post.id, exc)
+            return False
+
+        targets = post.get("platforms") or []
+        ours = [t for t in targets if t.get("accountId") == account.provider_account_id] or targets
+        statuses = [t.get("status", "") for t in ours]
+        platform_post.last_provider_status = ",".join(s for s in statuses if s)
+        platform_post.last_status_synced_at = timezone.now()
+        platform_post.save(update_fields=["last_provider_status", "last_status_synced_at", "updated_at"])
+
+        if any(s == "failed" for s in statuses):
+            err = next((t.get("error") for t in ours if t.get("status") == "failed"), None)
+            platform_post.last_provider_error = str(err or "")[:2000]
+            platform_post.save(update_fields=["last_provider_error", "updated_at"])
+            self._fail_permanently(
+                platform_post,
+                str(err or f"{account.platform} failed to publish this post."),
+                user_message=str(err) if err else PUBLISH_GENERIC_MESSAGE,
+                reason="failed",
+            )
+            return True
+        if ours and all(s == "published" for s in statuses):
+            self._mark_confirmed_published(platform_post, ours[0].get("platformPostId") or handle)
+            return True
+        if any(normalise_status(s) == "draft" for s in statuses):
+            # Cancelled at the provider: never went out, never will under this handle.
+            self._fail_permanently(
+                platform_post,
+                "This post was cancelled before publishing.",
+                user_message="This post was cancelled before publishing.",
+                reason="cancelled",
+            )
+            return True
+
+        if platform_post.updated_at < confirm_before:
+            self._give_up_unconfirmed(
+                platform_post,
+                f"{account.platform} never finished processing this post.",
+            )
+            return True
+        return False
+
     def _dispatch_to_provider(self, platform_post, media_cache=None):
         """Dispatch to the appropriate platform provider.
 
@@ -701,6 +893,11 @@ class PublishEngine:
         """
         account = platform_post.social_account
         platform = account.platform
+
+        if account.provider == "zernio":
+            return self._dispatch_to_zernio(platform_post)
+
+        platform_post.provider = "direct"
         attachments = list(platform_post.post.media_attachments.select_related("media_asset").order_by("position"))
 
         # Every scheduled row passes through here, however it was scheduled, so
@@ -1207,6 +1404,13 @@ class PublishEngine:
 
     def _confirm_one_publish(self, platform_post, *, stale_before, confirm_before, unconfirmed_before) -> bool:
         """Settle one in-flight row. Returns True when it reached a terminal status."""
+        # The account owns who publishes it; PlatformPost.provider is stamped
+        # at dispatch and defaults to "zernio", so it cannot be the switch.
+        if platform_post.social_account.provider == "zernio":
+            return self._confirm_one_zernio_publish(
+                platform_post, stale_before=stale_before, confirm_before=confirm_before
+            )
+
         handle = platform_post.platform_post_id
         account = platform_post.social_account
 

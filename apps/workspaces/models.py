@@ -34,6 +34,12 @@ class Workspace(models.Model):
         default=ApprovalWorkflowMode.NONE,
     )
     is_archived = models.BooleanField(default=False)
+    # Server-enforced test mode: while on, the publish engine never calls the
+    # live publishing provider for this workspace - publishes are simulated
+    # and marked as such. For trying RevUp end-to-end before a real account
+    # goes anywhere near it. Server-side only; no endpoint can clear it but
+    # the workspace settings save.
+    publish_test_mode = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

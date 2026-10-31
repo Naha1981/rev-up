@@ -46,6 +46,7 @@ class PendingPublishTestCase(TestCase):
             account_platform_id="tt-1",
             account_name="acct",
             connection_status=SocialAccount.ConnectionStatus.CONNECTED,
+            provider="direct",
         )
         self.post = Post.objects.create(workspace=self.workspace, caption="hi")
         self.pp = PlatformPost.objects.create(
