@@ -45,6 +45,7 @@ urlpatterns = [
     path("workspace/<uuid:workspace_id>/analytics/", include("apps.analytics.urls")),
     path("webhooks/", include("apps.inbox.webhook_urls")),
     path("webhooks/", include("apps.common.webhook_urls")),
+    path("webhooks/", include("apps.publisher.webhook_urls")),
     # Agent API (Phase 2) — programmatic access for external AI agents.
     # Authenticated via scoped bearer tokens issued from the Organization
     # → API Keys page. OpenAPI docs at /api/v1/docs. ``agent_api.urls``

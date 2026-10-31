@@ -84,3 +84,28 @@ class RateLimitState(models.Model):
         if self.requests_remaining > 0:
             return True
         return not self.is_rate_limited
+
+
+class ZernioWebhookEvent(models.Model):
+    """One received Zernio webhook delivery.
+
+    The row is inserted BEFORE processing with Zernio's stable event id under
+    a unique constraint: a redelivery that conflicts is a duplicate and is
+    acked without reprocessing (unless the first attempt never finished).
+    It is also the audit record of what the provider told us and when.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    event_id = models.CharField(max_length=64, unique=True)
+    event_type = models.CharField(max_length=60, blank=True, default="")
+    payload = models.JSONField(default=dict)
+    received_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(blank=True, null=True)
+    processing_error = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "publisher_zernio_webhook_event"
+        ordering = ["-received_at"]
+
+    def __str__(self):
+        return f"ZernioWebhookEvent({self.event_type or 'unknown'} {self.event_id})"
