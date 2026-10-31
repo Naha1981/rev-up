@@ -35,6 +35,14 @@ WS_ROLE_LEVEL = {
 
 
 def _inviter_org_level(inviter, org):
+    # Platform staff (the RevUp owner operating /platform-admin/) act above
+    # every org's hierarchy: they create businesses and invite clients into
+    # orgs they hold no membership in. v1 resolves request.org via a single
+    # .first() membership, so giving staff real memberships in every client
+    # org would make their own org context nondeterministic - the bypass is
+    # the safe shape.
+    if getattr(inviter, "is_staff", False):
+        return ORG_ROLE_LEVEL[OrgMembership.OrgRole.OWNER] + 1
     membership = OrgMembership.objects.filter(user=inviter, organization=org).first()
     if not membership:
         return 0

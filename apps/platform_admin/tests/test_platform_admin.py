@@ -146,7 +146,10 @@ def test_business_detail_shows_accounts_and_members(client):
 
 
 @pytest.mark.django_db
-def test_business_create_creates_org_workspace_and_owner_memberships(client):
+def test_business_create_creates_org_workspace_without_owner_membership(client):
+    """Staff hold NO membership in client orgs - v1 request.org resolution
+    uses .first() and multiple memberships would make it nondeterministic.
+    The invite service grants staff an explicit bypass instead."""
     from apps.members.models import OrgMembership, WorkspaceMembership
 
     staff = make_user("owner3@example.com", is_staff=True)
@@ -158,11 +161,9 @@ def test_business_create_creates_org_workspace_and_owner_memberships(client):
     org = Organization.objects.get(name="New Client Biz")
     assert resp.status_code == 302
     assert str(org.id) in resp["Location"]
-    ws = org.workspaces.get()
-    assert OrgMembership.objects.filter(user=staff, organization=org, org_role=OrgMembership.OrgRole.OWNER).exists()
-    assert WorkspaceMembership.objects.filter(
-        user=staff, workspace=ws, workspace_role=WorkspaceMembership.WorkspaceRole.OWNER
-    ).exists()
+    assert org.workspaces.count() == 1
+    assert not OrgMembership.objects.filter(user=staff, organization=org).exists()
+    assert not WorkspaceMembership.objects.filter(user=staff, workspace__organization=org).exists()
 
 
 @pytest.mark.django_db

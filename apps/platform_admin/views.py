@@ -90,7 +90,7 @@ def business_create(request):
     from django.contrib import messages
     from django.shortcuts import redirect
 
-    from apps.members.models import OrgMembership, WorkspaceMembership
+    from apps.members.models import WorkspaceMembership
     from apps.members.services import create_invitation
     from apps.workspaces.models import Workspace
 
@@ -103,15 +103,6 @@ def business_create(request):
         else:
             org = Organization.objects.create(name=name, default_timezone=timezone_name)
             workspace = Workspace.objects.create(organization=org, name=name)
-            # The platform owner owns every business they create - this is
-            # what "switch between businesses" and the invite role checks
-            # (no granting above your own level) key off.
-            OrgMembership.objects.create(user=request.user, organization=org, org_role=OrgMembership.OrgRole.OWNER)
-            WorkspaceMembership.objects.create(
-                user=request.user,
-                workspace=workspace,
-                workspace_role=WorkspaceMembership.WorkspaceRole.OWNER,
-            )
             if client_email:
                 try:
                     create_invitation(
