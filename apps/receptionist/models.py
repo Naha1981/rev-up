@@ -13,9 +13,28 @@ from django.db import models
 
 
 class Industry(models.TextChoices):
+    PLUMBER = "plumber", "Plumbing"
+    ELECTRICIAN = "electrician", "Electrical"
+    SECURITY = "security", "Security"
+    SOLAR = "solar", "Solar / inverters"
+    AUTO_WORKSHOP = "auto-workshop", "Auto workshop"
+    MOBILE_MECHANIC = "mobile-mechanic", "Mobile mechanic"
+    TOWING = "towing", "Towing / roadside"
+    HVAC = "hvac", "Aircon / refrigeration"
+    ROOFING = "roofing", "Roofing / waterproofing"
+    GATES_ACCESS = "gates-access", "Gates / fencing / access control"
+    PEST_CONTROL = "pest-control", "Pest control"
+    PROPERTY_MAINTENANCE = "property-maintenance", "Property maintenance"
+    CONTAINER_TRANSPORT = "container-transport", "Container transport"
+    POOL = "pool", "Pool services"
+    AESTHETICS = "aesthetics", "Aesthetics / cosmetic clinic"
+    REAL_ESTATE = "real-estate", "Real estate"
+    PROPERTY_MANAGEMENT = "property-management", "Property management"
+    LEGAL = "legal", "Law firm"
+    FINANCIAL_BROKER = "financial-broker", "Financial / insurance broker"
     FUNERAL = "funeral", "Funeral services"
     DENTAL = "dental", "Dental practice"
-    TRADES = "trades", "Trades (plumbing, electrical, building)"
+    TRADES = "trades", "Trades (general building & repairs)"
     GENERAL = "general", "General local service"
 
 

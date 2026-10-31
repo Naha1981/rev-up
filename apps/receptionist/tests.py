@@ -483,6 +483,78 @@ class QuoteTests(TestCase):
         self.assertEqual(quote.status, "draft")
 
 
+class IndustryPackTests(TestCase):
+    def test_every_industry_has_a_brief(self):
+        from apps.receptionist.models import Industry
+        from apps.receptionist.services import _INDUSTRY_BRIEFS
+
+        for value in Industry.values:
+            self.assertIn(value, _INDUSTRY_BRIEFS, f"no brief for {value}")
+            self.assertLessEqual(len(value), 20, f"{value} exceeds the industry column")
+
+    def test_twenty_approved_packs_present(self):
+        from apps.receptionist.models import Industry
+
+        approved = {
+            "plumber",
+            "electrician",
+            "security",
+            "solar",
+            "auto-workshop",
+            "mobile-mechanic",
+            "towing",
+            "hvac",
+            "roofing",
+            "gates-access",
+            "pest-control",
+            "property-maintenance",
+            "container-transport",
+            "pool",
+            "dental",
+            "aesthetics",
+            "real-estate",
+            "property-management",
+            "legal",
+            "financial-broker",
+        }
+        self.assertTrue(approved.issubset(set(Industry.values)))
+
+    def test_setup_accepts_new_pack(self):
+        from django.contrib.auth import get_user_model
+
+        from apps.members.models import WorkspaceMembership
+
+        ws = _workspace("mm-plumbing")
+        user = get_user_model().objects.create_user(
+            email="plumber2@example.com", password="x" * 20, tos_accepted_at=timezone.now()
+        )
+        WorkspaceMembership.objects.create(user=user, workspace=ws)
+        self.client.force_login(user)
+        resp = self.client.post(
+            f"/workspace/{ws.id}/receptionist/setup/",
+            {"industry": "plumber", "business_name": "Fourways Plumbing", "pricing_data": '{"Call-out": "R650"}'},
+        )
+        self.assertEqual(resp.status_code, 302)
+        profile = BusinessProfile.objects.get(workspace=ws)
+        self.assertEqual(profile.industry, "plumber")
+
+    @patch("apps.receptionist.webhooks.draft_reply")
+    def test_pack_intake_creates_booking(self, mock_draft):
+        from apps.receptionist.services import ReplyDraft
+
+        ws = _workspace("nn-plumbing")
+        BusinessProfile.objects.create(workspace=ws, industry="plumber", business_name="NN Plumbing")
+        ZernioChannel.objects.create(workspace=ws, zernio_account_id="acct-nn")
+        mock_draft.return_value = ReplyDraft(
+            body="We can help with that.",
+            intake={"name": "Vusi", "detail": "Burst geyser", "preferred_time": "today"},
+        )
+        handle_inbox_message(_payload("acct-nn", wa="27829998877", text="Geyser burst, need help today"))
+        booking = Booking.objects.get(workspace=ws)
+        self.assertEqual(booking.service, "Burst geyser")
+        self.assertEqual(booking.preferred_time, "today")
+
+
 class RealPayloadShapeTests(TestCase):
     """The actual Zernio message.received schema (from their OpenAPI spec)."""
 
