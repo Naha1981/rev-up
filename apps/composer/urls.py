@@ -1,10 +1,13 @@
 from django.urls import path
+from django.views.generic import RedirectView
 
 from . import views
 
 app_name = "composer"
 
 urlpatterns = [
+    # Workspace root -> composer
+    path("", RedirectView.as_view(pattern_name="composer:compose", permanent=False), name="workspace_home"),
     # Create landing page
     path("create/", views.create_landing, name="create_landing"),
     # Idea CRUD (HTMX endpoints)
