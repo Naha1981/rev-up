@@ -457,9 +457,7 @@ def calculated_metrics_note(
         calculated.append("follower growth")
     calculated.append("% changes vs. the previous period")
     listed = get_text_list(calculated, "and")
-    return (
-        f"Underlying data comes from {platform}. The {listed} are calculated by RevUp, not reported by {platform}."
-    )
+    return f"Underlying data comes from {platform}. The {listed} are calculated by RevUp, not reported by {platform}."
 
 
 def hero_chart_metrics(account: SocialAccount) -> list[str]:

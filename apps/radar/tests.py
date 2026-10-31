@@ -13,8 +13,20 @@ FEED = {
     "radar": {
         "real": True,
         "items": [
-            {"group": "Costs", "title": "Food inflation bites", "link": "https://news.example/a", "source": "Farmer's Weekly", "score": 4},
-            {"group": "Dining", "title": "Joburg dining trends", "link": "https://news.example/b", "source": "F&H", "score": 3},
+            {
+                "group": "Costs",
+                "title": "Food inflation bites",
+                "link": "https://news.example/a",
+                "source": "Farmer's Weekly",
+                "score": 4,
+            },
+            {
+                "group": "Dining",
+                "title": "Joburg dining trends",
+                "link": "https://news.example/b",
+                "source": "F&H",
+                "score": 3,
+            },
         ],
     },
 }
@@ -86,7 +98,9 @@ class TestRadarIngest:
         assert ingest_feed_for_workspace(workspace, fetcher=_fetch(FEED))["mode"] == "no-feed"
 
     def test_feed_without_account_warns_and_skips(self, workspace):
-        WorkspaceSetting.objects.create(workspace=workspace, key="radar.feed_url", value="https://feed.example/pilot.json")
+        WorkspaceSetting.objects.create(
+            workspace=workspace, key="radar.feed_url", value="https://feed.example/pilot.json"
+        )
         assert ingest_feed_for_workspace(workspace, fetcher=_fetch(FEED))["mode"] == "no-account"
 
     def test_account_needs_reconnect_skips_cleanly(self, workspace, radar_account):

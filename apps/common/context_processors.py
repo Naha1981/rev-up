@@ -130,12 +130,7 @@ def sidebar_context(request):
     dismissed_at = request.user.review_banner_dismissed_at
     last_login = request.user.last_login
     if dismissed_at is None or (last_login is not None and last_login > dismissed_at):
-        show_review_banner = False and (bool(sidebar_channels) or (
-            SocialAccount.objects.filter(
-                workspace_id__in=[ws.id for ws in sidebar_workspaces],
-                connection_status=SocialAccount.ConnectionStatus.CONNECTED,
-            ).exists())
-        )
+        show_review_banner = False
 
     return {
         "sidebar_workspaces": sidebar_workspaces,

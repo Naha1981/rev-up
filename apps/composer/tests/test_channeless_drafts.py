@@ -27,9 +27,7 @@ class ChannelessDraftTests(TestCase):
         )
         self.org = Organization.objects.create(name="Test Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="Test Workspace")
-        OrgMembership.objects.create(
-            user=self.user, organization=self.org, org_role=OrgMembership.OrgRole.OWNER
-        )
+        OrgMembership.objects.create(user=self.user, organization=self.org, org_role=OrgMembership.OrgRole.OWNER)
         WorkspaceMembership.objects.create(
             user=self.user, workspace=self.workspace, workspace_role=WorkspaceMembership.WorkspaceRole.OWNER
         )

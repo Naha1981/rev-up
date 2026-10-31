@@ -78,9 +78,7 @@ def connect(request, workspace_id):
 def pairing(request, workspace_id, pk):
     """Show the pairing code; the page polls status until connected."""
     workspace = _get_workspace(request, workspace_id)
-    connection = get_object_or_404(
-        WhatsAppConnection, pk=pk, workspace=workspace
-    )
+    connection = get_object_or_404(WhatsAppConnection, pk=pk, workspace=workspace)
     return render(
         request,
         "whatsapp_connect/pairing.html",
@@ -108,9 +106,7 @@ def status_json(request, workspace_id, pk):
             connection.save(update_fields=update)
     except (evolution.EvolutionError, httpx.HTTPError) as exc:
         logger.warning("whatsapp status refresh failed: %s", exc)
-    return JsonResponse(
-        {"status": connection.status, "phone": connection.phone_number}
-    )
+    return JsonResponse({"status": connection.status, "phone": connection.phone_number})
 
 
 @login_required

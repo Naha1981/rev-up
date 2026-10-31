@@ -21,10 +21,10 @@ from apps.api.auth import ApiKeyAuth, McpAuth
 from apps.api.routers.accounts import router as accounts_router
 from apps.api.routers.analytics import router as analytics_router
 from apps.api.routers.inbox import router as inbox_router
-from apps.api.routers.responder import router as responder_router
 from apps.api.routers.me import router as me_router
 from apps.api.routers.media import router as media_router
 from apps.api.routers.posts import router as posts_router
+from apps.api.routers.responder import router as responder_router
 from apps.mcp.transport import router as mcp_router
 
 

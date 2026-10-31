@@ -15,13 +15,12 @@ Workspace settings (settings_manager):
 import json
 import logging
 import urllib.request
-
-from apps.common.industry_presets import get_preset
 import uuid as uuid_mod
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from apps.common.industry_presets import get_preset
 from apps.composer.services import approval_gate_allows_schedule, create_post, transition_platform_post
 from apps.settings_manager.helpers import get_generated_post_mode, get_setting
 from apps.social_accounts.models import SocialAccount
@@ -81,7 +80,9 @@ def ingest_feed_for_workspace(workspace: Workspace, *, fetcher=fetch_feed) -> di
         )
         return {"created": 0, "skipped": 0, "mode": "account-needs-reconnect"}
 
-    max_items = int(get_setting(workspace.id, "radar.max_items_per_run", workspace.organization_id) or DEFAULT_MAX_ITEMS)
+    max_items = int(
+        get_setting(workspace.id, "radar.max_items_per_run", workspace.organization_id) or DEFAULT_MAX_ITEMS
+    )
     mode = get_generated_post_mode(workspace.id, workspace.organization_id)
     if mode == "auto" and not approval_gate_allows_schedule(workspace, None):
         mode = "approval"  # same degradation contract as the ingest API
@@ -94,9 +95,11 @@ def ingest_feed_for_workspace(workspace: Workspace, *, fetcher=fetch_feed) -> di
     # industry. "general" (empty keyword list) ingests everything.
     keywords = [k.lower() for k in get_preset(getattr(workspace, "industry", None)).get("radar_keywords", [])]
     if keywords:
+
         def _relevant(it):
             hay = " ".join(str(it.get(k) or "") for k in ("title", "group", "source", "summary")).lower()
             return any(k in hay for k in keywords)
+
         before = len(items)
         items = [it for it in items if _relevant(it)]
         if before != len(items):
@@ -142,7 +145,9 @@ def poll_all_workspace_feeds(*, fetcher=fetch_feed) -> dict:
     from apps.settings_manager.models import WorkspaceSetting
 
     workspace_ids = (
-        WorkspaceSetting.objects.filter(key="radar.feed_url").exclude(value__isnull=True).values_list("workspace_id", flat=True)
+        WorkspaceSetting.objects.filter(key="radar.feed_url")
+        .exclude(value__isnull=True)
+        .values_list("workspace_id", flat=True)
     )
     results = {}
     for ws in Workspace.objects.filter(id__in=workspace_ids):

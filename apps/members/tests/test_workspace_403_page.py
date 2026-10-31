@@ -20,9 +20,7 @@ def _make_user_with_workspace(email, org_name, ws_name):
     org = Organization.objects.create(name=org_name)
     ws = Workspace.objects.create(organization=org, name=ws_name)
     OrgMembership.objects.create(user=user, organization=org, org_role=OrgMembership.OrgRole.OWNER)
-    WorkspaceMembership.objects.create(
-        user=user, workspace=ws, workspace_role=WorkspaceMembership.WorkspaceRole.OWNER
-    )
+    WorkspaceMembership.objects.create(user=user, workspace=ws, workspace_role=WorkspaceMembership.WorkspaceRole.OWNER)
     return user, ws
 
 

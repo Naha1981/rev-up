@@ -66,7 +66,7 @@ def research_trends(config, *, client=None) -> tuple[list[str], str]:
     except Exception as exc:  # network, non-JSON, 4xx/5xx - all the same fallback
         logger.warning("content-agent: SearXNG unavailable (%s); using seed topics", exc)
         return seeds[:MAX_TREND_TOPICS], "seeds"
-    topics = []
+    topics: list[str] = []
     for result in data.get("results", []):
         title = (result.get("title") or "").strip()
         if title and title.lower() not in {t.lower() for t in topics}:
@@ -94,7 +94,13 @@ def draft_posts(config, topics: list[str], *, client=None) -> list[Draft]:
     if not api_key:
         raise RuntimeError("CONTENT_AGENT_GEMINI_API_KEY is not set")
     primary = getattr(settings, "CONTENT_AGENT_GEMINI_MODEL", "gemini-3.8-flash")
-    fallbacks = [m.strip() for m in getattr(settings, "CONTENT_AGENT_GEMINI_FALLBACK_MODELS", "gemini-3-flash-preview,gemini-3.1-flash-lite").split(",") if m.strip()]
+    fallbacks = [
+        m.strip()
+        for m in getattr(
+            settings, "CONTENT_AGENT_GEMINI_FALLBACK_MODELS", "gemini-3-flash-preview,gemini-3.1-flash-lite"
+        ).split(",")
+        if m.strip()
+    ]
     models = [primary] + [m for m in fallbacks if m != primary]
     niche = config.niche or "local restaurant"
     drafts: list[Draft] = []
@@ -131,6 +137,11 @@ def draft_posts(config, topics: list[str], *, client=None) -> list[Draft]:
                     time.sleep(3 * (attempt + 1))
                 if resp is not None and resp.status_code not in (429, 503):
                     break
+            if resp is None:
+                # Every attempt across every model raised before a response
+                # (the inner raise only fires on the last attempt of the last
+                # model, so mypy cannot see this is unreachable on success).
+                raise ValueError("Gemini gave no response")
             resp.raise_for_status()
             payload = resp.json()
             text = payload["candidates"][0]["content"]["parts"][0]["text"]

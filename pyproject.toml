@@ -28,6 +28,11 @@ ignore = [
 # doesn't apply.
 "apps/api/routers/media.py" = ["B008"]
 "apps/api/routers/analytics.py" = ["B008"]
+# Startup modules set os.environ / sys.path BEFORE importing Django config;
+# the late imports are the point, not a mistake.
+"config/urls.py" = ["E402"]
+"nahalabs_prod_start.py" = ["E402"]
+"nahalabs_qa_start.py" = ["E402"]
 "apps/api/routers/inbox.py" = ["B008"]
 
 [tool.ruff.lint.isort]

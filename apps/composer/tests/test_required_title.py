@@ -26,9 +26,7 @@ class RequiredTitleTests(TestCase):
         )
         self.org = Organization.objects.create(name="Org")
         self.ws = Workspace.objects.create(organization=self.org, name="WS")
-        OrgMembership.objects.create(
-            user=self.user, organization=self.org, org_role=OrgMembership.OrgRole.OWNER
-        )
+        OrgMembership.objects.create(user=self.user, organization=self.org, org_role=OrgMembership.OrgRole.OWNER)
         WorkspaceMembership.objects.create(
             user=self.user, workspace=self.ws, workspace_role=WorkspaceMembership.WorkspaceRole.OWNER
         )

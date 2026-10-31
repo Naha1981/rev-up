@@ -508,8 +508,7 @@ def rotate_key(request, key_id):
     services.revoke_api_key(key)
     messages.success(
         request,
-        f"Rotated key “{key.name}” - the old token is dead. "
-        f"New token (shown once): {issued.plaintext_token}",
+        f"Rotated key “{key.name}” - the old token is dead. New token (shown once): {issued.plaintext_token}",
     )
     return redirect("api_keys:list")
 

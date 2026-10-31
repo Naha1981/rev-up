@@ -4,15 +4,17 @@ from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.contrib import admin
+from django.http import HttpResponse
 from django.urls import include, path, re_path
 from django.views.static import serve
 
-from django.http import HttpResponse
 from apps.accounts.views import health_check
 
 
 def robots_txt(request):
     return HttpResponse("User-agent: *\nDisallow: /\n", content_type="text/plain")
+
+
 from apps.api.api import api as agent_api
 from apps.oauth_server import views as oauth_views
 

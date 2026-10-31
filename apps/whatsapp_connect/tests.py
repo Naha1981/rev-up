@@ -3,8 +3,8 @@
 from unittest import mock
 
 from django.test import TestCase, override_settings
-from django.utils import timezone
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.members.models import OrgMembership, WorkspaceMembership
@@ -61,11 +61,15 @@ class PhoneNormalizeTests(TestCase):
 @override_settings(EVOLUTION_API_URL="http://evo.test", EVOLUTION_API_KEY="k")
 class ViewTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(email="owner@example.com", password="x", name="Owner", tos_accepted_at=timezone.now())
+        self.user = User.objects.create_user(
+            email="owner@example.com", password="x", name="Owner", tos_accepted_at=timezone.now()
+        )
         self.org = Organization.objects.create(name="Bistro org")
         self.workspace = Workspace.objects.create(organization=self.org, name="Bistro")
         OrgMembership.objects.create(user=self.user, organization=self.org, org_role=OrgMembership.OrgRole.OWNER)
-        WorkspaceMembership.objects.create(user=self.user, workspace=self.workspace, workspace_role=WorkspaceMembership.WorkspaceRole.OWNER)
+        WorkspaceMembership.objects.create(
+            user=self.user, workspace=self.workspace, workspace_role=WorkspaceMembership.WorkspaceRole.OWNER
+        )
         self.client.force_login(self.user)
 
     def _patch_org(self):
@@ -93,7 +97,9 @@ class ViewTests(TestCase):
 
     def test_status_json_marks_connected(self):
         conn = WhatsAppConnection.objects.create(
-            workspace=self.workspace, instance_name="ws-x", phone_number="27825551234",
+            workspace=self.workspace,
+            instance_name="ws-x",
+            phone_number="27825551234",
             pairing_code="ABCD-1234",
         )
         with mock.patch.object(evolution, "new_client", FakeClient), self._patch_org():
@@ -106,7 +112,9 @@ class ViewTests(TestCase):
 
     def test_disconnect_marks_disconnected(self):
         conn = WhatsAppConnection.objects.create(
-            workspace=self.workspace, instance_name="ws-x", phone_number="27825551234",
+            workspace=self.workspace,
+            instance_name="ws-x",
+            phone_number="27825551234",
             status=WhatsAppConnection.Status.CONNECTED,
         )
         with mock.patch.object(evolution, "new_client", FakeClient), self._patch_org():

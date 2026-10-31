@@ -27,9 +27,7 @@ class WhatsAppConnection(models.Model):
     )
     instance_name = models.CharField(max_length=64, unique=True)
     phone_number = models.CharField(max_length=20)
-    status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True
-    )
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
     pairing_code = models.CharField(max_length=32, blank=True, default="")
     pairing_code_fetched_at = models.DateTimeField(null=True, blank=True)
     connected_at = models.DateTimeField(null=True, blank=True)

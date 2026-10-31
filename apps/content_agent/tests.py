@@ -1,10 +1,7 @@
 """Content-agent tests: external calls are always mocked; the agent must
 never approve, schedule, or publish anything."""
 
-from unittest import mock
-
 from django.test import TestCase, override_settings
-from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.composer.models import PlatformPost, Post
@@ -23,7 +20,12 @@ def make_workspace(name="Test Bistro"):
 
 def make_config(**kwargs):
     workspace = kwargs.pop("workspace", None) or make_workspace()
-    defaults = {"enabled": True, "niche": "family restaurant in Soweto", "topics": ["winter specials", "family platters"], "posts_per_run": 2}
+    defaults = {
+        "enabled": True,
+        "niche": "family restaurant in Soweto",
+        "topics": ["winter specials", "family platters"],
+        "posts_per_run": 2,
+    }
     defaults.update(kwargs)
     return AgentConfig.objects.create(workspace=workspace, **defaults)
 
@@ -61,10 +63,7 @@ class FakeHttp:
             raise self.post_exc
         self.posted_prompts.append(json["contents"][0]["parts"][0]["text"])
         default_text = '{"caption": "Fresh winter specials are on.", "hashtags": ["#SowetoEats"]}'
-        if self.gemini_payloads:
-            payload = self.gemini_payloads.pop(0)
-        else:
-            payload = None
+        payload = self.gemini_payloads.pop(0) if self.gemini_payloads else None
         if payload is None:
             payload = {"candidates": [{"content": {"parts": [{"text": default_text}]}}]}
         return FakeResponse(payload)
@@ -74,7 +73,9 @@ class FakeHttp:
 class TrendResearchTests(TestCase):
     def test_live_trends_from_searxng(self):
         config = make_config()
-        http = FakeHttp(search_payload={"results": [{"title": "Winter warmer menus trend"}, {"title": "Sunday lunch rush"}]})
+        http = FakeHttp(
+            search_payload={"results": [{"title": "Winter warmer menus trend"}, {"title": "Sunday lunch rush"}]}
+        )
         topics, source = research_trends(config, client=http)
         self.assertEqual(source, "searxng")
         self.assertEqual(topics, ["Winter warmer menus trend", "Sunday lunch rush"])
@@ -102,16 +103,15 @@ class DraftTests(TestCase):
 
     def test_missing_api_key_raises_for_caller_to_record(self):
         config = make_config()
-        with override_settings(CONTENT_AGENT_GEMINI_API_KEY=""):
-            with self.assertRaises(RuntimeError):
-                draft_posts(config, ["x"], client=FakeHttp())
+        with override_settings(CONTENT_AGENT_GEMINI_API_KEY=""), self.assertRaises(RuntimeError):
+            draft_posts(config, ["x"], client=FakeHttp())
 
 
 class QueueTests(TestCase):
     def test_drafts_land_pending_review_never_scheduled(self):
         workspace = make_workspace()
         config = make_config(workspace=workspace)
-        user = User.objects.create_user(email="owner@example.com", password="x")
+        User.objects.create_user(email="owner@example.com", password="x")
         account = SocialAccount.objects.create(
             workspace=workspace,
             platform=PlatformCredential.Platform.LINKEDIN_COMPANY,

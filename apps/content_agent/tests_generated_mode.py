@@ -66,9 +66,7 @@ class GeneratedPostModeTests(TestCase):
         self._set_mode("auto")
         now = timezone.now()
         ids = queue_drafts_for_review(self.config, self.drafts, now=now)
-        times = sorted(
-            PlatformPost.objects.filter(post_id__in=ids).values_list("scheduled_at", flat=True)
-        )
+        times = sorted(PlatformPost.objects.filter(post_id__in=ids).values_list("scheduled_at", flat=True))
         assert all(t is not None for t in times)
         assert abs((times[0] - (now + timedelta(hours=1))).total_seconds()) < 2
         assert abs((times[1] - (now + timedelta(hours=2))).total_seconds()) < 2

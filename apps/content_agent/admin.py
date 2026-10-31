@@ -13,4 +13,13 @@ class AgentConfigAdmin(admin.ModelAdmin):
 class GenerationRunAdmin(admin.ModelAdmin):
     list_display = ("workspace", "status", "trend_source", "started_at", "finished_at")
     list_filter = ("status",)
-    readonly_fields = ("workspace", "status", "topics_found", "post_ids", "error", "trend_source", "started_at", "finished_at")
+    readonly_fields = (
+        "workspace",
+        "status",
+        "topics_found",
+        "post_ids",
+        "error",
+        "trend_source",
+        "started_at",
+        "finished_at",
+    )

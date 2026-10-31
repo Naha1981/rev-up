@@ -70,7 +70,7 @@ def submit_enquiry(request: HttpRequest, payload: EnquiryRequest):
             result = json.loads(resp.read().decode("utf-8"))
     except Exception as exc:
         log_audit_entry(request, action="responder.enquiry", target_id=None, status_code=502)
-        raise HttpError(502, f"Responder sidecar unavailable: {exc}")
+        raise HttpError(502, f"Responder sidecar unavailable: {exc}") from exc
 
     log_audit_entry(request, action="responder.enquiry", target_id=None, status_code=200)
     return EnquiryResponse(
