@@ -80,6 +80,7 @@ LOCAL_APPS = [
     "apps.responder",
     "apps.oauth_server",
     "apps.analytics",
+    "apps.platform_admin",
     "theme",
 ]
 

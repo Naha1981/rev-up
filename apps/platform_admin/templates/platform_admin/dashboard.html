@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Platform admin - RevUp{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-6">
+  <h1 class="text-2xl font-bold text-stone-900 mb-1">Platform admin</h1>
+  <p class="text-sm text-stone-500 mb-6">All businesses on RevUp and estimated Zernio costs. Only you can see this page.</p>
+
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+    <div class="bg-white border border-stone-200 rounded-xl p-4">
+      <div class="text-2xl font-bold text-stone-900">{{ business_count }}</div>
+      <div class="text-xs text-stone-500">Businesses</div>
+    </div>
+    <div class="bg-white border border-stone-200 rounded-xl p-4">
+      <div class="text-2xl font-bold text-stone-900">{{ total_connected }}</div>
+      <div class="text-xs text-stone-500">Connected accounts</div>
+    </div>
+    <div class="bg-white border border-stone-200 rounded-xl p-4">
+      <div class="text-2xl font-bold text-stone-900">{{ cost.free_accounts }}</div>
+      <div class="text-xs text-stone-500">Free (first 2)</div>
+    </div>
+    <div class="bg-white border border-stone-200 rounded-xl p-4">
+      <div class="text-2xl font-bold text-stone-900">${{ cost_dollars }}</div>
+      <div class="text-xs text-stone-500">Est. Zernio / month</div>
+    </div>
+  </div>
+
+  {% if cost.tiers %}
+  <div class="bg-white border border-stone-200 rounded-xl p-4 mb-6">
+    <h2 class="text-sm font-semibold text-stone-900 mb-2">Cost breakdown</h2>
+    <ul class="text-sm text-stone-600 space-y-1">
+      {% for tier in cost.tiers %}
+      <li>
+        Accounts {{ tier.range }}: {{ tier.accounts }} x {{ tier.price_display }} = {{ tier.subtotal_display }}
+      </li>
+      {% endfor %}
+    </ul>
+    {% if cost.beyond_published_pricing %}
+    <p class="text-xs text-amber-600 mt-2">Account count is beyond Zernio's published pricing tiers - confirm the rate with them.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="bg-white border border-stone-200 rounded-xl overflow-hidden">
+    <h2 class="text-sm font-semibold text-stone-900 px-4 pt-4 pb-2">Businesses</h2>
+    {% if orgs %}
+    <ul class="divide-y divide-stone-100">
+      {% for org in orgs %}
+      <li>
+        <a href="{% url 'platform_admin:business_detail' org.id %}" class="flex items-center justify-between px-4 py-3 hover:bg-stone-50">
+          <span class="text-sm font-medium text-stone-900">{{ org.name }}</span>
+          <span class="text-xs text-stone-500">{{ org.connected_accounts }} acct{{ org.connected_accounts|pluralize }} · {{ org.workspace_count }} ws · {{ org.member_count }} member{{ org.member_count|pluralize }}</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="px-4 pb-4 text-sm text-stone-500">No businesses yet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

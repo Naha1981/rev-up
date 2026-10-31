@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ org.name }} - Platform admin{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-6">
+  <a href="{% url 'platform_admin:dashboard' %}" class="text-sm text-stone-500 hover:text-stone-700">&larr; All businesses</a>
+  <h1 class="text-2xl font-bold text-stone-900 mt-1 mb-6">{{ org.name }}</h1>
+
+  <div class="bg-white border border-stone-200 rounded-xl p-4 mb-4">
+    <h2 class="text-sm font-semibold text-stone-900 mb-2">Workspaces</h2>
+    {% if workspaces %}
+    <ul class="text-sm text-stone-600 space-y-1">
+      {% for ws in workspaces %}
+      <li>{{ ws.name }} - {{ ws.connected_accounts }} connected account{{ ws.connected_accounts|pluralize }}</li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="text-sm text-stone-500">None.</p>{% endif %}
+  </div>
+
+  <div class="bg-white border border-stone-200 rounded-xl p-4 mb-4">
+    <h2 class="text-sm font-semibold text-stone-900 mb-2">Social accounts</h2>
+    {% if accounts %}
+    <ul class="text-sm space-y-1">
+      {% for acct in accounts %}
+      <li class="flex justify-between">
+        <span class="text-stone-700">{{ acct.get_platform_display }} - {{ acct.account_name }}{% if acct.account_handle %} (@{{ acct.account_handle }}){% endif %}</span>
+        <span class="text-xs {% if acct.connection_status == 'connected' %}text-green-600{% else %}text-amber-600{% endif %}">{{ acct.get_connection_status_display }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="text-sm text-stone-500">No accounts connected.</p>{% endif %}
+  </div>
+
+  <div class="bg-white border border-stone-200 rounded-xl p-4">
+    <h2 class="text-sm font-semibold text-stone-900 mb-2">Members</h2>
+    {% if members %}
+    <ul class="text-sm text-stone-600 space-y-1">
+      {% for m in members %}
+      <li>{{ m.user.email }} - {{ m.get_org_role_display }}</li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="text-sm text-stone-500">No members.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

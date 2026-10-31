@@ -37,6 +37,7 @@ urlpatterns = [
     path("social-accounts/", include("apps.social_accounts.urls")),
     path("social-accounts/", include("apps.whatsapp_connect.urls")),
     # Content Pipeline (Stream A)
+    path("platform-admin/", include("apps.platform_admin.urls")),
     path("workspace/<uuid:workspace_id>/", include("apps.composer.urls")),
     path("workspace/<uuid:workspace_id>/radar/", include("apps.radar.urls")),
     path("workspace/<uuid:workspace_id>/responder/", include("apps.responder.urls")),
