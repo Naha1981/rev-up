@@ -91,7 +91,11 @@ def draft_reply(profile: BusinessProfile, history: list[tuple[str, str]], incomi
     transcript = "\n".join(
         f"{'Customer' if sender == 'user' else 'Receptionist'}: {body}" for sender, body in history[-12:]
     )
+    from django.utils import timezone
+
+    now = timezone.localtime()
     prompt = (
+        f"Today is {now:%A} {now:%d %B %Y}, South Africa time.\n"
         f"{_INDUSTRY_BRIEFS.get(profile.industry, _INDUSTRY_BRIEFS[Industry.GENERAL])}\n"
         f"{_profile_block(profile)}\n\n"
         f"Conversation so far:\n{transcript}\nCustomer: {incoming}\n\n"
