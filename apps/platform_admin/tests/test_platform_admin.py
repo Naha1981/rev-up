@@ -1,4 +1,5 @@
 import pytest
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -211,7 +212,12 @@ def _make_customer_in_org(email, org):
     from apps.members.models import OrgMembership
 
     user = make_user(email)
-    OrgMembership.objects.create(user=user, organization=org, org_role=OrgMembership.OrgRole.MEMBER)
+    # Signup signals auto-create a personal org + membership; v1 resolves
+    # request.org via .first(), so the test user must hold exactly one.
+    OrgMembership.objects.filter(user=user).delete()
+    # A customer owns their org - owner role can reach org settings, so a
+    # 403 on that page can only come from the suspension gate.
+    OrgMembership.objects.create(user=user, organization=org, org_role=OrgMembership.OrgRole.OWNER)
     return user
 
 
@@ -275,3 +281,62 @@ def test_toggle_access_forbidden_for_customer(client):
     assert resp.status_code in (302, 403)
     org.refresh_from_db()
     assert org.access_suspended_at is None
+
+
+# --- ZAR currency display ---------------------------------------------------
+
+
+def test_format_zar_converts_at_operator_rate():
+    from apps.platform_admin.costs import format_zar
+
+    with override_settings(ZERNIO_USD_ZAR_RATE="20.00"):
+        assert format_zar(600) == "R120.00"
+        assert format_zar(123456) == "R24,691.20"
+
+
+def test_rate_note_names_source():
+    from apps.platform_admin.costs import get_usd_zar_rate
+
+    with override_settings(ZERNIO_USD_ZAR_RATE="19.25", ZERNIO_USD_ZAR_RATE_DATE="31 Oct 2026"):
+        rate, note = get_usd_zar_rate()
+    assert str(rate) == "19.25"
+    assert "R19.25/$" in note and "31 Oct 2026" in note
+
+
+@pytest.mark.django_db
+def test_dashboard_shows_zar_with_usd_note(client):
+    staff = make_user("owner8@example.com", is_staff=True)
+    org = Organization.objects.create(name="ZAR Org")
+    ws = Workspace.objects.create(organization=org, name="WS Z")
+    SocialAccount.objects.create(
+        workspace=ws,
+        platform="facebook",
+        account_platform_id="fb-z",
+        account_name="FB Z",
+        oauth_access_token="t",
+        connection_status=SocialAccount.ConnectionStatus.CONNECTED,
+    )
+    SocialAccount.objects.create(
+        workspace=ws,
+        platform="instagram",
+        account_platform_id="ig-z",
+        account_name="IG Z",
+        oauth_access_token="t",
+        connection_status=SocialAccount.ConnectionStatus.CONNECTED,
+    )
+    SocialAccount.objects.create(
+        workspace=ws,
+        platform="tiktok",
+        account_platform_id="tt-z",
+        account_name="TT Z",
+        oauth_access_token="t",
+        connection_status=SocialAccount.ConnectionStatus.CONNECTED,
+    )
+    client.force_login(staff)
+    with override_settings(ZERNIO_USD_ZAR_RATE="20.00"):
+        resp = client.get(reverse("platform_admin:dashboard"))
+    content = resp.content.decode()
+    # 3 connected: 1 billable at $6 -> R120.00 headline, USD note present.
+    assert "R120.00" in content
+    assert "$6.00 USD" in content
+    assert resp.context["rate_note"].startswith("R20.00/$")

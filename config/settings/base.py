@@ -199,9 +199,16 @@ PASSWORD_HASHERS = [
 ]
 
 # Internationalization
-LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
+LANGUAGE_CODE = "en-za"
+TIME_ZONE = "Africa/Johannesburg"
 USE_I18N = True
+
+
+# Zernio bills in USD; the platform is South African and displays rand.
+# Operator-set rate, never a paid FX API: override with the current rate
+# (and date it was checked) via env whenever it drifts.
+ZERNIO_USD_ZAR_RATE = env("ZERNIO_USD_ZAR_RATE", default="18.50")
+ZERNIO_USD_ZAR_RATE_DATE = env("ZERNIO_USD_ZAR_RATE_DATE", default="operator default")
 USE_TZ = True
 
 # Static files

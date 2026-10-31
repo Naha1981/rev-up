@@ -13,7 +13,7 @@ from apps.members.models import OrgMembership
 from apps.organizations.models import Organization
 from apps.social_accounts.models import SocialAccount
 
-from .costs import estimate_cost
+from .costs import estimate_cost, format_zar, get_usd_zar_rate
 
 User = get_user_model()
 
@@ -39,8 +39,8 @@ def dashboard(request):
     cost = estimate_cost(total_connected)
     for tier in cost["tiers"]:
         if tier["price_cents"] is not None:
-            tier["price_display"] = f"${tier['price_cents'] / 100:,.0f}"
-            tier["subtotal_display"] = f"${tier['subtotal_cents'] / 100:,.2f}"
+            tier["price_display"] = f"{format_zar(tier['price_cents'])}/acct"
+            tier["subtotal_display"] = format_zar(tier["subtotal_cents"])
         else:
             tier["price_display"] = "unpublished"
             tier["subtotal_display"] = "?"
@@ -50,6 +50,8 @@ def dashboard(request):
         "total_connected": total_connected,
         "cost": cost,
         "cost_dollars": f"{cost['total_cents'] / 100:,.2f}",
+        "cost_zar": format_zar(cost["total_cents"]),
+        "rate_note": get_usd_zar_rate()[1],
         "user_count": User.objects.count(),
     }
     return render(request, "platform_admin/dashboard.html", context)

@@ -9,6 +9,10 @@ Pricing (https://docs.zernio.com/pricing, spec-confirmed):
 Profiles (businesses) are free; only connected accounts bill.
 """
 
+from decimal import Decimal
+
+from django.conf import settings
+
 FREE_ALLOWANCE = 2
 
 # (upper_bound_inclusive, price_per_account_usd_cents)
@@ -65,3 +69,21 @@ def estimate_cost(connected_accounts: int) -> dict:
         "total_cents": total_cents,
         "beyond_published_pricing": remaining > 0,
     }
+
+
+def get_usd_zar_rate():
+    """Return (rate: Decimal, note: str) for USD -> ZAR display.
+
+    The rate is operator-set via env (ZERNIO_USD_ZAR_RATE /
+    ZERNIO_USD_ZAR_RATE_DATE) - never a paid FX API.
+    """
+    rate = Decimal(str(settings.ZERNIO_USD_ZAR_RATE))
+    note = f"R{rate}/$ (set {settings.ZERNIO_USD_ZAR_RATE_DATE}; env ZERNIO_USD_ZAR_RATE)"
+    return rate, note
+
+
+def format_zar(cents) -> str:
+    """R1,234.56 formatting for USD cents converted at the current rate."""
+    rate, _ = get_usd_zar_rate()
+    rands = (Decimal(int(cents)) / 100) * rate
+    return f"R{rands:,.2f}"
