@@ -4,6 +4,7 @@ import json
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.utils import timezone
 
 from apps.organizations.models import Organization
 from apps.workspaces.models import Workspace
@@ -171,3 +172,54 @@ class ReplyServiceTests(TestCase):
 
 def self_ws():
     return _workspace("dd-trades")
+
+
+class ViewTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        from apps.members.models import WorkspaceMembership
+
+        user_model = get_user_model()
+        self.ws = _workspace("ee-dental")
+        self.user = user_model.objects.create_user(
+            email="owner@example.com", password="x" * 20, tos_accepted_at=timezone.now()
+        )
+        self.outsider = user_model.objects.create_user(
+            email="outsider@example.com", password="x" * 20, tos_accepted_at=timezone.now()
+        )
+        WorkspaceMembership.objects.create(user=self.user, workspace=self.ws)
+
+    def test_setup_requires_membership(self):
+        self.client.force_login(self.outsider)
+        resp = self.client.get(f"/workspace/{self.ws.id}/receptionist/setup/")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_setup_creates_profile_and_redirects(self):
+        self.client.force_login(self.user)
+        resp = self.client.post(
+            f"/workspace/{self.ws.id}/receptionist/setup/",
+            {
+                "industry": "dental",
+                "business_name": "Smile Dental",
+                "operating_hours": "Mon-Fri 8-17",
+                "pricing_data": '{"Consultation": "R850"}',
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        profile = BusinessProfile.objects.get(workspace=self.ws)
+        self.assertEqual(profile.industry, "dental")
+        self.assertEqual(profile.pricing_data["Consultation"], "R850")
+
+    def test_inbox_shows_only_own_contacts(self):
+        self.client.force_login(self.user)
+        BusinessProfile.objects.create(workspace=self.ws, industry="dental", business_name="Smile Dental")
+        mine = Contact.objects.create(workspace=self.ws, wa_id="27111111111", name="Patient One")
+        Message.objects.create(
+            workspace=self.ws, contact=mine, direction="inbound", sender_type="user", body="Toothache"
+        )
+        other_ws = _workspace("ff-other")
+        Contact.objects.create(workspace=other_ws, wa_id="27222222222", name="Stranger")
+        resp = self.client.get(f"/workspace/{self.ws.id}/receptionist/")
+        self.assertContains(resp, "Patient One")
+        self.assertNotContains(resp, "Stranger")

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mx-auto max-w-2xl px-4 py-6">
+  <div class="flex items-center justify-between">
+    <h1 class="text-xl font-semibold text-gray-900">Receptionist</h1>
+    <a href="{% url 'receptionist:setup' workspace.id %}" class="text-sm font-medium text-blue-600">Settings</a>
+  </div>
+  {% if not profile %}
+  <div class="mt-6 rounded-2xl border border-gray-200 bg-white p-6 text-center">
+    <p class="text-gray-600">Set up your WhatsApp receptionist: tell it about your business, your prices and your rules. It answers enquiries and drafts every reply for you.</p>
+    <a href="{% url 'receptionist:setup' workspace.id %}" class="mt-4 inline-block rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-medium text-white">Set up</a>
+  </div>
+  {% else %}
+  <p class="mt-1 text-sm text-gray-500">{{ profile.get_industry_display }} &middot; {{ profile.business_name }}</p>
+  {% if contacts %}
+  <div class="mt-5 space-y-2">
+    {% for c in contacts %}
+    <a href="{% url 'receptionist:conversation' workspace.id c.id %}" class="flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3">
+      <div>
+        <p class="font-medium text-gray-900">{{ c.name|default:c.wa_id }}</p>
+        <p class="truncate text-sm text-gray-500">{{ c.messages.last.body|default:"" }}</p>
+      </div>
+      {% if c.needs_human %}<span class="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">Needs you</span>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="mt-6 text-sm text-gray-500">No conversations yet. When a customer messages your WhatsApp number, their enquiry and the drafted reply appear here.</p>
+  {% endif %}
+  {% if funeral_claims or dental_appointments or trade_dispatches %}
+  <h2 class="mt-8 text-sm font-semibold uppercase tracking-wide text-gray-500">Intake</h2>
+  <div class="mt-2 space-y-2">
+    {% for f in funeral_claims %}<div class="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm">Claim &middot; {{ f.claimant_name|default:"-" }} &middot; policy {{ f.policy_number|default:"-" }} <span class="text-gray-400">{{ f.get_status_display }}</span></div>{% endfor %}
+    {% for d in dental_appointments %}<div class="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm">Appointment &middot; {{ d.patient_name|default:"-" }} &middot; {{ d.reason|default:"-" }} <span class="text-gray-400">{{ d.get_status_display }}</span></div>{% endfor %}
+    {% for t in trade_dispatches %}<div class="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm">Dispatch &middot; {{ t.job_type|default:"-" }} &middot; {{ t.address|default:"-" }} {% if t.urgent %}<span class="text-red-600">urgent</span>{% endif %} <span class="text-gray-400">{{ t.get_status_display }}</span></div>{% endfor %}
+  </div>
+  {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

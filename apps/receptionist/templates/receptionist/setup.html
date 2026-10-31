@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mx-auto max-w-2xl px-4 py-6">
+  <h1 class="text-xl font-semibold text-gray-900">Receptionist setup</h1>
+  <p class="mt-1 text-sm text-gray-500">This is what your WhatsApp receptionist knows. It never invents prices or promises beyond this.</p>
+  <form method="post" class="mt-6 space-y-4">
+    {% csrf_token %}
+    <label class="block text-sm font-medium text-gray-700">Business type
+      <select name="industry" class="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5">
+        {% for value, label in industries %}<option value="{{ value }}" {% if profile and profile.industry == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="block text-sm font-medium text-gray-700">Business name
+      <input name="business_name" value="{{ profile.business_name|default:workspace.name }}" class="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5" />
+    </label>
+    <label class="block text-sm font-medium text-gray-700">Operating hours
+      <input name="operating_hours" value="{{ hours_text }}" placeholder="Mon-Fri 8:00-17:00, Sat 8:00-13:00" class="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5" />
+    </label>
+    <label class="block text-sm font-medium text-gray-700">Price list (JSON, in rand)
+      <textarea name="pricing_data" rows="3" placeholder='{"Standard consultation": "R850"}' class="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 font-mono text-xs">{{ pricing_text }}</textarea>
+    </label>
+    <label class="block text-sm font-medium text-gray-700">Call-out fee (R, trades only)
+      <input name="call_out_fee" value="{{ profile.call_out_fee|default:"" }}" placeholder="450" class="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5" />
+    </label>
+    <label class="block text-sm font-medium text-gray-700">Payment link
+      <input name="payment_link_url" value="{{ profile.payment_link_url|default:"" }}" class="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5" />
+    </label>
+    <label class="block text-sm font-medium text-gray-700">Emergency contact number
+      <input name="emergency_contact_phone" value="{{ profile.emergency_contact_phone|default:"" }}" class="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5" />
+    </label>
+    <label class="block text-sm font-medium text-gray-700">Standing rules for the receptionist
+      <textarea name="custom_rules" rows="3" placeholder="Never quote after-hours rates; always take a callback number." class="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5">{{ profile.custom_rules|default:"" }}</textarea>
+    </label>
+    <button class="w-full rounded-xl bg-blue-600 px-5 py-3 text-sm font-medium text-white">Save</button>
+  </form>
+</div>
+{% endblock %}
