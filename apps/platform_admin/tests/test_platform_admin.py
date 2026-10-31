@@ -300,7 +300,7 @@ def test_rate_note_names_source():
     with override_settings(ZERNIO_USD_ZAR_RATE="19.25", ZERNIO_USD_ZAR_RATE_DATE="31 Oct 2026"):
         rate, note = get_usd_zar_rate()
     assert str(rate) == "19.25"
-    assert "R19.25/$" in note and "31 Oct 2026" in note
+    assert "R19.25/$" in note and "31 Oct 2026" in note and "env" not in note
 
 
 @pytest.mark.django_db
@@ -339,4 +339,4 @@ def test_dashboard_shows_zar_with_usd_note(client):
     # 3 connected: 1 billable at $6 -> R120.00 headline, USD note present.
     assert "R120.00" in content
     assert "$6.00 USD" in content
-    assert resp.context["rate_note"].startswith("R20.00/$")
+    assert resp.context["rate_note"].startswith("rate R20.00/$")

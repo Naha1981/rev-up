@@ -78,7 +78,7 @@ def get_usd_zar_rate():
     ZERNIO_USD_ZAR_RATE_DATE) - never a paid FX API.
     """
     rate = Decimal(str(settings.ZERNIO_USD_ZAR_RATE))
-    note = f"R{rate}/$ (set {settings.ZERNIO_USD_ZAR_RATE_DATE}; env ZERNIO_USD_ZAR_RATE)"
+    note = f"rate R{rate}/$, set {settings.ZERNIO_USD_ZAR_RATE_DATE}"
     return rate, note
 
 
