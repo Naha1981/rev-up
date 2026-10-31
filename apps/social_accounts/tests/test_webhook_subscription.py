@@ -242,12 +242,12 @@ def test_a_later_success_clears_the_reconnect_prompt(workspace):
 
 
 def test_a_platform_without_webhooks_is_not_an_error(workspace):
-    """Bluesky has no webhooks; that must not look like a failed subscription."""
-    from providers.bluesky import BlueskyProvider
+    """Mastodon has no webhooks; that must not look like a failed subscription."""
+    from providers.mastodon import MastodonProvider
 
-    account = _account(workspace, platform="bluesky")
+    account = _account(workspace, platform="mastodon")
 
-    with patch("apps.social_accounts.webhooks._get_provider_for_platform", return_value=BlueskyProvider({})):
+    with patch("apps.social_accounts.webhooks._get_provider_for_platform", return_value=MastodonProvider({})):
         assert subscribe_account_webhooks(account) is False
 
     account.refresh_from_db()
@@ -256,11 +256,11 @@ def test_a_platform_without_webhooks_is_not_an_error(workspace):
 
 
 def test_supports_webhooks_distinguishes_real_implementations():
-    from providers.bluesky import BlueskyProvider
     from providers.facebook import FacebookProvider
+    from providers.mastodon import MastodonProvider
 
     assert supports_webhooks(FacebookProvider({})) is True
-    assert supports_webhooks(BlueskyProvider({})) is False
+    assert supports_webhooks(MastodonProvider({})) is False
 
 
 # ------------------------------------------------------------ unsubscribing
@@ -530,18 +530,18 @@ def test_a_platform_that_lost_webhook_support_clears_its_stale_warning(workspace
     Nobody can act on a warning about a platform that no longer has webhooks at
     all, so the honest state is "not applicable".
     """
-    from providers.bluesky import BlueskyProvider
+    from providers.mastodon import MastodonProvider
 
     account = _account(
         workspace,
-        platform="bluesky",
+        platform="mastodon",
         webhooks_active=False,
         webhook_error="left over from when this platform had webhooks",
         webhook_needs_reconnect=True,
         webhook_retry_count=3,
     )
 
-    with patch("apps.social_accounts.webhooks._get_provider_for_platform", return_value=BlueskyProvider({})):
+    with patch("apps.social_accounts.webhooks._get_provider_for_platform", return_value=MastodonProvider({})):
         assert subscribe_account_webhooks(account) is False
 
     account.refresh_from_db()
@@ -691,7 +691,6 @@ def test_only_the_page_flows_warn_that_disconnect_keeps_the_grant(workspace):
         ("facebook", True),
         ("instagram", True),
         ("instagram_login", False),
-        ("bluesky", False),
     ):
         account = SocialAccount(workspace=workspace, platform=platform, account_platform_id="x", account_name="x")
         assert account.keeps_platform_grant_on_disconnect is expected, platform

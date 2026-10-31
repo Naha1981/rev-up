@@ -65,7 +65,6 @@ PLATFORM_DAILY_POST_LIMIT: dict[str, int] = {
     "pinterest": 100,
     "threads": 250,
     "mastodon": 200,
-    "bluesky": 200,
     "google_business": 50,
 }
 

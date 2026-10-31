@@ -11,8 +11,6 @@ from unittest.mock import patch
 
 import pytest
 
-from providers.bluesky import BlueskyProvider
-from providers.devto import DevtoProvider
 from providers.exceptions import PublishError
 from providers.facebook import FacebookProvider
 from providers.google_business import GoogleBusinessProvider
@@ -60,16 +58,6 @@ CASES = [
         FacebookProvider,
         PublishContent(text="hi", post_type=PostType.TEXT),
         id="facebook-no-page",
-    ),
-    pytest.param(
-        BlueskyProvider,
-        PublishContent(text="x" * 301, post_type=PostType.TEXT),
-        id="bluesky-too-long",
-    ),
-    pytest.param(
-        DevtoProvider,
-        PublishContent(text="body", post_type=PostType.ARTICLE),
-        id="devto-no-title",
     ),
     pytest.param(
         GoogleBusinessProvider,

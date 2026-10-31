@@ -58,8 +58,6 @@ PLATFORM_METRICS: dict[str, list[str]] = {
     # watch_time is intentionally absent: TikTok has no public per-video
     # Analytics-style endpoint for it yet.
     "tiktok": ["views", "likes", "comments", "shares", "engagement"],
-    # Bluesky / AT Protocol post aggregates: like, repost, reply counts (no impressions/views).
-    "bluesky": ["likes", "reposts", "replies", "follows"],
     # Threads insights: views, likes, replies, reposts; account follower growth.
     "threads": ["views", "likes", "replies", "reposts", "follows"],
     # Pinterest pin analytics: impressions, saves, pin clicks, outbound clicks, engagement.
@@ -79,7 +77,6 @@ PLATFORM_PRIMARY: dict[str, str] = {
     "linkedin_personal": "likes",
     "youtube": "views",
     "tiktok": "views",
-    "bluesky": "likes",
     "threads": "views",
     "pinterest": "impressions",
     "google_business": "impressions",
@@ -95,7 +92,6 @@ PLATFORM_COLOR: dict[str, str] = {
     "linkedin_company": "#0A66C2",
     "youtube": "#FF0000",
     "tiktok": "#111111",
-    "bluesky": "#0085FF",
     "threads": "#111111",
     "pinterest": "#BD081C",
     "google_business": "#4285F4",
@@ -147,7 +143,7 @@ def hero_card_metrics(platform: str) -> list[str]:
 def has_engagement_card(platform: str) -> bool:
     """True if the platform has both engagement parts AND a reach-like denom.
 
-    Bluesky/Mastodon/LinkedIn-Personal have no reach denom, so we render
+    Mastodon/LinkedIn-Personal have no reach denom, so we render
     only count cards for them (per the plan's "hard platform gap" handling).
     """
     if platform == "youtube":

@@ -107,7 +107,7 @@ tests/          # Test suite
 Providers live in `providers/` with one file per platform. To add a new one:
 
 1. Create `providers/your_platform.py`
-2. Implement the provider class following the pattern in existing providers (e.g., `providers/bluesky.py` for a simple example, `providers/facebook.py` for a full OAuth flow)
+2. Implement the provider class following the pattern in existing providers (e.g., `providers/threads.py` for a simple example, `providers/facebook.py` for a full OAuth flow)
 3. Key methods to implement:
    - `get_authorization_url()` - Build the OAuth redirect URL
    - `exchange_code()` - Exchange the auth code for tokens

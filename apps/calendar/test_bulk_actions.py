@@ -69,7 +69,7 @@ class BulkActionBase(TestCase):
 
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,
-            platform="bluesky",
+            platform="mastodon",
             account_platform_id="did:plc:bulk-1",
             account_name="bsky",
             connection_status="connected",

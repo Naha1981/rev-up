@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # Platforms whose stored token is only usable for a bounded window and whose
 # refresh credential is the token itself, so an account with no recorded
 # expiry must still be refreshed. See the bootstrap in check_social_account_health.
-EXPIRY_BOOTSTRAP_PLATFORMS = ("bluesky", "threads")
+EXPIRY_BOOTSTRAP_PLATFORMS = ("threads",)
 
 
 @background(schedule=0)
@@ -56,7 +56,7 @@ def _check_social_account_health(account_id: str):
 
     # Resolve per-account credentials via the shared resolver: org/.env app creds
     # plus per-account federation metadata (Mastodon instance_url behind an SSRF
-    # check, Bluesky pds_url, Instagram ig_user_id). Shared with the publish engine
+    # check, Instagram ig_user_id). Shared with the publish engine
     # and inbox sync so every get_provider call resolves credentials identically.
     from apps.publisher.engine import _resolve_publish_credentials
 
@@ -72,7 +72,7 @@ def _check_social_account_health(account_id: str):
     # token_expires_at need a one-shot refresh to populate it; without this,
     # is_token_expiring_soon stays False forever (it can't judge an unknown
     # expiry) and the token is never rotated. Both platforms rotate on a fixed
-    # schedule — Bluesky's accessJwt within hours, Threads' long-lived token at
+    # schedule — Threads' long-lived token at
     # 60 days — so a refresh is always the right move when expiry is unknown.
     # Platforms whose refresh token outlives the access token are deliberately
     # left out: for them an unknown expiry means nothing needs doing yet.

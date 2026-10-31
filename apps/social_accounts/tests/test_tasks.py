@@ -317,44 +317,12 @@ class TestCheckSocialAccountHealth:
         check_social_account_health.now("00000000-0000-0000-0000-000000000000")
 
     @patch("providers.get_provider")
-    def test_bluesky_bootstrap_refresh_when_expires_at_null(self, mock_get_provider, db, workspace):
-        """Legacy Bluesky accounts with token_expires_at=NULL should still refresh."""
-        account = SocialAccount.objects.create(
-            workspace=workspace,
-            platform="bluesky",
-            account_platform_id="did:plc:abc",
-            account_name="Test",
-            oauth_access_token="stale_access",
-            oauth_refresh_token="valid_refresh",
-            token_expires_at=None,
-            connection_status=SocialAccount.ConnectionStatus.CONNECTED,
-        )
-
-        mock_provider = MagicMock()
-        mock_provider.refresh_token.return_value = OAuthTokens(
-            access_token="fresh_access",
-            refresh_token="fresh_refresh",
-            expires_in=7200,
-        )
-        mock_provider.get_profile.return_value = _profile(follower_count=42)
-        mock_get_provider.return_value = mock_provider
-
-        check_social_account_health.now(str(account.id))
-
-        mock_provider.refresh_token.assert_called_once_with("valid_refresh")
-        account.refresh_from_db()
-        assert account.oauth_access_token == "fresh_access"
-        assert account.oauth_refresh_token == "fresh_refresh"
-        assert account.token_expires_at is not None
-        assert account.connection_status == SocialAccount.ConnectionStatus.CONNECTED
-
-    @patch("providers.get_provider")
     def test_threads_bootstrap_refresh_when_expires_at_null(self, mock_get_provider, db, workspace):
         """Threads accounts with no recorded expiry must still refresh.
 
         is_token_expiring_soon can't judge a NULL expiry, so without the
         bootstrap these accounts sit out every refresh cycle and their 60-day
-        token lapses — the same trap the Bluesky bootstrap covers.
+        token lapses — the exact trap this bootstrap exists to cover.
         """
         account = SocialAccount.objects.create(
             workspace=workspace,

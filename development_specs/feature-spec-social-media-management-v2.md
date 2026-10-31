@@ -356,7 +356,6 @@ Manage the API credentials (app IDs, app secrets, callback URLs) needed to conne
 | YouTube | Client ID, Client Secret (Google Cloud OAuth) |
 | Pinterest | App ID, App Secret |
 | Threads | Same Facebook app (uses Instagram Graph API permissions) |
-| Bluesky | No app credentials needed (uses AT Protocol with user's handle + app password) |
 | Google Business Profile | Same Google Cloud OAuth app as YouTube (additional scopes) |
 | Mastodon | Per-instance OAuth app registration (auto-created on first connect) |
 
@@ -1053,7 +1052,6 @@ The backend system responsible for sending posts to social media platforms at th
 | YouTube | YouTube Data API v3 | OAuth 2.0 (Google) | Video upload with title, description, tags, category, privacy status, thumbnail. Shorts detected by aspect ratio + duration. |
 | Pinterest | Pinterest API v5 | OAuth 2.0 | Pins: image or video with title, description, link, board_id. |
 | Threads | Threads API (via Instagram Graph API) | OAuth 2.0 (Instagram business account) | Text posts, image posts, carousel (up to 20 items), video posts. |
-| Bluesky | AT Protocol (XRPC) | Session-based (handle + app password) | Text posts (300 char limit), image posts (up to 4 images), video posts. Rich text with facets (links, mentions, hashtags parsed into facets). |
 | Google Business Profile | Google Business Profile API | OAuth 2.0 (Google) | Local posts: What's New, Event, Offer. Image + text. |
 | Mastodon | Mastodon API v1 | OAuth 2.0 (per-instance app registration) | Text posts (character limit varies by instance), image (up to 4), video, poll. Content warnings. Visibility: public, unlisted, private, direct. |
 
@@ -1082,7 +1080,6 @@ The backend system responsible for sending posts to social media platforms at th
   - TikTok: Varies by app review tier. Default: 5 videos per day.
   - YouTube: per Google Cloud project, reset at midnight US/Pacific: 100 `videos.insert` (upload) calls and 100 `search.list` calls per day, each in its own bucket at 1 unit per call, plus 10,000 units per day for every other method (custom thumbnail and comment = 50 units each).
   - Pinterest: 1,000 API calls per hour.
-  - Bluesky: 5,000 actions per hour, 35,000 per day per account.
   - Mastodon: Varies by instance. Typical: 300 posts per 3 hours.
 - If a publish attempt hits a rate limit, the post is queued for retry after the rate limit window resets.
 - The system proactively checks rate limit headroom before attempting to publish. If the remaining quota is low, posts are delayed and the author is warned.
@@ -1160,7 +1157,6 @@ Connect social media accounts to a workspace so the platform can publish content
   5. The app fetches the account profile (name, avatar, follower count) and stores it.
   6. The account appears in the workspace's connected accounts list.
 - For platforms where one OAuth flow grants access to multiple accounts (e.g., Facebook OAuth grants access to multiple Pages), the user is shown a selection screen after OAuth to choose which specific account(s) to connect to this workspace.
-- For Bluesky: instead of OAuth, the user enters their handle (e.g., user.bsky.social) and an app password (generated in Bluesky settings). The system creates a session.
 - For Mastodon: the user enters their instance URL (e.g., mastodon.social). The system auto-registers an OAuth app on that instance, then proceeds with standard OAuth.
 
 **Connected Account Display:**
@@ -1196,7 +1192,6 @@ Connect social media accounts to a workspace so the platform can publish content
 | YouTube | youtube.upload, youtube.readonly, youtube.force-ssl |
 | Pinterest | boards:read, pins:read, pins:write |
 | Threads | threads_basic, threads_content_publish, threads_manage_insights, threads_manage_replies |
-| Bluesky | N/A (session auth) |
 | Google Business Profile | business.manage |
 | Mastodon | read, write, follow (standard scopes) |
 
@@ -2643,7 +2638,6 @@ Implementations:
   - YouTubeProvider (Data API v3)
   - PinterestProvider (API v5)
   - ThreadsProvider (Threads API)
-  - BlueskyProvider (AT Protocol)
   - GoogleBusinessProvider (GBP API)
   - MastodonProvider (Mastodon API)
 ```

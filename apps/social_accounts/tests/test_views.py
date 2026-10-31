@@ -260,20 +260,6 @@ class TestConnectPlatformView:
         response = authenticated_client.post(url, {"platform": "twitter"})
         assert response.status_code == 302
 
-    def test_post_bluesky_redirects_to_form(self, authenticated_client, workspace):
-        from apps.credentials.models import PlatformCredential
-
-        PlatformCredential.objects.create(
-            organization=workspace.organization,
-            platform="bluesky",
-            credentials={"handle": "test"},
-            is_configured=True,
-        )
-        url = reverse("social_accounts:connect", kwargs={"workspace_id": workspace.id})
-        response = authenticated_client.post(url, {"platform": "bluesky"})
-        assert response.status_code == 302
-        assert "bluesky" in response.url
-
     def test_pkce_connect_generates_and_forwards_verifier(self, authenticated_client, workspace):
         """A PKCE provider gets a code_verifier stashed in the session
         and forwarded to get_auth_url so it can derive the code_challenge.
@@ -1192,26 +1178,6 @@ class TestDisconnectConfirmation:
         assert "remove RevUp in your Pinterest settings" in text
         assert "deleted from RevUp" in text
         assert "revokes RevUp's access" not in text
-
-
-@pytest.mark.django_db
-class TestBlueskyConnectView:
-    def test_get_shows_form(self, authenticated_client, workspace):
-        url = reverse(
-            "social_accounts:connect_bluesky",
-            kwargs={"workspace_id": workspace.id},
-        )
-        response = authenticated_client.get(url)
-        assert response.status_code == 200
-        assert b"Connect Bluesky" in response.content
-
-    def test_post_requires_handle_and_password(self, authenticated_client, workspace):
-        url = reverse(
-            "social_accounts:connect_bluesky",
-            kwargs={"workspace_id": workspace.id},
-        )
-        response = authenticated_client.post(url, {"handle": "", "app_password": ""})
-        assert response.status_code == 200
 
 
 @pytest.mark.django_db

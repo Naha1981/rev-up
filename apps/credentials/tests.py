@@ -39,7 +39,6 @@ def test_derive_false_for_partial_or_empty():
 
 
 def test_derive_false_for_credential_less_platforms():
-    assert derive_is_configured("bluesky", {"anything": "x"}) is False
     assert derive_is_configured("mastodon", {"client_id": "x", "client_secret": "y"}) is False
 
 
@@ -214,7 +213,6 @@ def test_admin_form_rejects_non_object_json(organization):
 def test_admin_form_excludes_credential_less_platforms():
     choice_values = [value for value, _label in PlatformCredentialAdminForm().fields["platform"].choices]
     assert "youtube" in choice_values
-    assert "bluesky" not in choice_values
     assert "mastodon" not in choice_values
 
 

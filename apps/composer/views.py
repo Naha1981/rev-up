@@ -452,16 +452,16 @@ def _validate_required_media(request, post, workspace, action):
 
 
 # Platforms whose providers refuse to publish without a title.
-_TITLE_REQUIRED_PLATFORMS = frozenset({"devto"})
+_TITLE_REQUIRED_PLATFORMS: frozenset[str] = frozenset()
 
 
 def _validate_required_title(request, post, workspace, action):
     """Refuse to commit a post when a selected platform needs a title it lacks.
 
-    DEV.to rejects titleless articles at publish time, so committing one can
-    only fail later - after the user has walked away, and after any other
-    platforms on the post may already have gone out. Mirror the provider's
-    rule here, while the composer can still surface the fix.
+    A platform that rejects titleless posts fails at publish time otherwise -
+    after the user has walked away, and after any other platforms on the post
+    may already have gone out. Mirror the provider's rule here, while the
+    composer can still surface the fix.
     """
     if action not in _PUBLISH_COMMITTING_ACTIONS:
         return None

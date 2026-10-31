@@ -133,7 +133,7 @@ class TestConnectGrid:
 
     def test_grid_never_offers_meta_connect(self, authenticated_client, workspace, zernio_on, settings):
         """Even with Meta app credentials present, no managed-platform card posts
-        to the old OAuth endpoint (other platforms - bluesky etc. - legitimately
+        to the old OAuth endpoint (other platforms - mastodon etc. - legitimately
         still use it, so the check is per-card)."""
         settings.PLATFORM_CREDENTIALS_FROM_ENV = {"facebook": {"app_id": "i", "app_secret": "s"}}
         url = reverse("social_accounts:connect", kwargs={"workspace_id": workspace.id})

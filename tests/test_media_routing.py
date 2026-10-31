@@ -7,7 +7,7 @@ The first is issue #130: ``config/urls.py`` used to mount media only under
 ``STORAGE_BACKEND=local`` returned 404 for every upload. That breaks more than
 the thumbnails in the UI — ``apps/publisher/engine.py`` builds each attachment's
 outbound URL as ``APP_URL + asset.file.url``, and Instagram, Threads, Facebook,
-Pinterest, Google Business and dev.to fetch that URL server-side with no
+Pinterest and Google Business fetch that URL server-side with no
 byte-upload fallback, so publishing to them fails too.
 
 The second is the shape of the route. ``MEDIA_URL`` is only assigned on the

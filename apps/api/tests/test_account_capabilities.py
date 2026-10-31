@@ -107,7 +107,6 @@ class TestPerPlatformCapabilities:
             _make_account(workspace, "youtube", account_platform_id="yt-1"),
             _make_account(workspace, "pinterest", account_platform_id="pi-1"),
             _make_account(workspace, "tiktok", account_platform_id="tk-1"),
-            _make_account(workspace, "bluesky", account_platform_id="bs-1"),
             _make_account(workspace, "google_business", account_platform_id="gb-1"),
             _make_account(workspace, "linkedin_company", account_platform_id="li-co-1"),
             _make_account(workspace, "facebook", account_platform_id="fb-1"),
@@ -135,9 +134,8 @@ class TestPerPlatformCapabilities:
         assert accs["pinterest"]["supports_first_comment"] is False
         assert accs["pinterest"]["char_limit"] == 500
 
-        # TikTok / Bluesky / Google Business: no first comment.
+        # TikTok / Google Business: no first comment.
         assert accs["tiktok"]["supports_first_comment"] is False
-        assert accs["bluesky"]["supports_first_comment"] is False
         assert accs["google_business"]["supports_first_comment"] is False
 
         # LinkedIn Company: supports first comment unconditionally.

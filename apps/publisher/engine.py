@@ -64,7 +64,7 @@ def _resolve_publish_credentials(account):
 
     Combines org-level `PlatformCredential` (with `.env` dominant) with
     per-account federation metadata (Mastodon `instance_url` +
-    `MastodonAppRegistration`, Bluesky `pds_url`). Returns a plain dict
+    `MastodonAppRegistration`). Returns a plain dict
     suitable for `get_provider(platform, credentials)`.
     """
     platform = account.platform
@@ -89,16 +89,6 @@ def _resolve_publish_credentials(account):
         else:
             logger.warning(
                 "Mastodon instance URL failed SSRF check for account %s",
-                account.id,
-            )
-    elif platform == "bluesky" and account.instance_url:
-        from apps.common.validators import is_safe_url
-
-        if is_safe_url(account.instance_url):
-            credentials["pds_url"] = account.instance_url
-        else:
-            logger.warning(
-                "Bluesky PDS URL failed SSRF check for account %s",
                 account.id,
             )
     elif platform == "facebook":
@@ -913,9 +903,8 @@ class PublishEngine:
         if blocker:
             raise PublishError(blocker, platform=account.get_platform_display(), retryable=False)
 
-        # Refreshes an expiring token first — covers OAuth2 providers *and*
-        # session providers like Bluesky, whose accessJwt expires after only a
-        # few hours and must be renewed before each publish.
+        # Refreshes an expiring token first, so the publish call always goes
+        # out with a live credential.
         provider, access_token = _provider_and_access_token(account)
 
         # Download media from storage (S3/cloud) to temp files for upload

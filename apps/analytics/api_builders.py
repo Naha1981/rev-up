@@ -119,7 +119,7 @@ def build_post_analytics(post: Post) -> PostAnalyticsResponse:
     """Assemble per-platform analytics for every child of a Post.
 
     Each ``PlatformPost`` gets its own envelope so a mixed-platform post
-    (e.g. one Threads child + one Bluesky child) reports
+    (e.g. two Threads children) reports
     ``analytics_available`` independently per platform.
     """
     # ``_get_workspace_post`` (REST) and ``_get_post_for_key`` (MCP) already

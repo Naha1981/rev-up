@@ -17,19 +17,9 @@ urlpatterns = [
         name="connect",
     ),
     path(
-        "<uuid:workspace_id>/connect/bluesky/",
-        views.connect_bluesky,
-        name="connect_bluesky",
-    ),
-    path(
         "<uuid:workspace_id>/connect/mastodon/",
         views.connect_mastodon,
         name="connect_mastodon",
-    ),
-    path(
-        "<uuid:workspace_id>/connect/devto/",
-        views.connect_devto,
-        name="connect_devto",
     ),
     # Zernio one-tap connect (Facebook, Instagram, TikTok, LinkedIn)
     path(

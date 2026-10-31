@@ -42,7 +42,7 @@ class PlatformCredentialAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Only offer platforms that take app-level credentials (exclude session /
-        # per-instance auth platforms like bluesky and mastodon).
+        # per-instance auth platforms like mastodon).
         self.fields["platform"].choices = [
             choice
             for choice in self.fields["platform"].choices

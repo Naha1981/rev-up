@@ -10,7 +10,7 @@ from apps.common.managers import OrgScopedManager
 # non-empty value. Mirrors the keys each provider actually reads — TikTok uses
 # ``client_key`` (not ``client_id``); Meta and Pinterest accept ``app_id`` /
 # ``app_secret`` as aliases for ``client_id`` / ``client_secret``. Platforms
-# with no entry (bluesky, mastodon) use session / per-instance auth and need no
+# with no entry (mastodon) uses per-instance auth and needs no
 # app-level credentials.
 REQUIRED_CREDENTIAL_KEYS = {
     "facebook": (("client_id", "app_id"), ("client_secret", "app_secret")),
@@ -50,10 +50,8 @@ class PlatformCredential(models.Model):
         YOUTUBE = "youtube", "YouTube"
         PINTEREST = "pinterest", "Pinterest"
         THREADS = "threads", "Threads"
-        BLUESKY = "bluesky", "Bluesky"
         GOOGLE_BUSINESS = "google_business", "Google Business Profile"
         MASTODON = "mastodon", "Mastodon"
-        DEVTO = "devto", "DEV.to"
 
     class TestResult(models.TextChoices):
         SUCCESS = "success", "Success"

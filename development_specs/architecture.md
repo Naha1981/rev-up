@@ -64,7 +64,6 @@ project/
 │   ├── youtube.py
 │   ├── pinterest.py
 │   ├── threads.py
-│   ├── bluesky.py
 │   ├── google_business.py
 │   └── mastodon.py
 ├── theme/                      # django-tailwind theme app
@@ -411,7 +410,6 @@ The publishing engine sends content out to platforms (outbound). For real-time i
 | YouTube | Yes (YouTube Data API push notifications via PubSubHubbub) | New comments on videos |
 | Pinterest | No | - (polling only) |
 | Threads | No | - (polling only) |
-| Bluesky | No (AT Protocol firehose exists but is not per-account) | - (polling only) |
 | Google Business Profile | No | - (polling only) |
 | Mastodon | Yes (Streaming API via WebSocket, not HTTP webhooks) | Notifications, mentions, new followers |
 

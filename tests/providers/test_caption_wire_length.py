@@ -42,7 +42,7 @@ class TestMatchesTheEscapedPayload:
 class TestPlatformsWithoutEscaping:
     def test_plain_platforms_count_the_typed_length(self):
         caption = "Look (here) #now"
-        for platform in ("bluesky", "facebook", "instagram", "threads"):
+        for platform in ("facebook", "instagram", "threads"):
             assert caption_wire_length(platform, caption) == len(caption)
 
     def test_unknown_platform_falls_back_to_len(self):
@@ -50,7 +50,6 @@ class TestPlatformsWithoutEscaping:
 
     def test_empty_caption_is_zero_everywhere(self):
         assert caption_wire_length("linkedin_personal", "") == 0
-        assert caption_wire_length("bluesky", "") == 0
 
 
 class TestTheLimitItBuys:

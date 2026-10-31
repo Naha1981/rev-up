@@ -69,7 +69,7 @@ class SocialAccount(models.Model):
     analytics_checked_at = models.DateTimeField(blank=True, null=True)
     analytics_credentials_version = models.PositiveIntegerField(default=0)
 
-    # Instance URL for Mastodon and Bluesky PDS
+    # Instance URL for Mastodon federation
     instance_url = models.URLField(max_length=500, blank=True, default="")
 
     # Object we subscribed for webhook delivery, when it isn't this account
@@ -412,10 +412,8 @@ class SocialAccount(models.Model):
         "youtube": 5000,
         "pinterest": 500,
         "threads": 500,
-        "bluesky": 300,
         "google_business": 1500,
         "mastodon": 500,
-        "devto": 25000,
     }
 
     @property
@@ -459,17 +457,7 @@ class SocialAccount(models.Model):
         "tiktok": {
             "supports_first_comment": False,
         },
-        "bluesky": {
-            "supports_first_comment": False,
-        },
         "google_business": {
-            "supports_first_comment": False,
-        },
-        "devto": {
-            "needs_title": True,
-            "title_max_length": 128,
-            "title_label": "Article Title",
-            "caption_label": "Body (Markdown)",
             "supports_first_comment": False,
         },
     }
@@ -510,9 +498,7 @@ class SocialAccount(models.Model):
         The disconnect confirmation promises exactly this, so it lists only the
         providers whose ``revoke_token`` calls a revocation endpoint with the
         token disconnect hands it. Left out, besides the Facebook-Page flows:
-        Pinterest, Threads and DEV.to have no revocation call, and Bluesky's
-        ``deleteSession`` wants the refresh JWT rather than the access JWT it
-        gets — and the app password outlives any session regardless.
+        Pinterest and Threads have no revocation call.
         """
         return self.platform in {
             PlatformCredential.Platform.YOUTUBE,
@@ -575,10 +561,8 @@ class SocialAccount(models.Model):
             "youtube": "yt",
             "pinterest": "pi",
             "threads": "th",
-            "bluesky": "bs",
             "google_business": "gb",
             "mastodon": "ma",
-            "devto": "dv",
         }
         return icons.get(self.platform, self.platform[:2])
 
@@ -680,8 +664,8 @@ class AnalyticsPlatformConfig(models.Model):
         default and the fact that the admin forbids adding or deleting rows —
         so a missing row always means "nothing has been said about this
         platform", never "an admin turned it off". Without that, every platform
-        slug added after the seed migration (``devto`` was the first) had its
-        analytics silently switched off, which is invisible from the admin
+        slug added after the seed migration had its analytics silently
+        switched off, which is invisible from the admin
         because the platform isn't listed there either.
 
         Driven off ``Platform.choices`` rather than the table, so a row left

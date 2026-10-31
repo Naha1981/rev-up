@@ -23,7 +23,7 @@ from apps.publisher.engine import PublishEngine
 from apps.social_accounts.models import SocialAccount
 from apps.workspaces.models import Workspace
 
-PLATFORMS = ["tiktok", "youtube", "instagram", "pinterest", "bluesky"]
+PLATFORMS = ["tiktok", "youtube", "instagram", "pinterest", "threads"]
 
 
 class PublishFailureFanOutTest(TestCase):

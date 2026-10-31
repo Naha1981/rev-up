@@ -62,7 +62,7 @@ class ChannelessDraftTests(TestCase):
 
     def test_advanced_child_still_excludes_post(self):
         account = SocialAccount.objects.create(
-            workspace=self.workspace, platform="bluesky", account_handle="t.bsky.social"
+            workspace=self.workspace, platform="mastodon", account_handle="t.bsky.social"
         )
         PlatformPost.objects.create(post=self.post, social_account=account, status="scheduled")
         url = reverse("composer:drafts_list", args=[self.workspace.id])

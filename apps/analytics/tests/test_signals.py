@@ -96,15 +96,15 @@ class TestPlatformEnableQueuesBackfill:
         backfill.assert_called_once_with(str(account.id), remove_existing_tasks=True)
 
     def test_a_platform_with_no_analytics_api_queues_nothing(self, workspace):
-        """``bluesky`` is listed in the admin but has no analytics API at all.
+        """``mastodon`` is listed in the admin but has no analytics API at all.
 
         Queueing would insert a task per account that returns immediately from
         ``backfill_account_analytics``'s own availability check.
         """
-        _account(workspace, platform="bluesky")
-        _set_enabled("bluesky", is_enabled=False)
+        _account(workspace, platform="mastodon")
+        _set_enabled("mastodon", is_enabled=False)
 
-        backfill, config = _toggle("bluesky", is_enabled=True)
+        backfill, config = _toggle("mastodon", is_enabled=True)
 
         backfill.assert_not_called()
         assert not hasattr(config, BACKFILL_QUEUED_ATTR)

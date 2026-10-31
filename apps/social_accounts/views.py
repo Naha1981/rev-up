@@ -68,7 +68,6 @@ def _get_configured_platforms(org_id):
         if derive_is_configured(platform, creds):
             configured.add(platform)
 
-    # Session-auth platforms (e.g. Bluesky) don't need app-level credentials —
     # the user supplies their own handle + app password at connect time.
     # Instance-OAuth platforms (e.g. Mastodon) don't need them either —
     # we register a per-instance OAuth app on first connect and persist it in
@@ -268,12 +267,8 @@ def connect_platform(request, workspace_id):
         return redirect("social_accounts:connect", workspace_id=workspace_id)
 
     # Special auth flows
-    if platform == PlatformCredential.Platform.BLUESKY:
-        return redirect("social_accounts:connect_bluesky", workspace_id=workspace_id)
     if platform == PlatformCredential.Platform.MASTODON:
         return redirect("social_accounts:connect_mastodon", workspace_id=workspace_id)
-    if platform == PlatformCredential.Platform.DEVTO:
-        return redirect("social_accounts:connect_devto", workspace_id=workspace_id)
 
     # Standard OAuth flow
     provider = _get_provider_for_platform(platform, request.org.id)
@@ -581,107 +576,6 @@ def select_account(request):
 
 
 # ------------------------------------------------------------------
-# Bluesky Connect (session-based, no OAuth)
-# ------------------------------------------------------------------
-
-
-@login_required
-@require_permission("manage_social_accounts")
-def connect_bluesky(request, workspace_id):
-    """Connect a Bluesky account via handle + app password."""
-    if request.method == "GET":
-        return render(
-            request,
-            "social_accounts/bluesky_connect.html",
-            {"workspace_id": workspace_id},
-        )
-
-    handle = request.POST.get("handle", "").strip().lstrip("@")
-    app_password = request.POST.get("app_password", "").strip()
-
-    if not handle or not app_password:
-        messages.error(request, "Handle and app password are required.")
-        return render(
-            request,
-            "social_accounts/bluesky_connect.html",
-            {"workspace_id": workspace_id},
-        )
-
-    try:
-        provider = _get_provider_for_platform(PlatformCredential.Platform.BLUESKY, request.org.id)
-        tokens = provider.create_session(handle, app_password)
-        profile = provider.get_profile(tokens.access_token)
-
-        _create_or_update_account(
-            workspace_id=workspace_id,
-            platform=PlatformCredential.Platform.BLUESKY,
-            profile=profile,
-            access_token=tokens.access_token,
-            refresh_token=tokens.refresh_token,
-            expires_in=tokens.expires_in,
-            instance_url=provider.pds_url,
-        )
-        messages.success(request, f"Connected {profile.name} on Bluesky.")
-
-    except Exception:
-        logger.exception("Bluesky connection failed")
-        messages.error(
-            request,
-            "Failed to connect Bluesky account. Check your handle and app password.",
-        )
-        return render(
-            request,
-            "social_accounts/bluesky_connect.html",
-            {"workspace_id": workspace_id},
-        )
-
-    return redirect("calendar:calendar", workspace_id=workspace_id)
-
-
-# ------------------------------------------------------------------
-# DEV.to Connect (API-key based, no OAuth)
-# ------------------------------------------------------------------
-
-
-@login_required
-@require_permission("manage_social_accounts")
-def connect_devto(request, workspace_id):
-    """Connect a DEV.to account via a personal API key."""
-    if request.method == "GET":
-        return render(
-            request,
-            "social_accounts/devto_connect.html",
-            {"workspace_id": workspace_id},
-        )
-
-    api_key = request.POST.get("api_key", "").strip()
-    if not api_key:
-        messages.error(request, "A DEV.to API key is required.")
-        return render(
-            request,
-            "social_accounts/devto_connect.html",
-            {"workspace_id": workspace_id},
-        )
-
-    try:
-        provider = _get_provider_for_platform(PlatformCredential.Platform.DEVTO, request.org.id)
-        profile = provider.get_profile(api_key)
-        _create_or_update_account(
-            workspace_id=workspace_id,
-            platform=PlatformCredential.Platform.DEVTO,
-            profile=profile,
-            access_token=api_key,
-        )
-        messages.success(request, f"Connected {profile.name} on DEV.to.")
-    except Exception:
-        logger.exception("DEV.to connection failed")
-        messages.error(request, "Failed to connect DEV.to account. Check your API key.")
-        return render(request, "social_accounts/devto_connect.html", {"workspace_id": workspace_id})
-
-    return redirect("calendar:calendar", workspace_id=workspace_id)
-
-
-# ------------------------------------------------------------------
 # Mastodon Connect (instance-based OAuth)
 # ------------------------------------------------------------------
 
@@ -808,12 +702,8 @@ def reconnect(request, workspace_id, account_id):
             messages.error(request, "Could not start the reconnection. Please try again.")
             return redirect("social_accounts:list", workspace_id=workspace_id)
 
-    if platform == PlatformCredential.Platform.BLUESKY:
-        return redirect("social_accounts:connect_bluesky", workspace_id=workspace_id)
     if platform == PlatformCredential.Platform.MASTODON:
         return redirect("social_accounts:connect_mastodon", workspace_id=workspace_id)
-    if platform == PlatformCredential.Platform.DEVTO:
-        return redirect("social_accounts:connect_devto", workspace_id=workspace_id)
 
     # Standard OAuth reconnect
     provider = _get_provider_for_platform(platform, request.org.id)

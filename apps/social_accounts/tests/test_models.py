@@ -130,9 +130,7 @@ class TestDisconnectRevocation:
         so each one's provider must actually call out to revoke — and every
         other provider must not, or the copy undersells what happens.
 
-        Bluesky is the one provider that calls out without revoking: its
-        ``deleteSession`` wants the refresh JWT, and the app password outlives
-        any session anyway."""
+        Providers with no revocation endpoint simply make no call."""
         from providers import PROVIDER_REGISTRY
 
         provider = PROVIDER_REGISTRY[platform](
@@ -147,7 +145,7 @@ class TestDisconnectRevocation:
         provider.revoke_token("token")
 
         account = SocialAccount(platform=platform)
-        calls_out = provider._request.called and platform != "bluesky"
+        calls_out = provider._request.called
         assert account.revokes_platform_grant_on_disconnect is calls_out, platform
         if calls_out:
             assert not account.keeps_platform_grant_on_disconnect, platform
@@ -214,16 +212,16 @@ class TestAnalyticsPlatformConfigEnabledPlatforms:
 
     def test_platform_without_a_row_counts_as_enabled(self):
         """The seed migration enumerated the choices as of its own migration, so
-        every slug added afterwards (``devto`` was the first) has no row. Reading
+        every slug added afterwards has no row. Reading
         that as "disabled" switched analytics off for them silently — and
         invisibly, since a platform with no row isn't listed in the admin either.
         """
         from apps.credentials.models import PlatformCredential
         from apps.social_accounts.models import AnalyticsPlatformConfig
 
-        AnalyticsPlatformConfig.objects.filter(platform=PlatformCredential.Platform.DEVTO).delete()
+        AnalyticsPlatformConfig.objects.filter(platform=PlatformCredential.Platform.MASTODON).delete()
 
-        assert PlatformCredential.Platform.DEVTO in AnalyticsPlatformConfig.enabled_platforms()
+        assert PlatformCredential.Platform.MASTODON in AnalyticsPlatformConfig.enabled_platforms()
 
     def test_disabled_row_is_honored(self):
         from apps.social_accounts.models import AnalyticsPlatformConfig

@@ -14,11 +14,5 @@ from __future__ import annotations
 # honest for any caller that reads the table directly.
 NO_ANALYTICS_PLATFORMS: dict[str, str] = {
     "linkedin_personal": ("LinkedIn doesn't expose personal-profile analytics. Only Company Pages have analytics."),
-    "bluesky": ("Bluesky's AT Protocol doesn't surface aggregate post analytics."),
     "mastodon": ("The Mastodon API doesn't expose aggregate post analytics."),
-    # DevtoProvider implements no metrics methods, so the sync would call into
-    # SocialProvider's NotImplementedError. Listed here rather than left to
-    # AnalyticsPlatformConfig: a missing config row now reads as *enabled*, and
-    # this is a capability gap, not an admin decision.
-    "devto": ("Publishing to DEV.to is supported, but its analytics aren't wired up yet."),
 }

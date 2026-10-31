@@ -129,7 +129,7 @@ class QueueCreateCategoryIdorTests(TestCase):
         WorkspaceMembership.objects.create(user=self.user, workspace=self.ws_b, workspace_role="owner")
         self.account = SocialAccount.objects.create(
             workspace=self.ws_a,
-            platform="bluesky",
+            platform="mastodon",
             account_name="bsky",
             account_platform_id="did:plc:test",
             connection_status="connected",

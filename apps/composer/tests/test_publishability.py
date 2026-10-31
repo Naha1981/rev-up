@@ -47,7 +47,7 @@ class PublishBlockerTest(TestCase):
         assert "board" in publish_blocker(self._account("pinterest"), media_types=IMAGE)
 
     def test_text_platforms_are_not_blocked(self):
-        for platform in ("facebook", "linkedin_personal", "bluesky", "threads"):
+        for platform in ("facebook", "linkedin_personal", "threads"):
             with self.subTest(platform=platform):
                 assert publish_blocker(self._account(platform), media_types=set()) == ""
 

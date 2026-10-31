@@ -36,7 +36,7 @@ class AddToQueueRollbackTest(TestCase):
         )
         self.acct_b = SocialAccount.objects.create(
             workspace=self.workspace,
-            platform="bluesky",
+            platform="mastodon",
             account_platform_id="bs-b",
             account_name="B",
             connection_status=SocialAccount.ConnectionStatus.CONNECTED,

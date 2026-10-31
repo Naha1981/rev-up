@@ -48,11 +48,6 @@ urlpatterns = [
         name="connection_done",
     ),
     path(
-        "connect/<str:token>/bluesky/",
-        views.connection_bluesky_connect,
-        name="connection_bluesky",
-    ),
-    path(
         "connect/<str:token>/mastodon/",
         views.connection_mastodon_start,
         name="connection_mastodon",

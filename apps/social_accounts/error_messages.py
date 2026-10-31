@@ -219,7 +219,7 @@ def _friendly(exc: Exception, copy: dict[str, str], fallback: str) -> str:
     Only ``PublishError`` passes through, and only when it still looks like
     prose. Its messages are written by us for a human and are frequently the
     most useful thing we could say — "TikTok only supports VIDEO posts", "Trim
-    the video and try again", "DEV.to requires a title" — so rewriting them
+    the video and try again", "Pinterest requires a board" — so rewriting them
     generically would lose real information.
 
     Everything else is rewritten. ``APIError``/``RateLimitError`` messages are

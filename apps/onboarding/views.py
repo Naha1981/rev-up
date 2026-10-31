@@ -316,12 +316,9 @@ def connection_oauth_start(request, token):
     if platform not in configured_platforms:
         return redirect("onboarding:connection_page", token=token)
 
-    # Bluesky and Mastodon use their own forms on the connection page
-    # (not standard OAuth via this endpoint), so reject them here.
-    if platform in (
-        PlatformCredential.Platform.BLUESKY,
-        PlatformCredential.Platform.MASTODON,
-    ):
+    # Mastodon uses its own form on the connection page (not standard OAuth
+    # via this endpoint), so reject it here.
+    if platform == PlatformCredential.Platform.MASTODON:
         return redirect("onboarding:connection_page", token=token)
 
     # Standard OAuth flow
@@ -597,50 +594,6 @@ def connection_done(request, token):
             "connected_count": connected_count,
         },
     )
-
-
-@require_POST
-def connection_bluesky_connect(request, token):
-    """Connect a Bluesky account via the connection link page."""
-    link = _get_connection_link_or_none(token)
-    if not link or not link.is_active:
-        return render(request, "onboarding/connection_expired.html", status=400)
-
-    handle = request.POST.get("handle", "").strip()
-    app_password = request.POST.get("app_password", "").strip()
-
-    if not handle or not app_password:
-        request.session["connection_link_error"] = "Handle and app password are required."
-        return redirect("onboarding:connection_page", token=token)
-
-    org = link.workspace.organization
-
-    try:
-        provider = _get_provider_for_platform(PlatformCredential.Platform.BLUESKY, org.id)
-        tokens = provider.create_session(handle, app_password)
-        profile = provider.get_profile(tokens.access_token)
-
-        account = _create_or_update_account(
-            workspace_id=str(link.workspace_id),
-            platform=PlatformCredential.Platform.BLUESKY,
-            profile=profile,
-            access_token=tokens.access_token,
-            refresh_token=tokens.refresh_token,
-            expires_in=tokens.expires_in,
-            instance_url=provider.pds_url,
-        )
-        ConnectionLinkUsage.objects.get_or_create(
-            connection_link=link,
-            social_account=account,
-        )
-
-    except Exception:
-        logger.exception("Connection link Bluesky connection failed")
-        request.session["connection_link_error"] = (
-            "Failed to connect Bluesky account. Check your handle and app password."
-        )
-
-    return redirect("onboarding:connection_page", token=token)
 
 
 @csp_update(FORM_ACTION="'self' https:")

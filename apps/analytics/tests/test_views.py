@@ -130,8 +130,8 @@ def test_index_prefers_an_account_with_analytics_available(owner_client, workspa
 
 @pytest.mark.django_db
 def test_inherently_unavailable_platform_gets_no_reconnect_hint(owner_client, workspace):
-    """Bluesky has no analytics API — reconnecting would achieve nothing."""
-    account = _account(workspace, "bluesky", "Bluesky")
+    """Mastodon has no analytics API — reconnecting would achieve nothing."""
+    account = _account(workspace, "mastodon", "Mastodon")
 
     response = owner_client.get(_account_url(workspace, account))
 
@@ -154,22 +154,6 @@ def test_disconnected_account_is_not_listed(owner_client, workspace):
 
 
 @pytest.mark.django_db
-def test_devto_account_renders_the_unavailable_state(owner_client, workspace):
-    """DEV.to has no metrics methods and no entry in the PLATFORM_* maps.
-
-    It reaches the page now that a missing config row counts as enabled, so the
-    platform-keyed lookups all have to tolerate it rather than KeyError.
-    """
-    account = _account(workspace, "devto", "Dev Blog")
-
-    response = owner_client.get(_account_url(workspace, account))
-
-    assert response.status_code == 200
-    assert response.context["analytics_unavailable"] is True
-    assert response.context["analytics_disabled_by_admin"] is False
-
-
-@pytest.mark.django_db
 def test_unavailable_account_suppresses_the_scope_reconnect_banner(owner_client, workspace):
     """Two reconnect CTAs on one screen give contradictory instructions.
 
@@ -188,7 +172,7 @@ def test_unavailable_account_suppresses_the_scope_reconnect_banner(owner_client,
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("platform", ["instagram_login", "bluesky"])
+@pytest.mark.parametrize("platform", ["instagram_login", "mastodon"])
 def test_pages_never_leak_raw_template_tags(owner_client, workspace, platform):
     """Django's ``{# #}`` is single-line only: a multi-line one is emitted as
     visible page text instead of being stripped. Cheap to assert, and it caught

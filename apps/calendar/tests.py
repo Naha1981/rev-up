@@ -549,7 +549,7 @@ class RepairPublishedScheduledAtTests(TestCase):
 
         sibling_account = SocialAccount.objects.create(
             workspace=self.workspace,
-            platform="bluesky",
+            platform="mastodon",
             account_platform_id="bs-sibling",
             account_name="Sibling",
             connection_status=SocialAccount.ConnectionStatus.CONNECTED,
@@ -1116,7 +1116,7 @@ class SlotOccupancyQueueTests(TestCase):
     def test_queue_full_raises_when_channel_has_no_slots(self):
         slotless = SocialAccount.objects.create(
             workspace=self.workspace,
-            platform="bluesky",
+            platform="mastodon",
             account_platform_id="bs-slotless",
             account_name="Slotless",
             connection_status=SocialAccount.ConnectionStatus.CONNECTED,
@@ -1155,7 +1155,7 @@ class SlotOccupancyQueueTests(TestCase):
         # the prioritize ladder has nowhere to push the top mover.
         weekly = SocialAccount.objects.create(
             workspace=self.workspace,
-            platform="bluesky",
+            platform="mastodon",
             account_platform_id="bs-weekly",
             account_name="W",
             connection_status=SocialAccount.ConnectionStatus.CONNECTED,

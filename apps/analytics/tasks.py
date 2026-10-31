@@ -125,14 +125,12 @@ BACKFILL_DAYS_PER_PLATFORM: dict[str, int] = {
     "threads": 90,
     "google_business": 90,
     "tiktok": 60,
-    # Bluesky / Mastodon / LinkedIn-Personal / DEV.to have no analytics surface
-    # — skip. LinkedIn only exposes share statistics for Organization URNs, not
-    # personal Person URNs, regardless of granted scopes. Each of these must
-    # also appear in ``NO_ANALYTICS_PLATFORMS``.
-    "bluesky": 0,
+    # Mastodon / LinkedIn-Personal have no analytics surface — skip. LinkedIn
+    # only exposes share statistics for Organization URNs, not personal Person
+    # URNs, regardless of granted scopes. Each of these must also appear in
+    # ``NO_ANALYTICS_PLATFORMS``.
     "mastodon": 0,
     "linkedin_personal": 0,
-    "devto": 0,
 }
 DEFAULT_BACKFILL_DAYS = 90
 
@@ -163,11 +161,6 @@ _POST_FIELD_OVERRIDES: dict[str, dict[str, str]] = {
     "mastodon": {
         # providers/mastodon.py:313-316: favourites→likes (ok), reblogs→shares,
         # replies→comments. Catalog wants reposts/replies.
-        "shares": "reposts",
-        "comments": "replies",
-    },
-    "bluesky": {
-        # AT Protocol counts: align with the bluesky catalog.
         "shares": "reposts",
         "comments": "replies",
     },
@@ -328,8 +321,8 @@ def _resolve_provider(account):
 
     This used to be a hand-copy of ``_resolve_publish_credentials`` and had
     drifted: no ``instagram_login`` branch (so Instagram Direct providers were
-    built with no ``ig_user_id`` / ``account_handle``) and no Bluesky
-    ``pds_url``. Calling the shared resolver is the only way that stays fixed.
+    built with no ``ig_user_id`` / ``account_handle``). Calling the shared
+    resolver is the only way that stays fixed.
 
     Adopting it deliberately changes two Mastodon behaviours to match
     publishing: ``MastodonAppRegistration``'s client_id/secret now apply only
@@ -1515,8 +1508,8 @@ def sync_all_account_analytics() -> None:
     from . import services
 
     # Filter on the same predicate the page and the agent API use, not just the
-    # admin toggle. A platform with no analytics API at all (DEV.to, Bluesky,
-    # ...) is "enabled" as far as AnalyticsPlatformConfig is concerned, and the
+    # admin toggle. A platform with no analytics API at all is "enabled" as
+    # far as AnalyticsPlatformConfig is concerned, and the
     # ``cap_days == 0`` guard only skips the per-post loop — so without this
     # those accounts reached _sync_account_metrics every single hour, built a
     # provider, and failed. They never write a snapshot row, so ``has_today_rows``

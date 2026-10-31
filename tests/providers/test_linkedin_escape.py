@@ -33,7 +33,7 @@ class TestEscapeCommentary:
 
     def test_leaves_plain_text_and_urls_untouched(self):
         assert escape_commentary("Hola mundo, ¿qué tal?") == "Hola mundo, ¿qué tal?"
-        url = "https://dev.to/agentprojectcontext/mcp-scopes-are-trust-boundaries-not-settings-2i18"
+        url = "https://example.com/agentprojectcontext/mcp-scopes-are-trust-boundaries-not-settings-2i18"
         assert escape_commentary(url) == url
 
     def test_empty_and_none_are_safe(self):

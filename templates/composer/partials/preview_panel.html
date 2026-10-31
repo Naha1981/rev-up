@@ -430,47 +430,6 @@ Context: previews (list of dicts with account, title, caption, first_comment, ch
             </div>
         </div>
 
-        {% elif p.account.platform == "bluesky" %}
-        {# ─── Bluesky ─── tweet-like minimal card #}
-        <div class="bg-white p-3">
-            <div class="flex gap-2.5">
-                {% if p.account.avatar_url %}
-                <img src="{{ p.account.avatar_url }}" class="w-10 h-10 rounded-full object-cover flex-shrink-0">
-                {% else %}
-                <div class="w-10 h-10 rounded-full bg-[#0085FF] flex items-center justify-center text-xs font-bold text-white flex-shrink-0">{{ p.account.account_name|default:p.account.account_handle|make_list|first|upper }}</div>
-                {% endif %}
-                <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-1.5 mb-0.5">
-                        <span class="text-[13px] font-semibold text-stone-900">{{ p.account.account_name|default:p.account.account_handle }}</span>
-                        <span class="text-[12px] text-stone-400">{{ p.account.account_handle|default:"@handle" }}</span>
-                        <span class="text-[11px] text-stone-400 ml-auto">now</span>
-                    </div>
-                    {% if p.caption %}
-                    <div class="text-[13px] text-stone-800 leading-relaxed whitespace-pre-wrap break-words mb-2">{{ p.truncated_caption|truncatechars:200 }}</div>
-                    {% else %}
-                    <div class="text-[13px] text-stone-300 italic mb-2">What's up?</div>
-                    {% endif %}
-                    {% if media_items %}
-                    {% with m=media_items.0 %}
-                    <div class="rounded-xl overflow-hidden border border-stone-200 mb-2">
-                        {% if m.is_video %}
-                        <div class="relative bg-stone-900" style="aspect-ratio: 16/9;"><video src="{{ m.url }}#t=0.5" class="w-full h-full object-cover" muted preload="metadata"></video></div>
-                        {% else %}
-                        <img src="{{ m.url }}" class="w-full object-cover" alt="" style="max-height: 180px;">
-                        {% endif %}
-                    </div>
-                    {% endwith %}
-                    {% endif %}
-                    <div class="flex items-center justify-between text-stone-400 pr-4">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.48.432.447.74 1.04.586 1.641a4.483 4.483 0 01-.923 1.785A5.969 5.969 0 006 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337z"/></svg>
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3"/></svg>
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"/></svg>
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z"/></svg>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         {% elif p.account.platform == "pinterest" %}
         {# ─── Pinterest ─── pin card with rounded corners #}
         <div class="bg-white">

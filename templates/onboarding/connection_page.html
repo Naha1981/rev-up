@@ -86,7 +86,6 @@
                 {% elif value == 'youtube' %}bg-red-50 text-red-600
                 {% elif value == 'pinterest' %}bg-red-50 text-red-500
                 {% elif value == 'threads' %}bg-stone-100 text-stone-800
-                {% elif value == 'bluesky' %}bg-sky-50 text-sky-500
                 {% elif value == 'google_business' %}bg-blue-50 text-blue-500
                 {% elif value == 'mastodon' %}bg-indigo-50 text-indigo-600
                 {% endif %}
@@ -107,7 +106,6 @@
                     {% elif value == 'youtube' %}Videos &amp; Shorts
                     {% elif value == 'pinterest' %}Pins &amp; Boards
                     {% elif value == 'threads' %}Text &amp; Media
-                    {% elif value == 'bluesky' %}AT Protocol
                     {% elif value == 'google_business' %}Local posts
                     {% elif value == 'mastodon' %}Federated social
                     {% endif %}
@@ -132,81 +130,7 @@
                 </div>
             </div>
             {% else %}
-            {% if value == 'bluesky' %}
-            <!-- Bluesky: inline form (no OAuth) -->
-            <div x-data="{ showForm: false }" style="flex-shrink: 0;">
-                <button @click="showForm = !showForm"
-                        class="btn-primary-hover"
-                        style="
-                    display: inline-flex; align-items: center; gap: 6px;
-                    padding: 7px 16px;
-                    font-size: 0.75rem; font-weight: 600;
-                    color: white; background: var(--primary);
-                    border: none; border-radius: var(--radius-full);
-                    cursor: pointer;
-                    box-shadow: var(--shadow-primary);
-                    transition: all 200ms ease;
-                ">
-                    Connect
-                    <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
-                </button>
-                <div x-show="showForm" x-cloak style="
-                    position: fixed; inset: 0; z-index: 50;
-                    display: flex; align-items: center; justify-content: center;
-                    background: rgba(0,0,0,0.4); padding: 16px;
-                " @click.self="showForm = false">
-                    <form method="post" action="{% url 'onboarding:connection_bluesky' token=link.token %}" style="
-                        background: var(--surface-0);
-                        border-radius: var(--radius-xl);
-                        padding: 24px;
-                        width: 100%; max-width: 380px;
-                        box-shadow: var(--shadow-xl);
-                    ">
-                        {% csrf_token %}
-                        <h3 style="font-size: 0.9375rem; font-weight: 600; color: var(--text-primary); margin-bottom: 16px;">Connect Bluesky</h3>
-                        <div style="margin-bottom: 12px;">
-                            <label style="font-size: 0.8125rem; font-weight: 600; color: var(--text-primary); display: block; margin-bottom: 4px;">Handle</label>
-                            <input type="text" name="handle" placeholder="you.bsky.social" required style="
-                                width: 100%; padding: 9px 12px;
-                                font-size: 0.875rem; font-family: var(--font-body);
-                                border: 1.5px solid var(--border);
-                                border-radius: var(--radius-lg);
-                                background: var(--surface-0);
-                                color: var(--text-primary);
-                                outline: none;
-                            ">
-                        </div>
-                        <div style="margin-bottom: 16px;">
-                            <label style="font-size: 0.8125rem; font-weight: 600; color: var(--text-primary); display: block; margin-bottom: 4px;">App Password</label>
-                            <input type="password" name="app_password" required style="
-                                width: 100%; padding: 9px 12px;
-                                font-size: 0.875rem; font-family: var(--font-body);
-                                border: 1.5px solid var(--border);
-                                border-radius: var(--radius-lg);
-                                background: var(--surface-0);
-                                color: var(--text-primary);
-                                outline: none;
-                            ">
-                            <p style="font-size: 0.6875rem; color: var(--text-tertiary); margin-top: 4px;">Generate at Settings &rarr; App Passwords on Bluesky</p>
-                        </div>
-                        <div style="display: flex; gap: 8px; justify-content: flex-end;">
-                            <button type="button" @click="showForm = false" style="
-                                padding: 8px 16px; font-size: 0.8125rem; font-weight: 600;
-                                background: var(--surface-0); color: var(--text-primary);
-                                border: 1px solid var(--border); border-radius: var(--radius-full);
-                                cursor: pointer;
-                            ">Cancel</button>
-                            <button type="submit" style="
-                                padding: 8px 16px; font-size: 0.8125rem; font-weight: 600;
-                                background: var(--primary); color: white;
-                                border: none; border-radius: var(--radius-full);
-                                cursor: pointer; box-shadow: var(--shadow-primary);
-                            ">Connect</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-            {% elif value == 'mastodon' %}
+            {% if value == 'mastodon' %}
             <!-- Mastodon: instance URL form -->
             <div x-data="{ showForm: false }" style="flex-shrink: 0;">
                 <button @click="showForm = !showForm"

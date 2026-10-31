@@ -60,9 +60,9 @@ def test_api_error_403_maps_to_reconnect():
     assert friendly_health_check_error(exc) == RECONNECT_MESSAGE
 
 
-def test_bluesky_expired_token_in_raw_response_maps_to_reconnect():
+def test_expired_token_in_raw_response_maps_to_reconnect():
     exc = APIError(
-        "Bluesky API error 400: ...",
+        "API error 400: ...",
         status_code=400,
         raw_response={"error": "ExpiredToken", "message": "Token has expired"},
     )
@@ -179,7 +179,7 @@ def test_a_publish_error_quoting_a_json_body_is_not_passed_through():
 
 
 def test_a_publish_error_quoting_a_dict_repr_is_not_passed_through():
-    exc = PublishError("DEV.to article creation returned no id: {'error': 'unauthorized', 'status': 401}")
+    exc = PublishError("Article creation returned no id: {'error': 'unauthorized', 'status': 401}")
 
     assert friendly_publish_error(exc) == PUBLISH_GENERIC_MESSAGE
 

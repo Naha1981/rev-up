@@ -67,7 +67,7 @@ api = NinjaAPI(
         "return 429 with the same error body shape, computed `retry_after` "
         "tells you when the oldest counting row ages out.\n\n"
         "**First comments.** When a target account's "
-        "`supports_first_comment` is `false` (TikTok, Pinterest, Bluesky, "
+        "`supports_first_comment` is `false` (TikTok, Pinterest, "
         "Google Business; LinkedIn Personal in OIDC mode), the "
         "`first_comment` field is silently dropped at publish time — call "
         "`GET /accounts/` or `GET /me/` first to check before composing.\n\n"
