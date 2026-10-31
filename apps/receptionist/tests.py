@@ -55,6 +55,19 @@ class FakeClient:
         return FakeResp(self._data)
 
 
+class SequenceClient:
+    """Returns a different fake response per call; empty string means empty content."""
+
+    def __init__(self, items):
+        self._items = list(items)
+        self.calls = []
+
+    def post(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        item = self._items.pop(0)
+        return FakeResp(item)
+
+
 REPLY = {"reply": "Good morning! Yes, we are open Saturdays 8:00-13:00.", "intake": {}}
 
 
@@ -161,6 +174,22 @@ class ReplyServiceTests(TestCase):
         self.assertFalse(draft.escalate)
         url = client.calls[0][0][0]
         self.assertIn("api.groq.com", url)
+
+    def test_draft_retries_when_reasoning_eats_budget(self):
+        ws = _workspace("retry-dental")
+        profile = BusinessProfile.objects.create(workspace=ws, industry="dental", business_name="Dent")
+        client = SequenceClient(
+            [
+                "",  # gpt-oss spent the whole budget on reasoning: empty content
+                {"reply": "Yes, we are open tomorrow 8:00-17:00.", "intake": {}},
+            ]
+        )
+        with self.settings(GROQ_API_KEY="k"):
+            from .services import draft_reply
+
+            draft = draft_reply(profile, [], "Are you open tomorrow?", client=client)
+        self.assertIn("open tomorrow", draft.body)
+        self.assertEqual(len(client.calls), 2)
 
     def test_trades_intake_creates_dispatch(self):
         from .webhooks import _apply_intake

@@ -112,35 +112,51 @@ def draft_reply(profile: BusinessProfile, history: list[tuple[str, str]], incomi
     ]
     models = [primary] + [m for m in fallbacks if m != primary]
     http = client or httpx.Client(timeout=_GROQ_TIMEOUT)
-    resp = None
+    text = ""
+    last_error: Exception | None = None
     for model in models:
         for attempt in range(2):
+            payload: dict = {
+                "model": model,
+                "temperature": 0.2,
+                # gpt-oss spends part of the budget on hidden reasoning; 800
+                # leaves room for the actual reply.
+                "max_tokens": 800,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+            if model.startswith("openai/gpt-oss"):
+                payload["reasoning_effort"] = "low"
             try:
                 resp = http.post(
                     "https://api.groq.com/openai/v1/chat/completions",
                     headers={"Authorization": f"Bearer {api_key}"},
-                    json={
-                        "model": model,
-                        "temperature": 0.2,
-                        "max_tokens": 400,
-                        "messages": [{"role": "user", "content": prompt}],
-                    },
+                    json=payload,
                 )
-            except Exception:
-                if attempt == 1 and model == models[-1]:
-                    raise
+            except Exception as exc:
+                last_error = exc
                 time.sleep(2 * (attempt + 1))
                 continue
-            if resp.status_code != 429:
+            if resp.status_code == 429:
+                last_error = RuntimeError(f"{model} rate-limited")
+                retry_after = min(int(resp.headers.get("retry-after", "5") or 5), 15)
+                time.sleep(retry_after)
+                continue
+            if resp.status_code >= 500:
+                last_error = RuntimeError(f"{model} HTTP {resp.status_code}")
+                time.sleep(2 * (attempt + 1))
+                continue
+            resp.raise_for_status()
+            content = resp.json()["choices"][0]["message"].get("content") or ""
+            if re.search(r"\{.*\}", content, re.S):
+                text = content
                 break
-            retry_after = min(int(resp.headers.get("retry-after", "5") or 5), 15)
-            time.sleep(retry_after)
-        if resp is not None and resp.status_code != 429:
+            # The model spent the whole budget on reasoning and returned no
+            # reply text - retry, then fall to the next model.
+            last_error = ValueError(f"no JSON object in {model} reply")
+        if text:
             break
-    if resp is None:
-        raise RuntimeError("no response from model")
-    resp.raise_for_status()
-    text = resp.json()["choices"][0]["message"]["content"]
+    if not text:
+        raise last_error or RuntimeError("no response from model")
     match = re.search(r"\{.*\}", text, re.S)
     if not match:
         raise ValueError("no JSON object in model reply")
