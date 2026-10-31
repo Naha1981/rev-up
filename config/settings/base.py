@@ -477,6 +477,15 @@ if SENTRY_DSN:
         profiles_sample_rate=env.float("SENTRY_PROFILES_SAMPLE_RATE", default=0.0),
     )
 
+# --- Zernio: RevUp's only social connect/publish provider ---
+# No Meta app anywhere in the product; Zernio hosts OAuth and holds the
+# platform tokens. ZERNIO_ENABLED=false is an OFF-switch only: it pauses
+# social publishing cleanly. There is no fallback provider to switch to.
+ZERNIO_ENABLED = env.bool("ZERNIO_ENABLED", default=False)
+ZERNIO_API_KEY = env("ZERNIO_API_KEY", default="")
+ZERNIO_BASE_URL = env("ZERNIO_BASE_URL", default="https://zernio.com/api/v1")
+ZERNIO_WEBHOOK_SECRET = env("ZERNIO_WEBHOOK_SECRET", default="")
+
 # Platform credentials env vars (cloud version)
 PLATFORM_INSTAGRAM_FACEBOOK_DM_SCOPES_ENABLED = env.bool("PLATFORM_INSTAGRAM_FACEBOOK_DM_SCOPES_ENABLED", default=True)
 _META_CREDENTIALS = {

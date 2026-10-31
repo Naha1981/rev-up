@@ -139,6 +139,24 @@ class SocialAccount(models.Model):
     # upstream tier (e.g. an X account on Pro vs the default Basic cap).
     daily_post_limit_override = models.PositiveIntegerField(blank=True, null=True)
 
+    # Publishing provider that owns this connection. "zernio" (the default for
+    # new rows) means connected and published through Zernio, which holds the
+    # platform tokens - the only path for new connections. "direct" marks the
+    # pre-Zernio per-platform OAuth rows (set by migration 0026).
+    provider = models.CharField(max_length=20, default="zernio", db_index=True)
+    provider_account_id = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="The account's id at the provider (the Zernio account _id).",
+    )
+    provider_profile_id = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="The provider profile (Zernio profile _id) this account sits on.",
+    )
+
     # Set by the analytics sync layer when the platform rejects an analytics
     # call as insufficient-scope. Surfaces a "Reconnect for analytics" CTA in
     # place of the metric region. Cleared on successful reconnect.
@@ -671,3 +689,40 @@ class AnalyticsPlatformConfig(models.Model):
         """
         rows = dict(cls.objects.values_list("platform", "is_enabled"))
         return [value for value, _label in PlatformCredential.Platform.choices if rows.get(value, True)]
+
+
+class WorkspaceProviderProfile(models.Model):
+    """A workspace's profile at a publishing provider (Zernio).
+
+    One per (workspace, provider). The Zernio profile is the tenant boundary
+    on their side - connect URLs, connected accounts, posts and webhook
+    routing all hang off its id, and it is created with externalId = our
+    workspace UUID so it can be recovered without storing anything.
+    """
+
+    class Provider(models.TextChoices):
+        ZERNIO = "zernio", "Zernio"
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        ERROR = "error", "Error"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        "workspaces.Workspace",
+        on_delete=models.CASCADE,
+        related_name="provider_profiles",
+    )
+    provider = models.CharField(max_length=20, choices=Provider.choices, default=Provider.ZERNIO)
+    profile_id = models.CharField(max_length=64, help_text="The Zernio profile _id.")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.ACTIVE)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "social_accounts_workspace_provider_profile"
+        unique_together = [("workspace", "provider")]
+
+    def __str__(self):
+        return f"{self.workspace} @ {self.provider} ({self.profile_id})"

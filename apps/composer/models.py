@@ -498,6 +498,25 @@ class PlatformPost(models.Model):
     retry_count = models.PositiveIntegerField(default=0)
     next_retry_at = models.DateTimeField(blank=True, null=True)
 
+    # Publishing-provider bookkeeping. ``provider`` names who was asked to
+    # publish ("zernio" - the only path); ``provider_post_id`` is the Zernio
+    # post _id, distinct from ``platform_post_id`` which is the id on the
+    # platform itself after publishing.
+    provider = models.CharField(max_length=20, default="zernio", db_index=True)
+    provider_post_id = models.CharField(max_length=64, blank=True, default="")
+    # One UUID per logical publish, sent to Zernio as its Idempotency-Key
+    # header (24h replay window). NULL until the first dispatch; the unique
+    # constraint below treats NULLs as distinct, so undispatched rows never
+    # collide.
+    idempotency_key = models.CharField(max_length=255, null=True, blank=True, default=None)
+    # Last state Zernio reported (webhook or poll), kept raw - an
+    # unrecognised value must be visible here rather than forced into the
+    # local state machine. ``last_provider_error`` keeps the provider's own
+    # words; ``last_status_synced_at`` paces status reconciliation.
+    last_provider_status = models.CharField(max_length=30, blank=True, default="")
+    last_provider_error = models.TextField(blank=True, default="")
+    last_status_synced_at = models.DateTimeField(blank=True, null=True)
+
     # Analytics sync state — the read-side counterpart to the retry budget
     # above, owned solely by ``apps.analytics.tasks``.
     #
@@ -524,6 +543,12 @@ class PlatformPost(models.Model):
     class Meta:
         db_table = "composer_platform_post"
         unique_together = [("post", "social_account")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["provider", "idempotency_key"],
+                name="uniq_pp_provider_idempotency",
+            ),
+        ]
         indexes = [
             models.Index(
                 fields=["status", "scheduled_at"],
