@@ -4,6 +4,7 @@ import json
 from unittest.mock import Mock, patch
 
 from django.test import TestCase, override_settings
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.organizations.models import Organization
@@ -456,6 +457,22 @@ class WhatsAppConnectTests(TestCase):
         channel = ZernioChannel.objects.get(workspace=ws)
         self.assertEqual(channel.zernio_account_id, "acc1")
         self.assertEqual(channel.phone_number, "2711000111")
+
+    def test_whatsapp_callback_returns_to_receptionist_setup(self):
+        ws = self._member_client()
+        from apps.social_accounts.models import WorkspaceProviderProfile
+
+        WorkspaceProviderProfile.objects.create(workspace=ws, provider="zernio", profile_id="prof1")
+        session = self.client.session
+        session["zernio_connect"] = {
+            "workspace_id": str(ws.id),
+            "platform": "whatsapp",
+            "profile_id": "prof1",
+            "user_id": str(session["_auth_user_id"]),
+        }
+        session.save()
+        resp = self.client.get(reverse("social_accounts:zernio_callback") + "?connected=whatsapp&profileId=prof1")
+        self.assertRedirects(resp, f"/workspace/{ws.id}/receptionist/setup/", fetch_redirect_response=False)
 
     @patch("providers.zernio.ZernioClient")
     def test_bind_refuses_account_not_on_profile(self, mock_client_cls):

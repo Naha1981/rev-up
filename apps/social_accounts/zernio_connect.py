@@ -303,6 +303,13 @@ def zernio_callback(request):
         messages.error(request, "This platform is not available.")
         return _back_to_grid()
 
+    # WhatsApp numbers power the receptionist, not the social grid: skip the
+    # social-account sync (whatsapp is not a SocialAccount platform) and send
+    # the owner back to receptionist setup to bind the number.
+    if connected_platform == "whatsapp":
+        messages.success(request, "WhatsApp connected. Choose this number below to finish setup.")
+        return redirect("receptionist:setup", workspace_id=workspace_id)
+
     from apps.workspaces.models import Workspace
 
     workspace = get_object_or_404(Workspace, id=workspace_id)
