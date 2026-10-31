@@ -363,6 +363,13 @@ class SandboxSendTests(TestCase):
         mock_post.assert_called_once()
 
 
+class ZernioChannelTests(TestCase):
+    def test_phone_number_saved_without_plus(self):
+        ws = _workspace("chan")
+        ch = ZernioChannel.objects.create(workspace=ws, zernio_account_id="a1", phone_number="+12029087457")
+        self.assertEqual(ch.phone_number, "12029087457")
+
+
 class PricingParserTests(TestCase):
     def test_lines_format(self):
         from apps.receptionist.views import _parse_pricing

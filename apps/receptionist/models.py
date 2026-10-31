@@ -62,6 +62,11 @@ class ZernioChannel(models.Model):
             models.UniqueConstraint(fields=["zernio_account_id"], name="uniq_zernio_channel_account"),
         ]
 
+    def save(self, *args, **kwargs):
+        # Stored without the leading "+" so screens can add it for display.
+        self.phone_number = self.phone_number.lstrip("+")
+        super().save(*args, **kwargs)
+
     def __str__(self) -> str:
         return f"{self.phone_number or self.zernio_account_id} -> {self.workspace_id}"
 
