@@ -133,6 +133,9 @@ class TestDisconnectRevocation:
         Providers with no revocation endpoint simply make no call."""
         from providers import PROVIDER_REGISTRY
 
+        if platform not in PROVIDER_REGISTRY:
+            pytest.skip("Zernio-managed platform: disconnect revokes via Zernio, not a direct provider")
+
         provider = PROVIDER_REGISTRY[platform](
             {
                 "client_id": "id",

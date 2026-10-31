@@ -14,4 +14,11 @@ from __future__ import annotations
 # honest for any caller that reads the table directly.
 NO_ANALYTICS_PLATFORMS: dict[str, str] = {
     "linkedin_personal": ("LinkedIn doesn't expose personal-profile analytics. Only Company Pages have analytics."),
+    "twitter": ("X analytics are not available yet."),
+    "reddit": ("Reddit analytics are not available yet."),
+    "bluesky": ("Bluesky analytics are not available yet."),
+    "telegram": ("Telegram analytics are not available yet."),
+    "whatsapp": ("WhatsApp analytics are not available yet."),
+    "discord": ("Discord analytics are not available yet."),
+    "slack": ("Slack analytics are not available yet."),
 }

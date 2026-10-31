@@ -167,6 +167,13 @@ _CONNECT_SUGGESTION_ORDER: tuple[str, ...] = (
     "pinterest",
     "instagram_login",
     "google_business",
+    "twitter",
+    "reddit",
+    "bluesky",
+    "telegram",
+    "whatsapp",
+    "discord",
+    "slack",
 )
 
 

@@ -49,6 +49,13 @@ class PlatformCredential(models.Model):
         PINTEREST = "pinterest", "Pinterest"
         THREADS = "threads", "Threads"
         GOOGLE_BUSINESS = "google_business", "Google Business Profile"
+        TWITTER = "twitter", "X (Twitter)"
+        REDDIT = "reddit", "Reddit"
+        BLUESKY = "bluesky", "Bluesky"
+        TELEGRAM = "telegram", "Telegram"
+        WHATSAPP = "whatsapp", "WhatsApp"
+        DISCORD = "discord", "Discord"
+        SLACK = "slack", "Slack"
 
     class TestResult(models.TextChoices):
         SUCCESS = "success", "Success"

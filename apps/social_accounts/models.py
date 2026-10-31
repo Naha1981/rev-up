@@ -414,6 +414,13 @@ class SocialAccount(models.Model):
         "pinterest": 500,
         "threads": 500,
         "google_business": 1500,
+        "twitter": 280,
+        "reddit": 40000,
+        "bluesky": 300,
+        "telegram": 4096,
+        "whatsapp": 4096,
+        "discord": 2000,
+        "slack": 4000,
     }
 
     @property
@@ -561,8 +568,16 @@ class SocialAccount(models.Model):
             "pinterest": "pi",
             "threads": "th",
             "google_business": "gb",
+            "twitter": "x",
+            "reddit": "re",
+            "bluesky": "bs",
+            "telegram": "tg",
+            "whatsapp": "wa",
+            "discord": "dc",
+            "slack": "sl",
         }
         return icons.get(self.platform, self.platform[:2])
+
 
 class PlatformVisibility(models.Model):
     """Site-wide toggle controlling which platforms appear on the connect page."""

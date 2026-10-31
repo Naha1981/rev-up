@@ -130,6 +130,13 @@ BACKFILL_DAYS_PER_PLATFORM: dict[str, int] = {
     # URNs, regardless of granted scopes. Each of these must also appear in
     # ``NO_ANALYTICS_PLATFORMS``.
     "linkedin_personal": 0,
+    "twitter": 0,
+    "reddit": 0,
+    "bluesky": 0,
+    "telegram": 0,
+    "whatsapp": 0,
+    "discord": 0,
+    "slack": 0,
 }
 DEFAULT_BACKFILL_DAYS = 90
 

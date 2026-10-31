@@ -303,7 +303,6 @@ class ResolvePublishCredentialsTest(SimpleTestCase):
         self.assertEqual(credentials["ig_user_id"], "17841400000000000")
 
 
-
 class NonRetryableFailureTest(TestCase):
     """_publish_platform_post must honor the exception's ``retryable`` flag."""
 

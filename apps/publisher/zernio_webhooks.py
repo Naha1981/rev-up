@@ -73,9 +73,7 @@ def zernio_webhook(request):
 
     try:
         with transaction.atomic():
-            event_row = ZernioWebhookEvent.objects.create(
-                event_id=event_id, event_type=event_type, payload=payload
-            )
+            event_row = ZernioWebhookEvent.objects.create(event_id=event_id, event_type=event_type, payload=payload)
     except IntegrityError:
         event_row = ZernioWebhookEvent.objects.get(event_id=event_id)
         if event_row.processed_at is not None:

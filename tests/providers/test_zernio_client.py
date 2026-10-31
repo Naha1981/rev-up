@@ -162,20 +162,37 @@ def test_connect_url_passes_profile_and_redirect():
     assert seen["params"] == {"profileId": "prof-1", "redirect_url": "https://revup.example/connected"}
 
 
-def test_connect_url_refuses_x_and_unknown_platforms_without_a_request():
+def test_connect_url_refuses_unsupported_platforms_without_a_request():
     def handler(request):
         raise AssertionError("no request may leave for a refused platform")
 
     with make_client(handler) as client:
-        for platform in ("twitter", "x", "pinterest", "snapchat"):
+        for platform in ("x", "snapchat", "myspace"):
             with pytest.raises(ZernioError) as exc_info:
                 client.get_connect_url(platform, profile_id="prof-1", redirect_url="https://revup.example/cb")
             assert exc_info.value.code == "unsupported_platform"
             assert exc_info.value.retryable is False
 
 
-def test_supported_platforms_are_the_owner_order_without_x():
-    assert SUPPORTED_PLATFORMS == ("facebook", "instagram", "tiktok", "linkedin")
+def test_supported_platforms_cover_the_full_spec():
+    """Every platform the spec makes connectable. Snapchat stays out (closed beta)."""
+    assert set(SUPPORTED_PLATFORMS) == {
+        "facebook",
+        "instagram",
+        "tiktok",
+        "linkedin",
+        "twitter",
+        "youtube",
+        "pinterest",
+        "threads",
+        "googlebusiness",
+        "reddit",
+        "bluesky",
+        "telegram",
+        "whatsapp",
+        "discord",
+        "slack",
+    }
 
 
 def test_connect_url_accepts_a_nested_data_envelope():

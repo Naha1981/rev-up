@@ -49,9 +49,6 @@ def _get_visible_platform_choices():
 
 def _get_configured_platforms(org_id):
     """Return set of platform names that have credentials configured."""
-    from providers import PROVIDER_REGISTRY
-    from providers.types import AuthType
-
     configured = set(
         PlatformCredential.objects.for_org(org_id).filter(is_configured=True).values_list("platform", flat=True)
     )
@@ -65,11 +62,13 @@ def _get_configured_platforms(org_id):
         if derive_is_configured(platform, creds):
             configured.add(platform)
 
-    # Providers that carry their own credentials flow (no repo-wide app
-    # credentials) are always connectable.
-    for platform, provider_cls in PROVIDER_REGISTRY.items():
-        if provider_cls().auth_type in (AuthType.SESSION, AuthType.INSTANCE_OAUTH):
-            configured.add(platform)
+    # Zernio-managed platforms need no repo-wide app credentials at all: the
+    # hosted connect flow carries authorization. When Zernio is configured,
+    # every mapped platform is connectable.
+    from apps.social_accounts.zernio_connect import ZERNIO_PLATFORM_SLUGS, zernio_ready
+
+    if zernio_ready():
+        configured.update(ZERNIO_PLATFORM_SLUGS)
 
     return configured
 

@@ -51,7 +51,24 @@ DEFAULT_TIMEOUT_SECONDS = 30.0
 # TikTok; LinkedIn last. X is deliberately absent - Zernio bills X API calls
 # as pass-through and the owner excluded it. Anything not listed here is
 # refused before it can cost money or surprise anyone.
-SUPPORTED_PLATFORMS = ("facebook", "instagram", "tiktok", "linkedin")
+# The spec's 15 connectable platforms (Snapchat stays out: closed beta).
+SUPPORTED_PLATFORMS = (
+    "facebook",
+    "instagram",
+    "tiktok",
+    "linkedin",
+    "twitter",
+    "youtube",
+    "pinterest",
+    "threads",
+    "googlebusiness",
+    "reddit",
+    "bluesky",
+    "telegram",
+    "whatsapp",
+    "discord",
+    "slack",
+)
 
 # Zernio per-platform post status -> PlatformPost.Status values
 # (apps.composer.models). Mapped as data, not by importing the app:
@@ -281,9 +298,9 @@ class ZernioClient:
     ) -> str:
         """The hosted Zernio OAuth URL for one platform. One tap for the user.
 
-        Only :data:`SUPPORTED_PLATFORMS` are served - anything else (X above
-        all) is refused here, before a request could connect something the
-        owner excluded. ``reconnect_account_id`` refreshes that exact existing
+        Only :data:`SUPPORTED_PLATFORMS` are served - anything else is
+        refused here, before a request could connect something the spec
+        excludes (Snapchat is closed beta). ``reconnect_account_id`` refreshes that exact existing
         account (Zernio's reconnectAccountId) instead of adding a new one.
         """
         if platform not in SUPPORTED_PLATFORMS:

@@ -46,6 +46,17 @@ ZERNIO_PLATFORM_SLUGS = {
     "tiktok": "tiktok",
     "linkedin_personal": "linkedin",
     "linkedin_company": "linkedin",
+    "youtube": "youtube",
+    "pinterest": "pinterest",
+    "threads": "threads",
+    "google_business": "googlebusiness",
+    "twitter": "twitter",
+    "reddit": "reddit",
+    "bluesky": "bluesky",
+    "telegram": "telegram",
+    "whatsapp": "whatsapp",
+    "discord": "discord",
+    "slack": "slack",
 }
 ZERNIO_MANAGED_PLATFORMS = tuple(ZERNIO_PLATFORM_SLUGS)
 

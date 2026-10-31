@@ -582,6 +582,3 @@ def connection_done(request, token):
             "connected_count": connected_count,
         },
     )
-
-
-

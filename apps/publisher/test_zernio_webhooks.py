@@ -101,7 +101,9 @@ class ZernioWebhookTest(TestCase):
         payload = _payload("webhook.test", event_id=None)
         del payload["id"]
         response = self.client.post(
-            self.url, data=json.dumps(payload), content_type="application/json",
+            self.url,
+            data=json.dumps(payload),
+            content_type="application/json",
             HTTP_X_ZERNIO_SIGNATURE=_sign(json.dumps(payload).encode()),
         )
         assert response.status_code == 400

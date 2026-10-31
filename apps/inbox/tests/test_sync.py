@@ -156,8 +156,6 @@ def test_instagram_failed_poll_keeps_previous_continuation(connected_account, fa
     assert connected_account.instagram_dm_poll_state == previous
 
 
-
-
 def _comment(message_id, *, post_id="", minutes_ago=0):
     return SimpleNamespace(
         platform_message_id=message_id,

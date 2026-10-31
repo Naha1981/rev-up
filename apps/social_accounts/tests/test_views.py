@@ -279,7 +279,12 @@ class TestConnectPlatformView:
         mock_provider.get_auth_url.return_value = "https://www.threads.com/oauth/authorize/?ok=1"
 
         url = reverse("social_accounts:connect", kwargs={"workspace_id": workspace.id})
-        with patch("apps.social_accounts.views._get_provider_for_platform", return_value=mock_provider):
+        # Threads is Zernio-managed now; exclude it here to exercise the
+        # direct-OAuth branch that remains for any non-Zernio platform.
+        with (
+            patch("apps.social_accounts.views._get_provider_for_platform", return_value=mock_provider),
+            patch("apps.social_accounts.zernio_connect.ZERNIO_MANAGED_PLATFORMS", ()),
+        ):
             response = authenticated_client.post(url, {"platform": "threads"})
 
         assert response.status_code == 302
@@ -320,7 +325,9 @@ class TestConnectPlatformView:
     @override_settings(PLATFORM_CREDENTIALS_FROM_ENV={"threads": {"app_id": "TH_ID", "app_secret": "TH_SECRET"}})
     def test_threads_connect_uses_threads_app_id(self, authenticated_client, workspace):
         url = reverse("social_accounts:connect", kwargs={"workspace_id": workspace.id})
-        response = authenticated_client.post(url, {"platform": "threads"})
+        # Direct Threads OAuth only runs when Zernio does not manage it.
+        with patch("apps.social_accounts.zernio_connect.ZERNIO_MANAGED_PLATFORMS", ()):
+            response = authenticated_client.post(url, {"platform": "threads"})
         assert response.status_code == 302
         assert response.url.startswith("https://www.threads.com/oauth/authorize?")
         assert "client_id=TH_ID" in response.url
@@ -358,7 +365,10 @@ class TestConnectPlatformView:
         mock_provider.get_auth_url.return_value = "https://threads.example/auth"
 
         url = reverse("social_accounts:connect", kwargs={"workspace_id": workspace.id})
-        with patch("apps.social_accounts.views._get_provider_for_platform", return_value=mock_provider):
+        with (
+            patch("apps.social_accounts.views._get_provider_for_platform", return_value=mock_provider),
+            patch("apps.social_accounts.zernio_connect.ZERNIO_MANAGED_PLATFORMS", ()),
+        ):
             response = authenticated_client.post(url, {"platform": "threads"})
 
         assert response.status_code == 302

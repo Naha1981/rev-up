@@ -124,6 +124,26 @@ class TestConnectGrid:
             assert platform in response.context["configured_platforms"]
         assert response.context["zernio_platforms"] == set(ZERNIO_MANAGED_PLATFORMS)
 
+    def test_grid_offers_all_spec_platforms_when_zernio_on(self, authenticated_client, workspace, zernio_on):
+        url = reverse("social_accounts:connect", kwargs={"workspace_id": workspace.id})
+        response = authenticated_client.get(url)
+        values = {value for value, _label in response.context["platform_choices"]}
+        for platform in (
+            "twitter",
+            "reddit",
+            "bluesky",
+            "telegram",
+            "whatsapp",
+            "discord",
+            "slack",
+            "youtube",
+            "pinterest",
+            "threads",
+            "google_business",
+        ):
+            assert platform in values
+            assert platform in response.context["configured_platforms"]
+
     def test_grid_hides_instagram_login_card_when_zernio_on(self, authenticated_client, workspace, zernio_on):
         url = reverse("social_accounts:connect", kwargs={"workspace_id": workspace.id})
         response = authenticated_client.get(url)
@@ -263,6 +283,36 @@ class TestConnectStart:
         assert response.status_code == 302
         assert response.url.startswith("https://zernio.com/connect/")
 
+    @pytest.mark.parametrize(
+        "platform,slug",
+        [
+            ("twitter", "twitter"),
+            ("reddit", "reddit"),
+            ("bluesky", "bluesky"),
+            ("telegram", "telegram"),
+            ("whatsapp", "whatsapp"),
+            ("discord", "discord"),
+            ("slack", "slack"),
+            ("youtube", "youtube"),
+            ("pinterest", "pinterest"),
+            ("threads", "threads"),
+            ("google_business", "googlebusiness"),
+        ],
+    )
+    def test_new_platforms_route_to_zernio_connect(
+        self, authenticated_client, workspace, zernio_on, monkeypatch, platform, slug
+    ):
+        """Every spec platform starts the hosted Zernio flow, never direct OAuth."""
+        routes = {
+            "/profiles": {"profile": {"_id": PROFILE_ID}},
+            f"/connect/{slug}": {"authUrl": f"https://zernio.com/connect/{slug}?token=z"},
+        }
+        monkeypatch.setattr("apps.social_accounts.zernio_connect.ZernioClient", lambda *a, **k: _client(routes))
+        url = reverse("social_accounts:connect", kwargs={"workspace_id": workspace.id})
+        response = authenticated_client.post(url, {"platform": platform})
+        assert response.status_code == 302
+        assert response.url == f"https://zernio.com/connect/{slug}?token=z"
+
     def test_old_connect_post_never_reaches_meta_when_zernio_off(self, authenticated_client, workspace, settings):
         settings.ZERNIO_ENABLED = False
         settings.PLATFORM_CREDENTIALS_FROM_ENV = {"facebook": {"app_id": "i", "app_secret": "s"}}
@@ -357,10 +407,11 @@ class TestZernioCallback:
         assert response.status_code == 403
 
     def test_unsupported_platform_rejected(self, authenticated_client, user, workspace, zernio_on):
-        self._seed_session(authenticated_client, workspace, user, platform="twitter")
+        """Snapchat is closed beta on Zernio - not a platform RevUp connects."""
+        self._seed_session(authenticated_client, workspace, user, platform="snapchat")
         url = reverse("social_accounts:zernio_callback")
         response = authenticated_client.get(
-            url, {"connected": "twitter", "profileId": PROFILE_ID, "accountId": "a", "username": "u"}
+            url, {"connected": "snapchat", "profileId": PROFILE_ID, "accountId": "a", "username": "u"}
         )
         assert response.status_code == 302
         assert SocialAccount.objects.count() == 0

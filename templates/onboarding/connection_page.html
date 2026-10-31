@@ -87,6 +87,13 @@
                 {% elif value == 'pinterest' %}bg-red-50 text-red-500
                 {% elif value == 'threads' %}bg-stone-100 text-stone-800
                 {% elif value == 'google_business' %}bg-blue-50 text-blue-500
+                {% elif value == 'twitter' %}bg-stone-900 text-white
+                {% elif value == 'reddit' %}bg-orange-50 text-orange-600
+                {% elif value == 'bluesky' %}bg-sky-50 text-sky-600
+                {% elif value == 'telegram' %}bg-sky-50 text-sky-500
+                {% elif value == 'whatsapp' %}bg-green-50 text-green-600
+                {% elif value == 'discord' %}bg-indigo-50 text-indigo-600
+                {% elif value == 'slack' %}bg-purple-50 text-purple-700
                 {% endif %}
             ">
                 {% include "social_accounts/partials/_platform_icon.html" with platform=value size="5" %}
@@ -106,6 +113,13 @@
                     {% elif value == 'pinterest' %}Pins &amp; Boards
                     {% elif value == 'threads' %}Text &amp; Media
                     {% elif value == 'google_business' %}Local posts
+                    {% elif value == 'twitter' %}Posts &amp; reposts
+                    {% elif value == 'reddit' %}Subreddit posts
+                    {% elif value == 'bluesky' %}Posts
+                    {% elif value == 'telegram' %}Channel posts
+                    {% elif value == 'whatsapp' %}Channel updates
+                    {% elif value == 'discord' %}Server posts
+                    {% elif value == 'slack' %}Workspace posts
                     {% endif %}
                 </div>
             </div>
