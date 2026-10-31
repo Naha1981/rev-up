@@ -42,7 +42,7 @@ class FakeResp:
         return None
 
     def json(self):
-        return {"candidates": [{"content": {"parts": [{"text": json.dumps(self._data)}]}}]}
+        return {"choices": [{"message": {"content": json.dumps(self._data)}}]}
 
 
 class FakeClient:
@@ -153,14 +153,14 @@ class ReplyServiceTests(TestCase):
             workspace=ws, industry="trades", business_name="CC Plumbing", call_out_fee="450.00"
         )
         client = FakeClient({"reply": "Our call-out fee is R450. What is the address?", "intake": {}})
-        with self.settings(CONTENT_AGENT_GEMINI_API_KEY="k"):
+        with self.settings(GROQ_API_KEY="k"):
             from .services import draft_reply
 
             draft = draft_reply(profile, [], "Do you charge a call-out fee?", client=client)
         self.assertIn("R450", draft.body)
         self.assertFalse(draft.escalate)
         url = client.calls[0][0][0]
-        self.assertIn("generativelanguage.googleapis.com", url)
+        self.assertIn("api.groq.com", url)
 
     def test_trades_intake_creates_dispatch(self):
         from .webhooks import _apply_intake

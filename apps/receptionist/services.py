@@ -20,7 +20,7 @@ from .models import BusinessProfile, Industry
 
 logger = logging.getLogger(__name__)
 
-_GEMINI_TIMEOUT = 30
+_GROQ_TIMEOUT = 20
 
 _ESCALATION_PATTERNS = [
     re.compile(r"\b(speak|talk)\s+to\s+(a\s+)?(person|human|someone|manager|owner)\b", re.I),
@@ -101,28 +101,46 @@ def draft_reply(profile: BusinessProfile, history: list[tuple[str, str]], incomi
         f"{_RULES}"
     )
 
-    api_key = getattr(settings, "CONTENT_AGENT_GEMINI_API_KEY", "") or ""
+    api_key = getattr(settings, "GROQ_API_KEY", "") or ""
     if not api_key:
-        raise RuntimeError("CONTENT_AGENT_GEMINI_API_KEY is not set")
-    model = getattr(settings, "CONTENT_AGENT_GEMINI_MODEL", "gemini-3.8-flash")
-    http = client or httpx.Client(timeout=_GEMINI_TIMEOUT)
+        raise RuntimeError("GROQ_API_KEY is not set")
+    primary = getattr(settings, "RECEPTIONIST_GROQ_MODEL", "openai/gpt-oss-120b")
+    fallbacks = [
+        m.strip()
+        for m in getattr(settings, "RECEPTIONIST_GROQ_FALLBACK_MODELS", "openai/gpt-oss-20b").split(",")
+        if m.strip()
+    ]
+    models = [primary] + [m for m in fallbacks if m != primary]
+    http = client or httpx.Client(timeout=_GROQ_TIMEOUT)
     resp = None
-    for attempt in range(3):
-        resp = http.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-            params={"key": api_key},
-            json={
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"responseMimeType": "application/json"},
-            },
-        )
-        if resp.status_code not in (429, 503):
+    for model in models:
+        for attempt in range(2):
+            try:
+                resp = http.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    json={
+                        "model": model,
+                        "temperature": 0.2,
+                        "max_tokens": 400,
+                        "messages": [{"role": "user", "content": prompt}],
+                    },
+                )
+            except Exception:
+                if attempt == 1 and model == models[-1]:
+                    raise
+                time.sleep(2 * (attempt + 1))
+                continue
+            if resp.status_code != 429:
+                break
+            retry_after = min(int(resp.headers.get("retry-after", "5") or 5), 15)
+            time.sleep(retry_after)
+        if resp is not None and resp.status_code != 429:
             break
-        time.sleep(3 * (attempt + 1))
     if resp is None:
         raise RuntimeError("no response from model")
     resp.raise_for_status()
-    text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+    text = resp.json()["choices"][0]["message"]["content"]
     match = re.search(r"\{.*\}", text, re.S)
     if not match:
         raise ValueError("no JSON object in model reply")
