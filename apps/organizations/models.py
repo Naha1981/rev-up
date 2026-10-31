@@ -18,6 +18,12 @@ class Organization(models.Model):
     # happened to click Subscribe.
     billing_email = models.EmailField(blank=True, default="")
 
+    # Platform-owner access control: when set, this org's members see a
+    # suspended notice instead of the app. Staff (/platform-admin/) are
+    # exempt. Toggled only from the platform-owner admin.
+    access_suspended_at = models.DateTimeField(blank=True, null=True)
+    access_suspension_reason = models.CharField(max_length=255, blank=True, default="")
+
     # Deletion workflow
     deletion_requested_at = models.DateTimeField(blank=True, null=True)
     deletion_scheduled_for = models.DateTimeField(blank=True, null=True)

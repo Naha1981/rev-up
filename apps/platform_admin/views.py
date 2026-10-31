@@ -127,3 +127,26 @@ def business_create(request):
                 messages.success(request, f"Business '{name}' created.")
             return redirect("platform_admin:business_detail", org_id=org.id)
     return render(request, "platform_admin/business_form.html", {})
+
+
+@staff_member_required
+def business_toggle_access(request, org_id):
+    """Suspend or restore a business's access (POST only)."""
+    from django.contrib import messages
+    from django.shortcuts import redirect
+    from django.utils import timezone
+
+    if request.method != "POST":
+        return redirect("platform_admin:business_detail", org_id=org_id)
+    org = get_object_or_404(Organization, id=org_id)
+    if org.access_suspended_at is None:
+        org.access_suspended_at = timezone.now()
+        org.access_suspension_reason = request.POST.get("reason", "")[:255]
+        org.save(update_fields=["access_suspended_at", "access_suspension_reason", "updated_at"])
+        messages.success(request, f"Access to '{org.name}' paused.")
+    else:
+        org.access_suspended_at = None
+        org.access_suspension_reason = ""
+        org.save(update_fields=["access_suspended_at", "access_suspension_reason", "updated_at"])
+        messages.success(request, f"Access to '{org.name}' restored.")
+    return redirect("platform_admin:business_detail", org_id=org.id)

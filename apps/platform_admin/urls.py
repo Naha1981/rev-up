@@ -8,4 +8,5 @@ urlpatterns = [
     path("", views.dashboard, name="dashboard"),
     path("businesses/new/", views.business_create, name="business_create"),
     path("businesses/<uuid:org_id>/", views.business_detail, name="business_detail"),
+    path("businesses/<uuid:org_id>/toggle-access/", views.business_toggle_access, name="business_toggle_access"),
 ]

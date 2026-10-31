@@ -72,6 +72,19 @@ class RBACMiddleware:
                     request.workspace = ws_membership.workspace
                     request.workspace_membership = ws_membership
 
+        # Platform-owner access suspension: a suspended org's members see a
+        # notice instead of the app. Staff and the account/auth paths are
+        # exempt so nobody is locked out of logging out or being unsuspended.
+        if (
+            request.org is not None
+            and request.org.access_suspended_at is not None
+            and not request.user.is_staff
+            and not request.path.startswith(("/accounts/", "/platform-admin/"))
+        ):
+            from django.shortcuts import render
+
+            return render(request, "organizations/access_suspended.html", status=403)
+
         return self.get_response(request)
 
     def process_view(self, request, view_func, view_args, view_kwargs):
