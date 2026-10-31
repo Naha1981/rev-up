@@ -119,6 +119,12 @@ class Message(models.Model):
 
     class Meta:
         ordering = ["created_at"]
+        indexes = [
+            # Every webhook does per-workspace budget counts and per-contact
+            # history reads; at 100+ tenants these tables are the hot path.
+            models.Index(fields=["workspace", "direction", "created_at"], name="msg_ws_dir_ts"),
+            models.Index(fields=["contact", "created_at"], name="msg_contact_ts"),
+        ]
 
     def __str__(self) -> str:
         return f"{self.direction}:{self.sender_type} {self.body[:40]}"
