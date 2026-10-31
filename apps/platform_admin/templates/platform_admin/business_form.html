@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}New business - Platform admin{% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto px-4 py-6">
+  <a href="{% url 'platform_admin:dashboard' %}" class="text-sm text-stone-500 hover:text-stone-700">&larr; Platform admin</a>
+  <h1 class="text-2xl font-bold text-stone-900 mt-1 mb-6">New business</h1>
+  <form method="post" class="bg-white border border-stone-200 rounded-xl p-5 space-y-4">
+    {% csrf_token %}
+    <div>
+      <label for="name" class="block text-sm font-medium text-stone-700 mb-1">Business name</label>
+      <input id="name" name="name" type="text" required class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-orange-500">
+    </div>
+    <div>
+      <label for="client_email" class="block text-sm font-medium text-stone-700 mb-1">Client email <span class="text-stone-400 font-normal">(optional - emails them an invite to manage it)</span></label>
+      <input id="client_email" name="client_email" type="email" class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-orange-500">
+    </div>
+    <div>
+      <label for="timezone" class="block text-sm font-medium text-stone-700 mb-1">Timezone</label>
+      <input id="timezone" name="timezone" type="text" value="Africa/Johannesburg" class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-orange-500">
+    </div>
+    <button type="submit" class="w-full rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium py-2.5">Create business</button>
+  </form>
+</div>
+{% endblock %}

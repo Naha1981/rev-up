@@ -140,3 +140,64 @@ def test_business_detail_shows_accounts_and_members(client):
     content = resp.content.decode()
     assert "Detail Org" in content
     assert "TT One" in content and "ttone" in content
+
+
+# --- business create + client invite ---------------------------------------
+
+
+@pytest.mark.django_db
+def test_business_create_creates_org_workspace_and_owner_memberships(client):
+    from apps.members.models import OrgMembership, WorkspaceMembership
+
+    staff = make_user("owner3@example.com", is_staff=True)
+    client.force_login(staff)
+    resp = client.post(
+        reverse("platform_admin:business_create"),
+        {"name": "New Client Biz", "timezone": "Africa/Johannesburg"},
+    )
+    org = Organization.objects.get(name="New Client Biz")
+    assert resp.status_code == 302
+    assert str(org.id) in resp["Location"]
+    ws = org.workspaces.get()
+    assert OrgMembership.objects.filter(user=staff, organization=org, org_role=OrgMembership.OrgRole.OWNER).exists()
+    assert WorkspaceMembership.objects.filter(
+        user=staff, workspace=ws, workspace_role=WorkspaceMembership.WorkspaceRole.OWNER
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_business_create_with_email_invites_client_as_admin(client):
+    from apps.members.models import Invitation, OrgMembership
+
+    staff = make_user("owner4@example.com", is_staff=True)
+    client.force_login(staff)
+    client.post(
+        reverse("platform_admin:business_create"),
+        {
+            "name": "Invited Biz",
+            "client_email": "client@example.com",
+            "timezone": "Africa/Johannesburg",
+        },
+    )
+    org = Organization.objects.get(name="Invited Biz")
+    invite = Invitation.objects.get(organization=org, email="client@example.com")
+    assert invite.org_role == OrgMembership.OrgRole.ADMIN
+    assert len(invite.workspace_assignments) == 1
+
+
+@pytest.mark.django_db
+def test_business_create_requires_name(client):
+    staff = make_user("owner5@example.com", is_staff=True)
+    client.force_login(staff)
+    resp = client.post(reverse("platform_admin:business_create"), {"name": ""})
+    assert resp.status_code == 200
+    assert not Organization.objects.filter(name="").exists()
+
+
+@pytest.mark.django_db
+def test_business_create_forbidden_for_customer(client):
+    customer = make_user("customer3@example.com")
+    client.force_login(customer)
+    resp = client.post(reverse("platform_admin:business_create"), {"name": "Nope"})
+    assert resp.status_code in (302, 403)
+    assert not Organization.objects.filter(name="Nope").exists()

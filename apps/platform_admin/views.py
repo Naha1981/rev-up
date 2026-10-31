@@ -81,3 +81,58 @@ def business_detail(request, org_id):
             "accounts": accounts,
         },
     )
+
+
+@staff_member_required
+def business_create(request):
+    """Create a business (org + default workspace) for a client, optionally
+    emailing the client an invite to manage it themselves."""
+    from django.contrib import messages
+    from django.shortcuts import redirect
+
+    from apps.members.models import OrgMembership, WorkspaceMembership
+    from apps.members.services import create_invitation
+    from apps.workspaces.models import Workspace
+
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        client_email = request.POST.get("client_email", "").strip().lower()
+        timezone_name = request.POST.get("timezone", "Africa/Johannesburg").strip() or "Africa/Johannesburg"
+        if not name:
+            messages.error(request, "Business name is required.")
+        else:
+            org = Organization.objects.create(name=name, default_timezone=timezone_name)
+            workspace = Workspace.objects.create(organization=org, name=name)
+            # The platform owner owns every business they create - this is
+            # what "switch between businesses" and the invite role checks
+            # (no granting above your own level) key off.
+            OrgMembership.objects.create(user=request.user, organization=org, org_role=OrgMembership.OrgRole.OWNER)
+            WorkspaceMembership.objects.create(
+                user=request.user,
+                workspace=workspace,
+                workspace_role=WorkspaceMembership.WorkspaceRole.OWNER,
+            )
+            if client_email:
+                try:
+                    create_invitation(
+                        org,
+                        client_email,
+                        OrgMembership.OrgRole.ADMIN,
+                        [
+                            {
+                                "workspace_id": str(workspace.id),
+                                "role": WorkspaceMembership.WorkspaceRole.OWNER,
+                            }
+                        ],
+                        request.user,
+                    )
+                    messages.success(
+                        request,
+                        f"Business '{name}' created and invite emailed to {client_email}.",
+                    )
+                except ValueError as exc:
+                    messages.warning(request, f"Business '{name}' created, but the invite failed: {exc}")
+            else:
+                messages.success(request, f"Business '{name}' created.")
+            return redirect("platform_admin:business_detail", org_id=org.id)
+    return render(request, "platform_admin/business_form.html", {})

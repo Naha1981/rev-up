@@ -41,7 +41,10 @@
   {% endif %}
 
   <div class="bg-white border border-stone-200 rounded-xl overflow-hidden">
-    <h2 class="text-sm font-semibold text-stone-900 px-4 pt-4 pb-2">Businesses</h2>
+    <div class="flex items-center justify-between px-4 pt-4 pb-2">
+      <h2 class="text-sm font-semibold text-stone-900">Businesses</h2>
+      <a href="{% url 'platform_admin:business_create' %}" class="text-xs font-medium text-white bg-orange-600 hover:bg-orange-700 rounded-lg px-3 py-1.5">+ New business</a>
+    </div>
     {% if orgs %}
     <ul class="divide-y divide-stone-100">
       {% for org in orgs %}
