@@ -101,6 +101,7 @@ MIDDLEWARE = [
     "apps.accounts.middleware.TosAcceptanceMiddleware",
     "django_htmx.middleware.HtmxMiddleware",
     "apps.members.middleware.RBACMiddleware",
+    "apps.organizations.middleware.TrialLockMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "csp.middleware.CSPMiddleware",
@@ -767,3 +768,6 @@ if INTELLIGENCE_ENABLED:
                 f"localhost / 127.0.0.1 dev tunnels) — current value would "
                 f"leak Intelligence API keys in transit."
             )
+
+# Billing: WhatsApp number that receives "I want to pay" messages (EFT activation).
+REVUP_BILLING_WHATSAPP = env("REVUP_BILLING_WHATSAPP", default="27612980377")

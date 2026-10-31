@@ -32,8 +32,51 @@ class Organization(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Plan(models.TextChoices):
+        STARTER = "starter", "Starter - R499/month"
+        GROWTH = "growth", "Growth - R999/month"
+        BUSINESS_PRO = "business-pro", "Business Pro - R1,999/month"
+
+    PLAN_PRICES_RAND = {"starter": 499, "growth": 999, "business-pro": 1999}
+
+    class SubscriptionStatus(models.TextChoices):
+        TRIAL = "trial", "Free trial"
+        ACTIVE = "active", "Active"
+        EXPIRED = "expired", "Trial expired"
+
+    TRIAL_DAYS = 7
+
+    plan = models.CharField(max_length=20, choices=Plan.choices, default=Plan.STARTER)
+    subscription_status = models.CharField(
+        max_length=12, choices=SubscriptionStatus.choices, default=SubscriptionStatus.TRIAL
+    )
+    trial_started_at = models.DateTimeField(blank=True, null=True)
+    payment_reference = models.CharField(max_length=20, blank=True, default="")
+
     class Meta:
         db_table = "organizations_organization"
+
+    def save(self, *args, **kwargs):
+        if not self.payment_reference and self.id:
+            self.payment_reference = "RU-" + self.id.hex[:8].upper()
+        if self.trial_started_at is None and self.subscription_status == self.SubscriptionStatus.TRIAL:
+            from django.utils import timezone
+
+            self.trial_started_at = timezone.now()
+        super().save(*args, **kwargs)
+
+    def trial_state(self, now=None):
+        """(status, day 1-based, days_left). Active orgs short-circuit."""
+        from django.utils import timezone
+
+        if self.subscription_status == self.SubscriptionStatus.ACTIVE:
+            return (self.SubscriptionStatus.ACTIVE, self.TRIAL_DAYS, 0)
+        now = now or timezone.now()
+        start = self.trial_started_at or self.created_at or now
+        elapsed = max(0, (now - start).days)
+        if elapsed >= self.TRIAL_DAYS:
+            return (self.SubscriptionStatus.EXPIRED, self.TRIAL_DAYS, 0)
+        return (self.SubscriptionStatus.TRIAL, elapsed + 1, self.TRIAL_DAYS - elapsed)
 
     def __str__(self):
         return self.name

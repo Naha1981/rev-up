@@ -10,6 +10,30 @@ from apps.members.models import OrgMembership, WorkspaceMembership
 
 from .models import Workspace
 
+PLAN_CARDS = [
+    {
+        "id": "starter",
+        "name": "Starter",
+        "price": 499,
+        "price_fmt": "499",
+        "blurb": "WhatsApp receptionist, inbox, intake, bookings and customers.",
+    },
+    {
+        "id": "growth",
+        "name": "Growth",
+        "price": 999,
+        "price_fmt": "999",
+        "blurb": "Everything in Starter, plus quotes and chasing, revenue-leaks board, lead scoring, weekly content plan drafts and reporting.",
+    },
+    {
+        "id": "business-pro",
+        "name": "Business Pro",
+        "price": 1999,
+        "price_fmt": "1,999",
+        "blurb": "Everything in Growth, plus auto-posting on social media, team seats, API keys and webhooks, and your business page.",
+    },
+]
+
 
 @login_required
 def workspace_list(request):
@@ -221,5 +245,48 @@ def approvals_settings(request, workspace_id):
             "settings_active": "approvals",
             "is_owner_or_manager": is_owner_or_manager,
             "approval_modes": Workspace.ApprovalWorkflowMode,
+        },
+    )
+
+
+@login_required
+def workspace_billing(request, workspace_id):
+    from urllib.parse import quote_plus
+
+    from django.conf import settings as django_settings
+    from django.shortcuts import get_object_or_404
+
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    if not WorkspaceMembership.objects.filter(user=request.user, workspace=workspace).exists():
+        raise Http404
+    org = workspace.organization
+    if request.method == "POST":
+        chosen = request.POST.get("plan", "")
+        if chosen in org.PLAN_PRICES_RAND:
+            org.plan = chosen
+            org.save(update_fields=["plan", "payment_reference", "trial_started_at"])
+            messages.success(request, f"{dict(org.Plan.choices)[chosen]} selected.")
+        return redirect("workspaces:billing", workspace_id=workspace.id)
+    if not org.payment_reference:
+        org.save()  # save() assigns the RU- reference when blank
+    status, day, days_left = org.trial_state()
+    card = next(c for c in PLAN_CARDS if c["id"] == org.plan)
+    number = getattr(django_settings, "REVUP_BILLING_WHATSAPP", "27612980377")
+    text = (
+        f"Hi NahaLabs, I want to pay my RevUp {card['name']} subscription "
+        f"(R{card['price']}/month). My payment reference is {org.payment_reference}."
+    )
+    return render(
+        request,
+        "workspaces/billing.html",
+        {
+            "workspace": workspace,
+            "org": org,
+            "cards": PLAN_CARDS,
+            "card": card,
+            "status": status,
+            "trial_day": day,
+            "days_left": days_left,
+            "pay_url": f"https://wa.me/{number}?text={quote_plus(text)}",
         },
     )
