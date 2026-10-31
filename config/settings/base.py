@@ -68,6 +68,7 @@ LOCAL_APPS = [
     "apps.onboarding",
     "apps.content_agent",
     "apps.whatsapp_connect",
+    "apps.receptionist",
     # Always installed (migrations consistent across deployments). URLs +
     # templates short-circuit when ``settings.INTELLIGENCE_ENABLED`` is False,
     # so self-hosters who don't set the Intelligence env vars get no

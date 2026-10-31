@@ -105,6 +105,8 @@ def _process(event_type: str, payload: dict) -> None:
         _process_tiktok_url(payload)
     elif event_type in _ACCOUNT_EVENTS:
         _process_account_event(event_type, payload)
+    elif _receptionist_handles(event_type):
+        _process_inbox_event(payload)
     else:
         logger.info("Zernio webhook: unhandled event type %s (acked)", event_type)
 
@@ -263,3 +265,15 @@ def _process_account_event(event_type: str, payload: dict) -> None:
     except Exception:
         logger.exception("account.connected sync failed for profile %s", profile_id)
         raise
+
+
+def _receptionist_handles(event_type: str) -> bool:
+    from apps.receptionist import webhooks as receptionist_webhooks
+
+    return receptionist_webhooks.handles(event_type)
+
+
+def _process_inbox_event(payload: dict) -> None:
+    from apps.receptionist import webhooks as receptionist_webhooks
+
+    receptionist_webhooks.handle_inbox_message(payload)
