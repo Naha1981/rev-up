@@ -220,17 +220,14 @@ def test_list_accounts_passes_filters_and_returns_the_list():
 PLATFORM_ENTRY = {"platform": "facebook", "accountId": "acc-1"}
 
 
-def create_post_handler(request):
-    seen = create_post_handler.seen
-    seen["body"] = json.loads(request.content)
-    seen["idem"] = request.headers.get("Idempotency-Key")
-    return json_response(201, {"message": "Post created", "post": {"_id": "post-1", "status": "scheduled"}})
-
-
-create_post_handler.seen = {}
-
-
 def test_create_post_body_and_idempotency_key():
+    seen: dict = {}
+
+    def create_post_handler(request):
+        seen["body"] = json.loads(request.content)
+        seen["idem"] = request.headers.get("Idempotency-Key")
+        return json_response(201, {"message": "Post created", "post": {"_id": "post-1", "status": "scheduled"}})
+
     with make_client(create_post_handler) as client:
         result = client.create_post(
             platforms=[PLATFORM_ENTRY],
@@ -245,7 +242,6 @@ def test_create_post_body_and_idempotency_key():
     assert result["post"]["_id"] == "post-1"
     assert result["partial"] is False
     assert result["idempotent_replay"] is False
-    seen = create_post_handler.seen
     assert seen["idem"] == "11111111-1111-1111-1111-111111111111"
     assert seen["body"]["platforms"] == [PLATFORM_ENTRY]
     assert seen["body"]["content"] == "hello"
