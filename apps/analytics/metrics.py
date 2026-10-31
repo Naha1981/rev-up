@@ -64,8 +64,6 @@ PLATFORM_METRICS: dict[str, list[str]] = {
     "pinterest": ["impressions", "saves", "clicks", "outbound", "engagement"],
     # Google Business Profile performance: search/map impressions, clicks, calls, directions.
     "google_business": ["impressions", "clicks"],
-    # Mastodon: only favourites/reblogs/replies from the public status record.
-    "mastodon": ["likes", "reposts", "replies"],
 }
 
 # The "hero" metric each platform defaults the big chart and table sort to.
@@ -80,7 +78,6 @@ PLATFORM_PRIMARY: dict[str, str] = {
     "threads": "views",
     "pinterest": "impressions",
     "google_business": "impressions",
-    "mastodon": "likes",
 }
 
 # Brand-orange override for charts; per-platform colors used as a tweak.
@@ -95,7 +92,6 @@ PLATFORM_COLOR: dict[str, str] = {
     "threads": "#111111",
     "pinterest": "#BD081C",
     "google_business": "#4285F4",
-    "mastodon": "#6364FF",
 }
 
 # Metrics that contribute to engagement rate (numerator).
@@ -143,8 +139,8 @@ def hero_card_metrics(platform: str) -> list[str]:
 def has_engagement_card(platform: str) -> bool:
     """True if the platform has both engagement parts AND a reach-like denom.
 
-    Mastodon/LinkedIn-Personal have no reach denom, so we render
-    only count cards for them (per the plan's "hard platform gap" handling).
+    LinkedIn-Personal has no reach denom, so we render
+    only count cards for it (per the plan's "hard platform gap" handling).
     """
     if platform == "youtube":
         return False

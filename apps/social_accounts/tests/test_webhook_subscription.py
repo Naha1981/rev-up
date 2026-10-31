@@ -242,12 +242,12 @@ def test_a_later_success_clears_the_reconnect_prompt(workspace):
 
 
 def test_a_platform_without_webhooks_is_not_an_error(workspace):
-    """Mastodon has no webhooks; that must not look like a failed subscription."""
-    from providers.mastodon import MastodonProvider
+    """Threads has no webhooks; that must not look like a failed subscription."""
+    from providers.threads import ThreadsProvider
 
-    account = _account(workspace, platform="mastodon")
+    account = _account(workspace, platform="threads")
 
-    with patch("apps.social_accounts.webhooks._get_provider_for_platform", return_value=MastodonProvider({})):
+    with patch("apps.social_accounts.webhooks._get_provider_for_platform", return_value=ThreadsProvider({})):
         assert subscribe_account_webhooks(account) is False
 
     account.refresh_from_db()
@@ -257,10 +257,10 @@ def test_a_platform_without_webhooks_is_not_an_error(workspace):
 
 def test_supports_webhooks_distinguishes_real_implementations():
     from providers.facebook import FacebookProvider
-    from providers.mastodon import MastodonProvider
+    from providers.threads import ThreadsProvider
 
     assert supports_webhooks(FacebookProvider({})) is True
-    assert supports_webhooks(MastodonProvider({})) is False
+    assert supports_webhooks(ThreadsProvider({})) is False
 
 
 # ------------------------------------------------------------ unsubscribing
@@ -530,18 +530,18 @@ def test_a_platform_that_lost_webhook_support_clears_its_stale_warning(workspace
     Nobody can act on a warning about a platform that no longer has webhooks at
     all, so the honest state is "not applicable".
     """
-    from providers.mastodon import MastodonProvider
+    from providers.threads import ThreadsProvider
 
     account = _account(
         workspace,
-        platform="mastodon",
+        platform="threads",
         webhooks_active=False,
         webhook_error="left over from when this platform had webhooks",
         webhook_needs_reconnect=True,
         webhook_retry_count=3,
     )
 
-    with patch("apps.social_accounts.webhooks._get_provider_for_platform", return_value=MastodonProvider({})):
+    with patch("apps.social_accounts.webhooks._get_provider_for_platform", return_value=ThreadsProvider({})):
         assert subscribe_account_webhooks(account) is False
 
     account.refresh_from_db()

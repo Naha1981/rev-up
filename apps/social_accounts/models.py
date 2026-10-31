@@ -69,7 +69,8 @@ class SocialAccount(models.Model):
     analytics_checked_at = models.DateTimeField(blank=True, null=True)
     analytics_credentials_version = models.PositiveIntegerField(default=0)
 
-    # Instance URL for Mastodon federation
+    # DEPRECATED: legacy Mastodon federation column. Unused; kept so historical
+    # migrations (e.g. 0015) can still query SocialAccount on a migrated schema.
     instance_url = models.URLField(max_length=500, blank=True, default="")
 
     # Object we subscribed for webhook delivery, when it isn't this account
@@ -413,7 +414,6 @@ class SocialAccount(models.Model):
         "pinterest": 500,
         "threads": 500,
         "google_business": 1500,
-        "mastodon": 500,
     }
 
     @property
@@ -506,7 +506,6 @@ class SocialAccount(models.Model):
             PlatformCredential.Platform.TIKTOK,
             PlatformCredential.Platform.LINKEDIN_PERSONAL,
             PlatformCredential.Platform.LINKEDIN_COMPANY,
-            PlatformCredential.Platform.MASTODON,
             PlatformCredential.Platform.INSTAGRAM_LOGIN,
         }
 
@@ -562,26 +561,8 @@ class SocialAccount(models.Model):
             "pinterest": "pi",
             "threads": "th",
             "google_business": "gb",
-            "mastodon": "ma",
         }
         return icons.get(self.platform, self.platform[:2])
-
-
-class MastodonAppRegistration(models.Model):
-    """Stores per-instance OAuth app registrations for Mastodon federation."""
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    instance_url = models.URLField(max_length=500, unique=True)
-    client_id = EncryptedTextField()
-    client_secret = EncryptedTextField()
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "social_accounts_mastodon_app_registration"
-
-    def __str__(self):
-        return self.instance_url
-
 
 class PlatformVisibility(models.Model):
     """Site-wide toggle controlling which platforms appear on the connect page."""

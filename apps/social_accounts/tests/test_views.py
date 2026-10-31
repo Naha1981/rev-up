@@ -1080,49 +1080,6 @@ class TestDisconnectView:
         mock.return_value.revoke_token.assert_called_once_with("refresh-token")
         assert not SocialAccount.objects.filter(pk=account.pk).exists()
 
-    def test_mastodon_revokes_on_the_accounts_own_instance(self, authenticated_client, workspace):
-        """A Mastodon grant lives on the account's instance, under that
-        instance's app registration; the org's credentials carry neither."""
-        from apps.social_accounts.models import MastodonAppRegistration
-
-        MastodonAppRegistration.objects.create(
-            instance_url="https://mastodon.example",
-            client_id="masto-client-id",
-            client_secret="masto-client-secret",
-        )
-        account = SocialAccount.objects.create(
-            workspace=workspace,
-            platform="mastodon",
-            account_platform_id="42",
-            account_name="Test Masto",
-            instance_url="https://mastodon.example",
-            oauth_access_token="masto-token",
-            provider="direct",
-        )
-        url = reverse(
-            "social_accounts:disconnect",
-            kwargs={"workspace_id": workspace.id, "account_id": account.id},
-        )
-        # is_safe_url is patched to keep the resolver's SSRF check off the network.
-        with (
-            patch("apps.common.validators.is_safe_url", return_value=True),
-            patch("apps.social_accounts.views.unsubscribe_account_webhooks"),
-            patch("providers.mastodon.MastodonProvider._request") as request,
-        ):
-            response = authenticated_client.post(url)
-
-        assert response.status_code == 302
-        request.assert_called_once_with(
-            "POST",
-            "https://mastodon.example/oauth/revoke",
-            data={
-                "client_id": "masto-client-id",
-                "client_secret": "masto-client-secret",
-                "token": "masto-token",
-            },
-        )
-        assert not SocialAccount.objects.filter(pk=account.pk).exists()
-
     def test_disconnect_requires_post(self, authenticated_client, workspace):
         account = SocialAccount.objects.create(
             workspace=workspace,
@@ -1178,15 +1135,3 @@ class TestDisconnectConfirmation:
         assert "remove RevUp in your Pinterest settings" in text
         assert "deleted from RevUp" in text
         assert "revokes RevUp's access" not in text
-
-
-@pytest.mark.django_db
-class TestMastodonConnectView:
-    def test_get_shows_form(self, authenticated_client, workspace):
-        url = reverse(
-            "social_accounts:connect_mastodon",
-            kwargs={"workspace_id": workspace.id},
-        )
-        response = authenticated_client.get(url)
-        assert response.status_code == 200
-        assert b"Connect Mastodon" in response.content

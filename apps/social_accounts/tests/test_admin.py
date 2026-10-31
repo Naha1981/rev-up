@@ -106,10 +106,10 @@ class TestAnalyticsPlatformConfigAdminSaveModel:
         assert AnalyticsPlatformConfig.objects.get(platform="instagram_login").is_enabled is False
 
     def test_a_platform_with_no_analytics_api_says_nothing(self, workspace, model_admin, request_with_messages):
-        """Nothing is queued for Mastodon, so there is nothing to claim."""
-        _account(workspace, platform="mastodon")
-        AnalyticsPlatformConfig.objects.update_or_create(platform="mastodon", defaults={"is_enabled": False})
+        """Nothing is queued for LinkedIn Personal, so there is nothing to claim."""
+        _account(workspace, platform="linkedin_personal")
+        AnalyticsPlatformConfig.objects.update_or_create(platform="linkedin_personal", defaults={"is_enabled": False})
 
-        sent = _save(model_admin, request_with_messages, "mastodon", is_enabled=True)
+        sent = _save(model_admin, request_with_messages, "linkedin_personal", is_enabled=True)
 
         assert sent == []

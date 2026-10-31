@@ -626,7 +626,7 @@ class AccountAnalyticsResponse(Schema):
         ...,
         description=(
             "``false`` for platforms whose APIs don't expose aggregate analytics "
-            "(currently LinkedIn Personal, Mastodon). Metric arrays are empty when false."
+            "(currently LinkedIn Personal). Metric arrays are empty when false."
         ),
     )
     unavailable_reason: str | None = Field(

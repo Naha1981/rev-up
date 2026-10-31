@@ -156,42 +156,6 @@ def test_instagram_failed_poll_keeps_previous_continuation(connected_account, fa
     assert connected_account.instagram_dm_poll_state == previous
 
 
-@pytest.mark.django_db
-def test_mastodon_sync_passes_per_account_instance_url(workspace):
-    # Regression: sync used to call get_provider(platform) with no credentials, so the
-    # federated MastodonProvider got instance_url="" and built scheme-less URLs like
-    # "/api/v1/notifications" -> httpx.UnsupportedProtocol. The account's instance_url
-    # must reach the provider. is_safe_url is patched so the SSRF check stays hermetic
-    # (it does a real DNS lookup otherwise).
-    from apps.social_accounts.models import MastodonAppRegistration
-
-    # Persisted so sync_all() picks it up; referenced only via the DB query.
-    SocialAccount.objects.create(
-        workspace=workspace,
-        platform="mastodon",
-        account_platform_id="masto-1",
-        account_name="Masto Test",
-        instance_url="https://mastodon.social",
-        oauth_access_token="tok",
-        connection_status=SocialAccount.ConnectionStatus.CONNECTED,
-    )
-    MastodonAppRegistration.objects.create(
-        instance_url="https://mastodon.social",
-        client_id="cid",
-        client_secret="csecret",
-    )
-
-    with (
-        patch("apps.inbox.tasks.get_provider") as get_provider,
-        patch("apps.common.validators.is_safe_url", return_value=True),
-    ):
-        get_provider.return_value.get_messages.return_value = []
-        InboxSyncEngine().sync_all()
-
-    get_provider.assert_called_once()
-    platform, credentials = get_provider.call_args.args
-    assert platform == "mastodon"
-    assert credentials["instance_url"] == "https://mastodon.social"
 
 
 def _comment(message_id, *, post_id="", minutes_ago=0):
@@ -371,13 +335,13 @@ def test_youtube_inbox_repeated_poll_upserts_without_duplicate_notification(work
 
 
 @pytest.mark.django_db
-def test_mastodon_503_does_not_stop_other_accounts(workspace):
+def test_a_provider_503_does_not_stop_other_accounts(workspace):
     SocialAccount.objects.create(
         workspace=workspace,
-        platform="mastodon",
-        account_platform_id="masto-sync-1",
-        account_name="Mastodon Sync Test",
-        oauth_access_token="mastodon-token",
+        platform="threads",
+        account_platform_id="threads-sync-1",
+        account_name="Threads Sync Test",
+        oauth_access_token="threads-token",
     )
     instagram = SocialAccount.objects.create(
         workspace=workspace,
@@ -386,8 +350,8 @@ def test_mastodon_503_does_not_stop_other_accounts(workspace):
         account_name="Instagram Sync Test",
         oauth_access_token="instagram-token",
     )
-    mastodon_provider = MagicMock()
-    mastodon_provider.get_messages.side_effect = APIError("upstream unavailable", status_code=503)
+    threads_provider = MagicMock()
+    threads_provider.get_messages.side_effect = APIError("upstream unavailable", status_code=503)
     instagram_provider = MagicMock()
     instagram_provider.get_messages.return_value = [_msg("still-polled")]
 
@@ -395,7 +359,7 @@ def test_mastodon_503_does_not_stop_other_accounts(workspace):
         patch("apps.publisher.engine._resolve_publish_credentials", return_value={}),
         patch(
             "apps.inbox.tasks.get_provider",
-            side_effect={"mastodon": mastodon_provider, "instagram": instagram_provider}.get,
+            side_effect={"threads": threads_provider, "instagram": instagram_provider}.get,
         ),
         patch.object(InboxSyncEngine, "_notify_new_message"),
     ):

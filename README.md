@@ -23,7 +23,7 @@
 
 ## About BrightBean Studio
 
-BrightBean Studio is an open-source, self-hostable social media management platform built for creators, agencies and SMBs. It does what Sendible, SocialPilot, or ContentStudio do, but free and without per-seat, per-channel, or per-workspace limits. Plan, compose, schedule, approve, publish, and monitor content across Facebook, Instagram, LinkedIn, TikTok, YouTube, Pinterest, Threads, Google Business Profile, and Mastodon from a single multi-workspace dashboard.
+BrightBean Studio is an open-source, self-hostable social media management platform built for creators, agencies and SMBs. It does what Sendible, SocialPilot, or ContentStudio do, but free and without per-seat, per-channel, or per-workspace limits. Plan, compose, schedule, approve, publish, and monitor content across Facebook, Instagram, LinkedIn, TikTok, YouTube, Pinterest, Threads, and Google Business Profile from a single multi-workspace dashboard.
 
 It's for people managing many client accounts under one roof who'd rather own their social stack than pay $100–300/month to a SaaS vendor. Every feature is available to every user. No paid tier, no feature gate, no upsell.
 
@@ -76,7 +76,6 @@ A free hosted version is available at [brightbean.xyz/studio](https://brightbean
 | <img src="https://cdn.simpleicons.org/pinterest" width="16" height="16"> Pinterest | ✓ | — | — | ✓ |
 | <img src="https://cdn.simpleicons.org/threads" width="16" height="16"> Threads | ✓ | ✓ | — | ✓ |
 | <img src="https://api.iconify.design/logos/google-icon.svg" width="16" height="16"> Google Business Profile | ✓ | — | — | ✓ |
-| <img src="https://cdn.simpleicons.org/mastodon" width="16" height="16"> Mastodon | ✓ | ✓ | — | — |
 
 ---
 
@@ -667,47 +666,6 @@ before enabling enforcement. Intelligence is outside this remediation.
    PLATFORM_PINTEREST_APP_ID=your-app-id
    PLATFORM_PINTEREST_APP_SECRET=your-app-secret
    ```
-
-### Mastodon
-
-No developer app registration needed. Brightbean Studio automatically registers an OAuth application on each Mastodon instance when a user connects their account. Users just need to enter their instance URL (e.g., `mastodon.social`).
-
-## Inbox: Backfill Historical Messages
-
-See the [Supported Platforms](#supported-platforms) matrix above for per-platform inbox capabilities.
-
-To import historical messages (e.g., from the last 7 days):
-
-```bash
-python manage.py backfill_inbox --days 7
-```
-
-Options:
-- `--days N` - Number of days to backfill (default: 7)
-- `--platform NAME` - Only backfill a specific platform (e.g., `facebook`, `youtube`, `linkedin`, `tiktok`)
-- `--account-id UUID` - Only backfill a specific account
-
-For Facebook this recovers comments on the Page's posts from the last 30 days — useful after fixing a webhook that was never delivering, since comments missed while it was broken are otherwise invisible:
-
-```bash
-python manage.py backfill_inbox --platform facebook --days 30
-```
-
-## Inbox: Diagnosing a Facebook Page That Receives Nothing
-
-When a Page's comments never reach the inbox, or a post's first comment never appears, the cause is usually a permission that was not granted or a webhook that was never configured — neither of which is visible from inside the app. Ask Meta directly:
-
-```bash
-python manage.py diagnose_facebook --account-id <uuid>
-```
-
-It reports the token's granted scopes (a missing `pages_manage_engagement` is why first comments fail), which app is subscribed to the Page and to which fields (`feed` is what carries comments), and whether comments are readable at all. Add `--subscribe` to repair a missing Page subscription in place, or `--json` for output to paste into an incident.
-
-## API & MCP for Agents
-
-BrightBean Studio ships a REST API and an MCP (Model Context Protocol) server so agents and scripts can read analytics, manage media, and create or schedule posts. Both share the same authentication, permission model, rate limits, and audit log. Pick whichever protocol fits your client.
-
-**Base URL:** `{APP_URL}/api/v1/` (e.g. `https://your-studio.example.com/api/v1/`)
 
 ### Authentication
 

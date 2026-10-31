@@ -74,7 +74,7 @@ def analytics_availability(platform: str, enabled_platforms: list[str] | None = 
       row that cannot exist.
     * ``CAUSE_NO_API`` — :data:`apps.analytics.constants.NO_ANALYTICS_PLATFORMS`:
       the platform exposes no aggregate analytics we can read (LinkedIn
-      Personal, Mastodon).
+      Personal).
     * ``CAUSE_DISABLED`` — :class:`apps.social_accounts.models.AnalyticsPlatformConfig`:
       an admin has switched the platform off (e.g. provider app-review for
       analytics scopes is still pending), so the background sync skips it.
@@ -813,7 +813,6 @@ def _media_kind(post: PlatformPost) -> str:
         "threads": "Post",
         "pinterest": "Pin",
         "google_business": "Post",
-        "mastodon": "Post",
     }
     return platform_default.get(post.social_account.platform, "Post")
 

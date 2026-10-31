@@ -125,11 +125,10 @@ BACKFILL_DAYS_PER_PLATFORM: dict[str, int] = {
     "threads": 90,
     "google_business": 90,
     "tiktok": 60,
-    # Mastodon / LinkedIn-Personal have no analytics surface — skip. LinkedIn
+    # LinkedIn-Personal has no analytics surface — skip. LinkedIn
     # only exposes share statistics for Organization URNs, not personal Person
     # URNs, regardless of granted scopes. Each of these must also appear in
     # ``NO_ANALYTICS_PLATFORMS``.
-    "mastodon": 0,
     "linkedin_personal": 0,
 }
 DEFAULT_BACKFILL_DAYS = 90
@@ -157,12 +156,6 @@ _POST_FIELD_OVERRIDES: dict[str, dict[str, str]] = {
         # for linkedin_company uses 'reactions' and 'reposts'.
         "likes": "reactions",
         "shares": "reposts",
-    },
-    "mastodon": {
-        # providers/mastodon.py:313-316: favourites→likes (ok), reblogs→shares,
-        # replies→comments. Catalog wants reposts/replies.
-        "shares": "reposts",
-        "comments": "replies",
     },
 }
 
@@ -324,11 +317,6 @@ def _resolve_provider(account):
     built with no ``ig_user_id`` / ``account_handle``). Calling the shared
     resolver is the only way that stays fixed.
 
-    Adopting it deliberately changes two Mastodon behaviours to match
-    publishing: ``MastodonAppRegistration``'s client_id/secret now apply only
-    when the org's own credentials don't already carry one, and an
-    ``instance_url`` that fails the SSRF check is dropped rather than passed
-    through (analytics for such an account fails instead of dialling it).
     """
     from apps.publisher.engine import _resolve_publish_credentials
     from providers import get_provider

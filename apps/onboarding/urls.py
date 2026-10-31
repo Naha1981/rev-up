@@ -47,11 +47,6 @@ urlpatterns = [
         views.connection_done,
         name="connection_done",
     ),
-    path(
-        "connect/<str:token>/mastodon/",
-        views.connection_mastodon_start,
-        name="connection_mastodon",
-    ),
     # OAuth callback for connection link flow (NO auth, token in state)
     path(
         "connect/callback/<str:platform>/",

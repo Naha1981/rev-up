@@ -14,5 +14,4 @@ from __future__ import annotations
 # honest for any caller that reads the table directly.
 NO_ANALYTICS_PLATFORMS: dict[str, str] = {
     "linkedin_personal": ("LinkedIn doesn't expose personal-profile analytics. Only Company Pages have analytics."),
-    "mastodon": ("The Mastodon API doesn't expose aggregate post analytics."),
 }

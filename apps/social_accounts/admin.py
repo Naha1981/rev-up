@@ -4,7 +4,7 @@ from django.contrib import admin, messages
 # and admin autodiscover runs after every app's models are loaded.
 from apps.analytics.signals import BACKFILL_QUEUED_ATTR
 
-from .models import AnalyticsPlatformConfig, MastodonAppRegistration, PlatformVisibility, SocialAccount
+from .models import AnalyticsPlatformConfig, PlatformVisibility, SocialAccount
 
 
 @admin.register(SocialAccount)
@@ -20,13 +20,6 @@ class SocialAccountAdmin(admin.ModelAdmin):
     search_fields = ("account_name", "account_handle")
     readonly_fields = ("id", "created_at", "updated_at")
     exclude = ("oauth_access_token", "oauth_refresh_token", "oauth_facebook_user_access_token")
-
-
-@admin.register(MastodonAppRegistration)
-class MastodonAppRegistrationAdmin(admin.ModelAdmin):
-    list_display = ("instance_url", "created_at")
-    readonly_fields = ("id", "created_at")
-    exclude = ("client_id", "client_secret")
 
 
 @admin.register(PlatformVisibility)

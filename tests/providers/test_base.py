@@ -25,7 +25,6 @@ class TestProviderRegistry:
             "pinterest",
             "threads",
             "google_business",
-            "mastodon",
         }
         assert set(PROVIDER_REGISTRY.keys()) == expected
 
@@ -43,8 +42,11 @@ class TestProviderRegistry:
             get_provider("twitter")
 
     def test_get_provider_default_credentials(self):
-        provider = get_provider("mastodon")
-        assert provider.credentials == {}
+        from django.conf import settings
+
+        env = settings.PLATFORM_CREDENTIALS_FROM_ENV["threads"]
+        provider = get_provider("threads")
+        assert provider.credentials == type(provider)(credentials=env).credentials
 
 
 class TestSocialProviderInterface:
@@ -137,10 +139,6 @@ class TestProviderMetadata:
         p = get_provider("threads")
         assert p.max_caption_length == 500
 
-    def test_mastodon_auth_type_is_instance_oauth(self):
-        p = get_provider("mastodon")
-        assert p.auth_type == AuthType.INSTANCE_OAUTH
-
     def test_facebook_auth_type_is_oauth2(self):
         p = get_provider("facebook")
         assert p.auth_type == AuthType.OAUTH2
@@ -169,7 +167,7 @@ class TestErrorForResponse:
         return resp
 
     def test_429_maps_to_rate_limit_error_with_retry_after(self):
-        provider = get_provider("mastodon")
+        provider = get_provider("threads")
 
         exc = provider._error_for_response(self._response(429, headers={"Retry-After": "12"}))
 
@@ -177,7 +175,7 @@ class TestErrorForResponse:
         assert exc.retry_after == 12
 
     def test_429_without_header_leaves_retry_after_unknown(self):
-        provider = get_provider("mastodon")
+        provider = get_provider("threads")
 
         exc = provider._error_for_response(self._response(429))
 
@@ -186,7 +184,7 @@ class TestErrorForResponse:
 
     @pytest.mark.parametrize("status", [400, 401, 403, 404, 500, 503])
     def test_other_errors_map_to_api_error_carrying_status(self, status):
-        provider = get_provider("mastodon")
+        provider = get_provider("threads")
 
         exc = provider._error_for_response(self._response(status))
 
@@ -198,7 +196,7 @@ class TestErrorForResponse:
 class TestGetPostMetricsBatchDefault:
     def test_default_walks_the_singular_method(self):
         """Keeps the interface total for the 11 providers with no batch endpoint."""
-        provider = get_provider("mastodon")
+        provider = get_provider("threads")
         with patch.object(type(provider), "get_post_metrics", side_effect=lambda _tok, pid: pid) as single:
             result = provider.get_post_metrics_batch("tok", ["a", "b"])
 

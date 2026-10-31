@@ -55,9 +55,9 @@ def _check_social_account_health(account_id: str):
         return
 
     # Resolve per-account credentials via the shared resolver: org/.env app creds
-    # plus per-account federation metadata (Mastodon instance_url behind an SSRF
-    # check, Instagram ig_user_id). Shared with the publish engine
-    # and inbox sync so every get_provider call resolves credentials identically.
+    # plus per-account metadata (Instagram ig_user_id). Shared with the publish
+    # engine and inbox sync so every get_provider call resolves credentials
+    # identically.
     from apps.publisher.engine import _resolve_publish_credentials
 
     credentials = _resolve_publish_credentials(account)

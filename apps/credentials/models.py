@@ -9,9 +9,7 @@ from apps.common.managers import OrgScopedManager
 # aliases" group; a platform counts as configured only when EVERY group has a
 # non-empty value. Mirrors the keys each provider actually reads — TikTok uses
 # ``client_key`` (not ``client_id``); Meta and Pinterest accept ``app_id`` /
-# ``app_secret`` as aliases for ``client_id`` / ``client_secret``. Platforms
-# with no entry (mastodon) uses per-instance auth and needs no
-# app-level credentials.
+# ``app_secret`` as aliases for ``client_id`` / ``client_secret``.
 REQUIRED_CREDENTIAL_KEYS = {
     "facebook": (("client_id", "app_id"), ("client_secret", "app_secret")),
     "instagram": (("client_id", "app_id"), ("client_secret", "app_secret")),
@@ -51,7 +49,6 @@ class PlatformCredential(models.Model):
         PINTEREST = "pinterest", "Pinterest"
         THREADS = "threads", "Threads"
         GOOGLE_BUSINESS = "google_business", "Google Business Profile"
-        MASTODON = "mastodon", "Mastodon"
 
     class TestResult(models.TextChoices):
         SUCCESS = "success", "Success"

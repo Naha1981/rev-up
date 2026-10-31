@@ -63,35 +63,15 @@ def _resolve_publish_credentials(account):
     """Resolve the credentials dict for publishing on behalf of `account`.
 
     Combines org-level `PlatformCredential` (with `.env` dominant) with
-    per-account federation metadata (Mastodon `instance_url` +
-    `MastodonAppRegistration`). Returns a plain dict
-    suitable for `get_provider(platform, credentials)`.
+    per-account metadata. Returns a plain dict suitable for
+    `get_provider(platform, credentials)`.
     """
     platform = account.platform
 
     # .env is dominant; admin-entered org credentials are the fallback.
     credentials = resolve_platform_credentials(platform, account.workspace.organization_id)
 
-    if platform == "mastodon" and account.instance_url:
-        from apps.common.validators import is_safe_url
-
-        if is_safe_url(account.instance_url):
-            credentials["instance_url"] = account.instance_url
-            if not credentials.get("client_id"):
-                from apps.social_accounts.models import MastodonAppRegistration
-
-                try:
-                    reg = MastodonAppRegistration.objects.get(instance_url=account.instance_url)
-                    credentials["client_id"] = reg.client_id
-                    credentials["client_secret"] = reg.client_secret
-                except MastodonAppRegistration.DoesNotExist:
-                    pass
-        else:
-            logger.warning(
-                "Mastodon instance URL failed SSRF check for account %s",
-                account.id,
-            )
-    elif platform == "facebook":
+    if platform == "facebook":
         credentials["page_id"] = account.account_platform_id
     elif platform in ("instagram", "instagram_login"):
         credentials["ig_user_id"] = account.account_platform_id

@@ -55,7 +55,7 @@ def workspace(db, user):
 def radar_account(workspace):
     return SocialAccount.objects.create(
         workspace=workspace,
-        platform="mastodon",
+        platform="threads",
         account_platform_id=f"t-{uuid.uuid4().hex[:8]}",
         account_name="Radar Test",
         connection_status=SocialAccount.ConnectionStatus.CONNECTED,

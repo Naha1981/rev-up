@@ -133,8 +133,8 @@ def strip_leading_at(value) -> str:
     """Strip a single leading ``@`` from a handle, leaving in-string ``@`` intact.
 
     YouTube's ``customUrl`` arrives with a leading ``@`` already attached, and
-    Mastodon-style ``user@instance.tld`` handles contain a meaningful in-string
-    ``@``. The built-in ``|cut:"@"`` filter would corrupt the Mastodon form.
+    some platforms carry a meaningful in-string ``@`` in their handles.
+    The built-in ``|cut:"@"`` filter would corrupt that form.
     """
     if value is None:
         return ""

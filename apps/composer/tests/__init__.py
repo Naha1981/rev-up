@@ -148,7 +148,7 @@ class CaptionLengthTest(TestCase):
         self.assertEqual(pp.caption_length, len("Va al repo (durable)") + 2)
 
     def test_other_platforms_count_the_typed_length(self):
-        pp = self._make_pp("mastodon", "Va al repo (durable)")
+        pp = self._make_pp("threads", "Va al repo (durable)")
         self.assertEqual(pp.caption_length, len("Va al repo (durable)"))
 
     def test_escaping_can_push_a_fitting_caption_over_the_limit(self):

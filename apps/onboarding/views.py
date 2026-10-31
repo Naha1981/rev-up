@@ -35,8 +35,6 @@ from apps.social_accounts.provider_factory import _get_provider_for_platform
 from apps.social_accounts.views import (
     _create_or_update_account,
     _get_configured_platforms,
-    _normalize_mastodon_instance_url,
-    _resolve_mastodon_extra_creds,
     page_is_publishable,
     promote_meta_user_token,
     resolve_page_account_token,
@@ -316,11 +314,6 @@ def connection_oauth_start(request, token):
     if platform not in configured_platforms:
         return redirect("onboarding:connection_page", token=token)
 
-    # Mastodon uses its own form on the connection page (not standard OAuth
-    # via this endpoint), so reject it here.
-    if platform == PlatformCredential.Platform.MASTODON:
-        return redirect("onboarding:connection_page", token=token)
-
     # Standard OAuth flow
     provider = _get_provider_for_platform(platform, org.id)
     nonce = secrets.token_urlsafe(32)
@@ -419,11 +412,7 @@ def connection_oauth_callback(request, platform):
     org = link.workspace.organization
 
     try:
-        extra_creds: dict = {}
-        if platform == PlatformCredential.Platform.MASTODON:
-            extra_creds = _resolve_mastodon_extra_creds(session_data)
-
-        provider = _get_provider_for_platform(platform, org.id, **extra_creds)
+        provider = _get_provider_for_platform(platform, org.id)
         redirect_uri = redirect_uri_from_request(request)
         tokens = provider.exchange_code(code, redirect_uri, **pkce_kwargs(session_data.get("code_verifier")))
 
@@ -533,7 +522,6 @@ def connection_oauth_callback(request, platform):
             access_token=tokens.access_token,
             refresh_token=tokens.refresh_token,
             expires_in=tokens.expires_in,
-            instance_url=extra_creds.get("instance_url", ""),
         )
         ConnectionLinkUsage.objects.get_or_create(
             connection_link=link,
@@ -596,74 +584,4 @@ def connection_done(request, token):
     )
 
 
-@csp_update(FORM_ACTION="'self' https:")
-@require_POST
-def connection_mastodon_start(request, token):
-    """Initiate Mastodon OAuth from the connection link page."""
-    link = _get_connection_link_or_none(token)
-    if not link or not link.is_active:
-        return render(request, "onboarding/connection_expired.html", status=400)
 
-    instance_url = _normalize_mastodon_instance_url(request.POST.get("instance_url", ""))
-    if not instance_url:
-        request.session["connection_link_error"] = "Instance URL is required."
-        return redirect("onboarding:connection_page", token=token)
-
-    org = link.workspace.organization
-
-    from apps.social_accounts.models import MastodonAppRegistration
-
-    # Check for existing or create app registration
-    try:
-        registration = MastodonAppRegistration.objects.get(instance_url=instance_url)
-        client_id = registration.client_id
-        client_secret = registration.client_secret
-    except MastodonAppRegistration.DoesNotExist:
-        try:
-            provider = _get_provider_for_platform(
-                PlatformCredential.Platform.MASTODON,
-                org.id,
-                instance_url=instance_url,
-            )
-            redirect_uri = _build_connection_redirect_uri(request, PlatformCredential.Platform.MASTODON)
-            app_data = provider.register_app(instance_url, redirect_uri)
-            MastodonAppRegistration.objects.create(
-                instance_url=instance_url,
-                client_id=app_data["client_id"],
-                client_secret=app_data["client_secret"],
-            )
-            client_id = app_data["client_id"]
-            client_secret = app_data["client_secret"]
-        except Exception:
-            logger.exception("Mastodon app registration failed for %s", instance_url)
-            request.session["connection_link_error"] = f"Failed to register with {instance_url}. Check the URL."
-            return redirect("onboarding:connection_page", token=token)
-
-    # Initiate OAuth
-    provider = _get_provider_for_platform(
-        PlatformCredential.Platform.MASTODON,
-        org.id,
-        instance_url=instance_url,
-        client_id=client_id,
-        client_secret=client_secret,
-    )
-
-    nonce = secrets.token_urlsafe(32)
-    state = _sign_connection_link_state(
-        link.workspace_id,
-        PlatformCredential.Platform.MASTODON,
-        token,
-        nonce,
-    )
-
-    request.session[CONNECTION_LINK_OAUTH_SESSION_KEY] = {
-        "nonce": nonce,
-        "workspace_id": str(link.workspace_id),
-        "platform": PlatformCredential.Platform.MASTODON,
-        "token": token,
-        "instance_url": instance_url,
-    }
-
-    redirect_uri = _build_connection_redirect_uri(request, PlatformCredential.Platform.MASTODON)
-    auth_url = provider.get_auth_url(redirect_uri, state)
-    return redirect(auth_url)

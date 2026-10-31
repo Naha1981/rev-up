@@ -6,7 +6,7 @@ An open-source, self-hostable social media management platform built for agencie
 
 **Core promise:** Everything Sendible, SocialPilot, and ContentStudio charge $100–300/month for - completely free, whether cloud-hosted or self-hosted.
 
-**Supported platforms:** Facebook Pages, Instagram (posts, reels, stories, carousels), LinkedIn (profiles + company pages), TikTok, YouTube (videos + shorts), Pinterest, Threads, Bluesky, Google Business Profile, Mastodon.
+**Supported platforms:** Facebook Pages, Instagram (posts, reels, stories, carousels), LinkedIn (profiles + company pages), TikTok, YouTube (videos + shorts), Pinterest, Threads, Google Business Profile.
 
 **Not supported:** X/Twitter is explicitly excluded from the platform.
 
@@ -19,7 +19,7 @@ An open-source, self-hostable social media management platform built for agencie
 ```
 Organization (Agency)
 ├── Workspace (Client A)
-│   ├── Social Accounts (IG, FB, LinkedIn, TikTok, YouTube, Pinterest, Threads, Bluesky, GBP, Mastodon)
+│   ├── Social Accounts (IG, FB, LinkedIn, TikTok, YouTube, Pinterest, Threads, GBP)
 │   ├── Content Calendar
 │   ├── Media Library
 │   ├── Social Inbox
@@ -357,7 +357,6 @@ Manage the API credentials (app IDs, app secrets, callback URLs) needed to conne
 | Pinterest | App ID, App Secret |
 | Threads | Same Facebook app (uses Instagram Graph API permissions) |
 | Google Business Profile | Same Google Cloud OAuth app as YouTube (additional scopes) |
-| Mastodon | Per-instance OAuth app registration (auto-created on first connect) |
 
 - Credentials are entered once at the org level and shared across all workspaces.
 - Credentials are stored encrypted at rest (AES-256-GCM, encryption key derived from a server-side secret, not stored in the database).
@@ -656,7 +655,7 @@ The central content creation interface. Users compose a single post and customiz
 - Left panel: platform selector (checkboxes for each connected account in the current workspace) and media upload area.
 - Center panel: caption text editor with the following controls:
   - Rich text is not supported (social platforms use plain text). The editor is a plain text area with character count.
-  - Character count shows limits per selected platform (e.g., LinkedIn: 3,000; Instagram: 2,200; Facebook: 63,206; Bluesky: 300; Mastodon: 500 or instance limit).
+  - Character count shows limits per selected platform (e.g., LinkedIn: 3,000; Instagram: 2,200; Facebook: 63,206).
   - If the caption exceeds any selected platform's limit, that platform's counter turns red and a warning is shown.
   - Emoji picker accessible via a button or keyboard shortcut.
   - Hashtag auto-suggest: typing "#" opens a dropdown with workspace default hashtags (from F-1.2 settings) and recently used hashtags.
@@ -958,7 +957,7 @@ The visual calendar is the daily operational hub for agencies. It provides an ov
 
 **Bulk Scheduling (CSV Import):**
 - Upload a CSV or TSV file with one row per post.
-- Columns: date (YYYY-MM-DD), time (HH:MM, 24h format), timezone (optional - defaults to workspace timezone), platform(s) (comma-separated platform identifiers: instagram, facebook, linkedin, tiktok, youtube, pinterest, threads, bluesky, google_business, mastodon), caption (text), media_url (URL to an image/video - fetched and stored in media library on import), category (name - matched to existing categories or created), tags (comma-separated), first_comment (text).
+- Columns: date (YYYY-MM-DD), time (HH:MM, 24h format), timezone (optional - defaults to workspace timezone), platform(s) (comma-separated platform identifiers: instagram, facebook, linkedin, tiktok, youtube, pinterest, threads, google_business), caption (text), media_url (URL to an image/video - fetched and stored in media library on import), category (name - matched to existing categories or created), tags (comma-separated), first_comment (text).
 - Column mapping: after upload, the user sees a column mapping interface where they assign each CSV column to a post field. The system attempts auto-detection based on column headers.
 - Validation: before import, the system validates all rows and shows errors per row (e.g., "Row 12: date is in the past," "Row 34: platform 'twitter' is not supported"). The user can fix the CSV and re-upload or skip invalid rows.
 - Import limit: unlimited posts per upload (processed in batches of 100).
@@ -1053,7 +1052,6 @@ The backend system responsible for sending posts to social media platforms at th
 | Pinterest | Pinterest API v5 | OAuth 2.0 | Pins: image or video with title, description, link, board_id. |
 | Threads | Threads API (via Instagram Graph API) | OAuth 2.0 (Instagram business account) | Text posts, image posts, carousel (up to 20 items), video posts. |
 | Google Business Profile | Google Business Profile API | OAuth 2.0 (Google) | Local posts: What's New, Event, Offer. Image + text. |
-| Mastodon | Mastodon API v1 | OAuth 2.0 (per-instance app registration) | Text posts (character limit varies by instance), image (up to 4), video, poll. Content warnings. Visibility: public, unlisted, private, direct. |
 
 **Media Processing:**
 - Before publishing, the engine processes media to meet platform requirements:
@@ -1080,7 +1078,6 @@ The backend system responsible for sending posts to social media platforms at th
   - TikTok: Varies by app review tier. Default: 5 videos per day.
   - YouTube: per Google Cloud project, reset at midnight US/Pacific: 100 `videos.insert` (upload) calls and 100 `search.list` calls per day, each in its own bucket at 1 unit per call, plus 10,000 units per day for every other method (custom thumbnail and comment = 50 units each).
   - Pinterest: 1,000 API calls per hour.
-  - Mastodon: Varies by instance. Typical: 300 posts per 3 hours.
 - If a publish attempt hits a rate limit, the post is queued for retry after the rate limit window resets.
 - The system proactively checks rate limit headroom before attempting to publish. If the remaining quota is low, posts are delayed and the author is warned.
 
@@ -1102,7 +1099,7 @@ The backend system responsible for sending posts to social media platforms at th
 - A background job runs every hour to check all OAuth tokens expiring within the next 24 hours.
 - Expiring tokens are refreshed using the platform's refresh token flow.
 - If a refresh fails (e.g., user revoked access), the social account is marked as "disconnected" and the workspace Manager is notified.
-- Platforms with non-refreshable tokens (Bluesky app passwords don't expire; Mastodon tokens don't expire by default) are skipped.
+- Platforms with non-refreshable tokens are skipped.
 
 **Post-Publish Actions:**
 - After successful publication, the engine:
@@ -1157,7 +1154,6 @@ Connect social media accounts to a workspace so the platform can publish content
   5. The app fetches the account profile (name, avatar, follower count) and stores it.
   6. The account appears in the workspace's connected accounts list.
 - For platforms where one OAuth flow grants access to multiple accounts (e.g., Facebook OAuth grants access to multiple Pages), the user is shown a selection screen after OAuth to choose which specific account(s) to connect to this workspace.
-- For Mastodon: the user enters their instance URL (e.g., mastodon.social). The system auto-registers an OAuth app on that instance, then proceeds with standard OAuth.
 
 **Connected Account Display:**
 - Each connected account shows: platform icon, account name/handle, avatar, follower count (fetched periodically), connection status (connected, token_expiring, disconnected, error).
@@ -1193,10 +1189,9 @@ Connect social media accounts to a workspace so the platform can publish content
 | Pinterest | boards:read, pins:read, pins:write |
 | Threads | threads_basic, threads_content_publish, threads_manage_insights, threads_manage_replies |
 | Google Business Profile | business.manage |
-| Mastodon | read, write, follow (standard scopes) |
 
 ### Data Model
-- `SocialAccount`: id, workspace_id, platform (enum), account_platform_id (string - the account's ID on the platform), account_name (string), account_handle (string, nullable), avatar_url (string), follower_count (integer), oauth_access_token (encrypted), oauth_refresh_token (encrypted), token_expires_at (datetime, nullable), instance_url (string, nullable - for Mastodon), connection_status (enum: connected, token_expiring, disconnected, error), last_health_check_at (datetime), last_error (text, nullable), connected_at (datetime).
+- `SocialAccount`: id, workspace_id, platform (enum), account_platform_id (string - the account's ID on the platform), account_name (string), account_handle (string, nullable), avatar_url (string), follower_count (integer), oauth_access_token (encrypted), oauth_refresh_token (encrypted), token_expires_at (datetime, nullable), connection_status (enum: connected, token_expiring, disconnected, error), last_health_check_at (datetime), last_error (text, nullable), connected_at (datetime).
 
 ### Dependencies
 - F-1.2 (Workspace) - accounts belong to workspaces.
@@ -1240,8 +1235,8 @@ Aggregate all inbound engagement (comments, mentions, DMs where API permits, rev
 
 | Type | Platforms | API Source |
 |------|-----------|-----------|
-| Comment | Instagram, Facebook, LinkedIn, YouTube, TikTok (read-only), Pinterest, Threads, Bluesky, Mastodon | Platform comment/reply APIs |
-| Mention | Instagram, Facebook, LinkedIn, Mastodon, Bluesky | Mentions/tagging APIs |
+| Comment | Instagram, Facebook, LinkedIn, YouTube, TikTok (read-only), Pinterest, Threads | Platform comment/reply APIs |
+| Mention | Instagram, Facebook, LinkedIn | Mentions/tagging APIs |
 | DM | Instagram (business accounts with approved permissions), Facebook Pages (Page conversations) | Messaging APIs |
 | Review | Google Business Profile | GBP review API |
 
@@ -2598,7 +2593,7 @@ InboxMessage
 - F-5.3 Integrations - Canva, Google Drive, Dropbox
 - F-5.3 Integrations - REST API & Webhooks
 - F-5.1 Authentication enhancements (2FA)
-- F-2.5 Additional platforms (TikTok, YouTube, Pinterest, Threads, Bluesky, GBP, Mastodon)
+- F-2.5 Additional platforms (TikTok, YouTube, Pinterest, Threads, GBP)
 - F-1.2 Workspace enhancements (archiving, cross-workspace calendar)
 - F-4.2 Org alerts
 - F-8.4 Data Export / GDPR (org-wide and workspace-scoped export, data deletion)
@@ -2639,7 +2634,6 @@ Implementations:
   - PinterestProvider (API v5)
   - ThreadsProvider (Threads API)
   - GoogleBusinessProvider (GBP API)
-  - MastodonProvider (Mastodon API)
 ```
 
 No unified or third-party social media API providers are used. Each provider manages its own OAuth flow, token refresh, rate limiting, and error handling.

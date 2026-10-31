@@ -130,8 +130,8 @@ def test_index_prefers_an_account_with_analytics_available(owner_client, workspa
 
 @pytest.mark.django_db
 def test_inherently_unavailable_platform_gets_no_reconnect_hint(owner_client, workspace):
-    """Mastodon has no analytics API — reconnecting would achieve nothing."""
-    account = _account(workspace, "mastodon", "Mastodon")
+    """LinkedIn Personal has no analytics API — reconnecting would achieve nothing."""
+    account = _account(workspace, "linkedin_personal", "LinkedIn Personal")
 
     response = owner_client.get(_account_url(workspace, account))
 
@@ -172,7 +172,7 @@ def test_unavailable_account_suppresses_the_scope_reconnect_banner(owner_client,
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("platform", ["instagram_login", "mastodon"])
+@pytest.mark.parametrize("platform", ["instagram_login", "threads"])
 def test_pages_never_leak_raw_template_tags(owner_client, workspace, platform):
     """Django's ``{# #}`` is single-line only: a multi-line one is emitted as
     visible page text instead of being stripped. Cheap to assert, and it caught

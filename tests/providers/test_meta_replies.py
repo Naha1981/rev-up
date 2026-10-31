@@ -255,9 +255,9 @@ def test_instagram_login_subscribes_the_account_itself():
 
 
 def test_providers_without_webhook_support_report_false():
-    from providers.mastodon import MastodonProvider
+    from providers.threads import ThreadsProvider
 
-    provider = MastodonProvider(CREDS)
+    provider = ThreadsProvider(CREDS)
     assert provider.subscribe_webhooks("t", "a") is False
     assert provider.unsubscribe_webhooks("t", "a") is False
 
@@ -549,7 +549,7 @@ def test_a_failed_readback_is_unknown_not_empty():
 
 
 def test_providers_that_cannot_be_asked_report_unknown():
-    from providers.mastodon import MastodonProvider
+    from providers.threads import ThreadsProvider
 
-    assert MastodonProvider(CREDS).get_granted_scopes("token") is None
+    assert ThreadsProvider(CREDS).get_granted_scopes("token") is None
     assert InstagramLoginProvider(CREDS).get_granted_scopes("token") is None

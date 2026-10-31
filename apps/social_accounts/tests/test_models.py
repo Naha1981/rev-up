@@ -8,7 +8,7 @@ from django.db import IntegrityError
 from django.utils import timezone
 
 from apps.credentials.models import PlatformCredential
-from apps.social_accounts.models import MastodonAppRegistration, SocialAccount
+from apps.social_accounts.models import SocialAccount
 
 
 @pytest.fixture
@@ -138,7 +138,6 @@ class TestDisconnectRevocation:
                 "client_id": "id",
                 "client_secret": "secret",
                 "client_key": "key",
-                "instance_url": "https://mastodon.example",
             }
         )
         provider._request = MagicMock()
@@ -165,48 +164,6 @@ class TestDisconnectRevocation:
 
 
 @pytest.mark.django_db
-class TestMastodonAppRegistration:
-    def test_create_registration(self, db):
-        reg = MastodonAppRegistration.objects.create(
-            instance_url="https://mastodon.social",
-            client_id="test_client_id",
-            client_secret="test_client_secret",
-        )
-        assert reg.pk is not None
-
-    def test_encrypted_credentials_round_trip(self, db):
-        reg = MastodonAppRegistration.objects.create(
-            instance_url="https://mastodon.social",
-            client_id="my_client_id",
-            client_secret="my_client_secret",
-        )
-        fetched = MastodonAppRegistration.objects.get(pk=reg.pk)
-        assert fetched.client_id == "my_client_id"
-        assert fetched.client_secret == "my_client_secret"
-
-    def test_unique_instance_url(self, db):
-        MastodonAppRegistration.objects.create(
-            instance_url="https://mastodon.social",
-            client_id="id1",
-            client_secret="secret1",
-        )
-        with pytest.raises(IntegrityError):
-            MastodonAppRegistration.objects.create(
-                instance_url="https://mastodon.social",
-                client_id="id2",
-                client_secret="secret2",
-            )
-
-    def test_str_representation(self, db):
-        reg = MastodonAppRegistration.objects.create(
-            instance_url="https://mastodon.social",
-            client_id="id",
-            client_secret="secret",
-        )
-        assert str(reg) == "https://mastodon.social"
-
-
-@pytest.mark.django_db
 class TestAnalyticsPlatformConfigEnabledPlatforms:
     """``enabled_platforms`` decides which platforms the analytics stack serves."""
 
@@ -219,9 +176,9 @@ class TestAnalyticsPlatformConfigEnabledPlatforms:
         from apps.credentials.models import PlatformCredential
         from apps.social_accounts.models import AnalyticsPlatformConfig
 
-        AnalyticsPlatformConfig.objects.filter(platform=PlatformCredential.Platform.MASTODON).delete()
+        AnalyticsPlatformConfig.objects.filter(platform=PlatformCredential.Platform.THREADS).delete()
 
-        assert PlatformCredential.Platform.MASTODON in AnalyticsPlatformConfig.enabled_platforms()
+        assert PlatformCredential.Platform.THREADS in AnalyticsPlatformConfig.enabled_platforms()
 
     def test_disabled_row_is_honored(self):
         from apps.social_accounts.models import AnalyticsPlatformConfig

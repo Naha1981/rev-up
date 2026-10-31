@@ -324,11 +324,11 @@ def test_engagement_rate_built_from_estimated_parts_is_marked_estimated():
 def test_calculated_note_with_only_the_change_chips():
     from apps.analytics.services import calculated_metrics_note
 
-    note = calculated_metrics_note(SocialAccount(platform="mastodon"), cards=[], engagement=None)
+    note = calculated_metrics_note(SocialAccount(platform="threads"), cards=[], engagement=None)
 
     assert note == (
-        "Underlying data comes from Mastodon. The % changes vs. the previous period are calculated by "
-        "RevUp, not reported by Mastodon."
+        "Underlying data comes from Threads. The % changes vs. the previous period are calculated by "
+        "RevUp, not reported by Threads."
     )
 
 

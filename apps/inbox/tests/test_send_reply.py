@@ -84,18 +84,17 @@ def test_mention_is_treated_as_a_comment(fb_account):
 
 
 def test_providers_without_a_comment_edge_alias_reply_to_comment():
-    """Mastodon, LinkedIn and YouTube answer comments through reply_to_message.
+    """LinkedIn and YouTube answer comments through reply_to_message.
 
     They implement reply_to_comment as a thin alias so the view can call one
     method unconditionally, rather than the view carrying a per-provider
     fallback.
     """
     from providers.linkedin import LinkedInProvider
-    from providers.mastodon import MastodonProvider
     from providers.youtube import YouTubeProvider
 
-    for cls in (MastodonProvider, LinkedInProvider, YouTubeProvider):
-        provider = cls({"instance_url": "https://example.social"})
+    for cls in (LinkedInProvider, YouTubeProvider):
+        provider = cls({})
         provider.reply_to_message = MagicMock(return_value=SimpleNamespace(platform_message_id="via-message"))
 
         result = provider.reply_to_comment("token", "comment-1", "Thanks!", {"k": "v"})

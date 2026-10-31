@@ -579,10 +579,6 @@ PLATFORM_CREDENTIALS_FROM_ENV = {
         "app_id": env("PLATFORM_PINTEREST_APP_ID", default=""),
         "app_secret": env("PLATFORM_PINTEREST_APP_SECRET", default=""),
     },
-    # Mastodon - instance-specific OAuth; credentials are registered per-instance
-    # on first connect and persisted in MastodonAppRegistration. No repo-wide
-    # credentials apply.
-    "mastodon": {},
 }
 
 # Publishing engine

@@ -65,7 +65,6 @@ project/
 │   ├── pinterest.py
 │   ├── threads.py
 │   ├── google_business.py
-│   └── mastodon.py
 ├── theme/                      # django-tailwind theme app
 │   └── static_src/
 │       ├── src/
@@ -411,7 +410,6 @@ The publishing engine sends content out to platforms (outbound). For real-time i
 | Pinterest | No | - (polling only) |
 | Threads | No | - (polling only) |
 | Google Business Profile | No | - (polling only) |
-| Mastodon | Yes (Streaming API via WebSocket, not HTTP webhooks) | Notifications, mentions, new followers |
 
 In practice, Facebook and Instagram are the only platforms where HTTP-based inbound webhooks meaningfully replace polling for inbox sync.
 
