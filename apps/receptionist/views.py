@@ -7,11 +7,14 @@ replies, intake records, and contacts waiting on a human.
 
 import json
 import logging
+from datetime import timedelta
+from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods
 
 from apps.members.models import WorkspaceMembership
@@ -25,6 +28,7 @@ from .models import (
     FuneralClaim,
     Industry,
     Message,
+    Quote,
     TradeDispatch,
     ZernioChannel,
 )
@@ -224,6 +228,128 @@ def booking_action(request, workspace_id, booking_id, action):
         booking.save(update_fields=["status"])
         messages.success(request, "Booking cancelled.")
     return redirect("receptionist:bookings", workspace_id=workspace.id)
+
+
+def _parse_rand(raw: str) -> int | None:
+    """'R1,500.00' / '1500' -> cents; None when not a clean positive amount."""
+    cleaned = raw.strip().lstrip("Rr").replace(",", "").replace(" ", "")
+    if not cleaned:
+        return None
+    try:
+        value = Decimal(cleaned)
+    except InvalidOperation:
+        return None
+    if value <= 0 or value > 10_000_000:
+        return None
+    return int(value * 100)
+
+
+def _quote_message(profile, quote) -> str:
+    what = quote.title or "the work"
+    return (
+        f"Hi {quote.customer_name}, your quote from {profile.business_name}: "
+        f"{what} - R{quote.amount_rand}. Reply here to accept or with any questions."
+    )
+
+
+@login_required
+def quotes(request, workspace_id):
+    workspace = _get_workspace(request, workspace_id)
+    profile = BusinessProfile.objects.filter(workspace=workspace).first()
+    if request.method == "POST":
+        name = request.POST.get("customer_name", "").strip()
+        title = request.POST.get("title", "").strip()
+        phone = request.POST.get("phone", "").strip().lstrip("+").replace(" ", "")
+        amount_cents = _parse_rand(request.POST.get("amount", ""))
+        if not name:
+            messages.error(request, "Add the customer's name.")
+        elif amount_cents is None:
+            messages.error(request, "Add the amount in rand, e.g. 1500 or R1,500.00.")
+        else:
+            contact = Contact.objects.filter(workspace=workspace, wa_id=phone).first() if phone else None
+            Quote.objects.create(
+                workspace=workspace,
+                contact=contact,
+                customer_name=name[:200],
+                title=title[:200],
+                amount_cents=amount_cents,
+            )
+            messages.success(request, f"Quote saved for {name}.")
+        return redirect("receptionist:quotes", workspace_id=workspace.id)
+    rows = Quote.objects.filter(workspace=workspace).select_related("contact")
+    today = timezone.localdate()
+    return render(
+        request,
+        "receptionist/quotes.html",
+        {"workspace": workspace, "profile": profile, "quotes": rows, "today": today},
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def quote_action(request, workspace_id, quote_id, action):
+    workspace = _get_workspace(request, workspace_id)
+    quote = get_object_or_404(Quote, id=quote_id, workspace=workspace)
+    profile = BusinessProfile.objects.filter(workspace=workspace).first()
+    today = timezone.localdate()
+
+    if action == "send" and quote.status == Quote.Status.DRAFT:
+        if profile is None:
+            messages.error(request, "Set up your business profile first.")
+            return redirect("receptionist:setup", workspace_id=workspace.id)
+        quote.status = Quote.Status.SENT
+        quote.sent_on = today
+        quote.follow_up_on = today + timedelta(days=3)
+        quote.save(update_fields=["status", "sent_on", "follow_up_on"])
+        _send_quote_message(request, workspace, profile, quote, _quote_message(profile, quote))
+        messages.success(request, f"Quote sent to {quote.customer_name}; follow-up due in 3 days.")
+    elif action == "chase" and quote.status == Quote.Status.SENT:
+        quote.follow_up_on = today + timedelta(days=3)
+        quote.save(update_fields=["follow_up_on"])
+        body = (
+            f"Hi {quote.customer_name}, checking you received our quote for "
+            f"{quote.title or 'the work'} (R{quote.amount_rand}). Happy to answer any questions."
+        )
+        _send_quote_message(request, workspace, profile, quote, body)
+        messages.success(request, f"Follow-up sent to {quote.customer_name}; next chase in 3 days.")
+    elif action == "won" and quote.status in (Quote.Status.DRAFT, Quote.Status.SENT):
+        quote.status = Quote.Status.WON
+        quote.save(update_fields=["status"])
+        messages.success(request, f"Marked {quote.customer_name}'s quote as won.")
+    elif action == "lost" and quote.status in (Quote.Status.DRAFT, Quote.Status.SENT):
+        quote.status = Quote.Status.LOST
+        quote.save(update_fields=["status"])
+    return redirect("receptionist:quotes", workspace_id=workspace.id)
+
+
+def _send_quote_message(request, workspace, profile, quote, body: str) -> None:
+    """Send one quote-related WhatsApp message through the reply-only guard."""
+    if profile is None:
+        return
+    if quote.contact is None:
+        messages.warning(
+            request,
+            f"Saved, but {quote.customer_name} has not messaged you on WhatsApp yet - "
+            "the quote text stays here until they do.",
+        )
+        return
+    reply = Message.objects.create(
+        workspace=workspace,
+        contact=quote.contact,
+        direction=Message.Direction.OUTBOUND,
+        sender_type=Message.SenderType.HUMAN_AGENT,
+        body=body,
+        is_draft=True,
+    )
+    channel = ZernioChannel.objects.filter(workspace=workspace).first()
+    if channel is None:
+        return
+    from .sending import send_draft
+
+    try:
+        send_draft(channel, quote.contact, reply)
+    except Exception:
+        logger.exception("receptionist: quote send failed for %s", quote.contact.id)
 
 
 @login_required

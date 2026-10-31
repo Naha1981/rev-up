@@ -1,6 +1,7 @@
 """Receptionist: tenant isolation, dry-run drafting, escalation, intake."""
 
 import json
+from datetime import timedelta
 from unittest.mock import Mock, patch
 
 from django.test import TestCase, override_settings
@@ -10,7 +11,7 @@ from django.utils import timezone
 from apps.organizations.models import Organization
 from apps.workspaces.models import Workspace
 
-from .models import Booking, BusinessProfile, Contact, FuneralClaim, Message, TradeDispatch, ZernioChannel
+from .models import Booking, BusinessProfile, Contact, FuneralClaim, Message, Quote, TradeDispatch, ZernioChannel
 from .services import needs_human
 from .webhooks import handle_inbox_message
 
@@ -360,6 +361,126 @@ class BookingTests(TestCase):
         self.assertEqual(resp.status_code, 403)
         booking.refresh_from_db()
         self.assertEqual(booking.status, "requested")
+
+
+class QuoteTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        from apps.members.models import WorkspaceMembership
+
+        user_model = get_user_model()
+        self.ws = _workspace("jj-solar")
+        self.user = user_model.objects.create_user(
+            email="solar@example.com", password="x" * 20, tos_accepted_at=timezone.now()
+        )
+        self.outsider = user_model.objects.create_user(
+            email="stranger3@example.com", password="x" * 20, tos_accepted_at=timezone.now()
+        )
+        WorkspaceMembership.objects.create(user=self.user, workspace=self.ws)
+        self.profile = BusinessProfile.objects.create(workspace=self.ws, industry="trades", business_name="JJ Solar")
+        self.channel = ZernioChannel.objects.create(workspace=self.ws, zernio_account_id="acct-jj")
+        self.contact = Contact.objects.create(workspace=self.ws, wa_id="27821112222", name="Pieter")
+
+    def _quote(self, **kw):
+        defaults = {
+            "workspace": self.ws,
+            "contact": self.contact,
+            "customer_name": "Pieter",
+            "title": "5kW inverter install",
+            "amount_cents": 4250000,
+        }
+        defaults.update(kw)
+        return Quote.objects.create(**defaults)
+
+    def test_create_quote_parses_rand(self):
+        self.client.force_login(self.user)
+        resp = self.client.post(
+            f"/workspace/{self.ws.id}/receptionist/quotes/",
+            {"customer_name": "Pieter", "phone": "+27 82 111 2222", "title": "5kW inverter", "amount": "R42,500.00"},
+        )
+        self.assertEqual(resp.status_code, 302)
+        quote = Quote.objects.get(workspace=self.ws)
+        self.assertEqual(quote.amount_cents, 4250000)
+        self.assertEqual(quote.contact, self.contact)
+        self.assertEqual(quote.status, "draft")
+
+    def test_create_quote_rejects_bad_amount(self):
+        self.client.force_login(self.user)
+        self.client.post(
+            f"/workspace/{self.ws.id}/receptionist/quotes/",
+            {"customer_name": "Pieter", "amount": "lots"},
+        )
+        self.assertEqual(Quote.objects.count(), 0)
+
+    def test_quotes_requires_membership(self):
+        self.client.force_login(self.outsider)
+        resp = self.client.get(f"/workspace/{self.ws.id}/receptionist/quotes/")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_list_shows_only_own_quotes(self):
+        self.client.force_login(self.user)
+        self._quote()
+        other_ws = _workspace("kk-other")
+        Quote.objects.create(workspace=other_ws, customer_name="Hidden Person", amount_cents=100)
+        resp = self.client.get(f"/workspace/{self.ws.id}/receptionist/quotes/")
+        self.assertContains(resp, "Pieter")
+        self.assertNotContains(resp, "Hidden Person")
+
+    @patch("apps.receptionist.sending.send_draft", return_value=True)
+    def test_send_marks_sent_and_messages_customer(self, mock_send):
+        self.client.force_login(self.user)
+        quote = self._quote()
+        self.client.post(f"/workspace/{self.ws.id}/receptionist/quotes/{quote.id}/send/")
+        quote.refresh_from_db()
+        self.assertEqual(quote.status, "sent")
+        self.assertEqual(quote.sent_on, timezone.localdate())
+        self.assertEqual(quote.follow_up_on, timezone.localdate() + timedelta(days=3))
+        reply = Message.objects.get(contact=self.contact, direction="outbound")
+        self.assertIn("JJ Solar", reply.body)
+        self.assertIn("R42,500.00", reply.body)
+        mock_send.assert_called_once()
+
+    @patch("apps.receptionist.sending.send_draft", return_value=True)
+    def test_send_without_contact_keeps_quote_sent_no_message(self, mock_send):
+        self.client.force_login(self.user)
+        quote = self._quote(contact=None)
+        self.client.post(f"/workspace/{self.ws.id}/receptionist/quotes/{quote.id}/send/")
+        quote.refresh_from_db()
+        self.assertEqual(quote.status, "sent")
+        mock_send.assert_not_called()
+        self.assertEqual(Message.objects.filter(direction="outbound").count(), 0)
+
+    @patch("apps.receptionist.sending.send_draft", return_value=True)
+    def test_chase_sends_followup_and_defers(self, mock_send):
+        self.client.force_login(self.user)
+        yesterday = timezone.localdate() - timedelta(days=1)
+        quote = self._quote(status="sent", sent_on=yesterday, follow_up_on=yesterday)
+        self.client.post(f"/workspace/{self.ws.id}/receptionist/quotes/{quote.id}/chase/")
+        quote.refresh_from_db()
+        self.assertEqual(quote.follow_up_on, timezone.localdate() + timedelta(days=3))
+        reply = Message.objects.get(contact=self.contact, direction="outbound")
+        self.assertIn("checking you received", reply.body)
+        mock_send.assert_called_once()
+
+    def test_won_and_lost(self):
+        self.client.force_login(self.user)
+        quote = self._quote(status="sent")
+        self.client.post(f"/workspace/{self.ws.id}/receptionist/quotes/{quote.id}/won/")
+        quote.refresh_from_db()
+        self.assertEqual(quote.status, "won")
+        q2 = self._quote(customer_name="Second")
+        self.client.post(f"/workspace/{self.ws.id}/receptionist/quotes/{q2.id}/lost/")
+        q2.refresh_from_db()
+        self.assertEqual(q2.status, "lost")
+
+    def test_outsider_cannot_send(self):
+        self.client.force_login(self.outsider)
+        quote = self._quote()
+        resp = self.client.post(f"/workspace/{self.ws.id}/receptionist/quotes/{quote.id}/send/")
+        self.assertEqual(resp.status_code, 403)
+        quote.refresh_from_db()
+        self.assertEqual(quote.status, "draft")
 
 
 class RealPayloadShapeTests(TestCase):

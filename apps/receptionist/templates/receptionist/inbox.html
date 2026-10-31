@@ -5,6 +5,7 @@
     <h1 class="text-xl font-semibold text-gray-900">Receptionist</h1>
     <div class="flex items-center gap-4">
       <a href="{% url 'receptionist:bookings' workspace.id %}" class="text-sm font-medium text-blue-600">Bookings</a>
+      <a href="{% url 'receptionist:quotes' workspace.id %}" class="text-sm font-medium text-blue-600">Quotes</a>
       <a href="{% url 'receptionist:setup' workspace.id %}" class="text-sm font-medium text-blue-600">Settings</a>
     </div>
   </div>

@@ -121,6 +121,41 @@ class Booking(models.Model):
         return f"{self.service or 'Booking'} - {self.contact.wa_id} ({self.status})"
 
 
+class Quote(models.Model):
+    """A quote the owner sends a customer, with a chase date for follow-up."""
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        SENT = "sent", "Sent"
+        WON = "won", "Won"
+        LOST = "lost", "Lost"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey("workspaces.Workspace", on_delete=models.CASCADE, related_name="receptionist_quotes")
+    contact = models.ForeignKey(Contact, on_delete=models.SET_NULL, null=True, blank=True, related_name="quotes")
+    customer_name = models.CharField(max_length=200)
+    title = models.CharField(max_length=200, blank=True)
+    amount_cents = models.PositiveBigIntegerField(default=0)
+    status = models.CharField(max_length=8, choices=Status.choices, default=Status.DRAFT)
+    sent_on = models.DateField(null=True, blank=True)
+    follow_up_on = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["status", "follow_up_on", "-created_at"]
+        indexes = [models.Index(fields=["workspace", "status", "follow_up_on"], name="quote_ws_status_fup")]
+
+    @property
+    def amount_rand(self) -> str:
+        return f"{self.amount_cents / 100:,.2f}"
+
+    def due_for_chase(self, today) -> bool:
+        return self.status == self.Status.SENT and self.follow_up_on is not None and self.follow_up_on <= today
+
+    def __str__(self) -> str:
+        return f"{self.customer_name}: {self.title or 'Quote'} R{self.amount_rand} ({self.status})"
+
+
 class Message(models.Model):
     class Direction(models.TextChoices):
         INBOUND = "inbound", "Inbound"
