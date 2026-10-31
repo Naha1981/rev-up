@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import views, zernio_connect
 
 app_name = "social_accounts"
 
@@ -30,6 +30,17 @@ urlpatterns = [
         "<uuid:workspace_id>/connect/devto/",
         views.connect_devto,
         name="connect_devto",
+    ),
+    # Zernio one-tap connect (Facebook, Instagram, TikTok, LinkedIn)
+    path(
+        "<uuid:workspace_id>/connect/zernio/<str:platform>/",
+        zernio_connect.connect_zernio,
+        name="connect_zernio",
+    ),
+    path(
+        "zernio/callback/",
+        zernio_connect.zernio_callback,
+        name="zernio_callback",
     ),
     # OAuth callback (not workspace-scoped - platform redirects here)
     path(

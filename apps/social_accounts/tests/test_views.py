@@ -217,22 +217,25 @@ class TestAccountListView:
 class TestConnectPlatformView:
     @pytest.mark.parametrize("flag", [False, True])
     @pytest.mark.parametrize("business_login", [False, True])
-    @pytest.mark.parametrize("entrypoint", ["connect", "reconnect"])
-    def test_instagram_scope_flag_in_each_connection_flow(
-        self, authenticated_client, workspace, settings, flag, business_login, entrypoint
+    def test_instagram_scope_flag_in_reconnect_flow(
+        self, authenticated_client, workspace, settings, flag, business_login
     ):
+        """The connect grid no longer offers Meta OAuth (Zernio-only); this
+        legacy direct-Meta flow remains only for reconnecting accounts that
+        predate the Zernio move (provider="direct")."""
         settings.PLATFORM_INSTAGRAM_FACEBOOK_DM_SCOPES_ENABLED = flag
         credentials = {"app_id": "ID", "app_secret": "SECRET"}
         if business_login:
             credentials["config_id"] = "config-1"
         settings.PLATFORM_CREDENTIALS_FROM_ENV = {"instagram": credentials}
-        if entrypoint == "connect":
-            url = reverse("social_accounts:connect", kwargs={"workspace_id": workspace.id})
-        else:
-            account = SocialAccount.objects.create(
-                workspace=workspace, platform="instagram", account_platform_id="ig-1", account_name="Instagram"
-            )
-            url = reverse("social_accounts:reconnect", kwargs={"workspace_id": workspace.id, "account_id": account.id})
+        account = SocialAccount.objects.create(
+            workspace=workspace,
+            platform="instagram",
+            account_platform_id="ig-1",
+            account_name="Instagram",
+            provider="direct",
+        )
+        url = reverse("social_accounts:reconnect", kwargs={"workspace_id": workspace.id, "account_id": account.id})
         response = authenticated_client.post(url, {"platform": "instagram"})
         assert response.status_code == 302
         query = parse_qs(urlparse(response.url).query)
@@ -272,27 +275,29 @@ class TestConnectPlatformView:
         assert "bluesky" in response.url
 
     def test_pkce_connect_generates_and_forwards_verifier(self, authenticated_client, workspace):
-        """A PKCE provider (TikTok) gets a code_verifier stashed in the session
-        and forwarded to get_auth_url so it can derive the code_challenge."""
+        """A PKCE provider gets a code_verifier stashed in the session
+        and forwarded to get_auth_url so it can derive the code_challenge.
+        (TikTok, the one real PKCE provider, is Zernio-managed now; this
+        exercises the machinery over a direct-OAuth platform instead.)"""
         from apps.credentials.models import PlatformCredential
 
         PlatformCredential.objects.create(
             organization=workspace.organization,
-            platform="tiktok",
-            credentials={"client_key": "k", "client_secret": "s"},
+            platform="threads",
+            credentials={"app_id": "i", "app_secret": "s"},
             is_configured=True,
         )
 
         mock_provider = MagicMock()
         mock_provider.uses_pkce = True
-        mock_provider.get_auth_url.return_value = "https://www.tiktok.com/v2/auth/authorize/?ok=1"
+        mock_provider.get_auth_url.return_value = "https://www.threads.com/oauth/authorize/?ok=1"
 
         url = reverse("social_accounts:connect", kwargs={"workspace_id": workspace.id})
         with patch("apps.social_accounts.views._get_provider_for_platform", return_value=mock_provider):
-            response = authenticated_client.post(url, {"platform": "tiktok"})
+            response = authenticated_client.post(url, {"platform": "threads"})
 
         assert response.status_code == 302
-        assert response.url == "https://www.tiktok.com/v2/auth/authorize/?ok=1"
+        assert response.url == "https://www.threads.com/oauth/authorize/?ok=1"
 
         verifier = authenticated_client.session[OAUTH_SESSION_KEY]["code_verifier"]
         assert verifier  # non-empty
@@ -310,13 +315,17 @@ class TestConnectPlatformView:
 
         With only Meta credentials set, offering a Connect button would dead-end
         at Meta's error 4476002, so the platform must read as unconfigured.
+        Facebook itself no longer reads as configured from Meta credentials at
+        all: it is Zernio-managed, and with ZERNIO_ENABLED off (the default
+        here) the grid offers no Meta fallback.
         """
         url = reverse("social_accounts:connect", kwargs={"workspace_id": workspace.id})
 
-        # The grid renders Threads as "Not Configured" while Facebook stays live.
+        # The grid renders Threads as "Not Configured"; Facebook is not
+        # offered via Meta credentials either.
         grid = authenticated_client.get(url)
         assert "threads" not in grid.context["configured_platforms"]
-        assert "facebook" in grid.context["configured_platforms"]
+        assert "facebook" not in grid.context["configured_platforms"]
 
         response = authenticated_client.post(url, {"platform": "threads"})
         assert response.status_code == 302
@@ -353,18 +362,18 @@ class TestConnectPlatformView:
 
         PlatformCredential.objects.create(
             organization=workspace.organization,
-            platform="facebook",
-            credentials={"client_id": "i", "client_secret": "s"},
+            platform="threads",
+            credentials={"app_id": "i", "app_secret": "s"},
             is_configured=True,
         )
 
         mock_provider = MagicMock()
         mock_provider.uses_pkce = False
-        mock_provider.get_auth_url.return_value = "https://facebook.example/auth"
+        mock_provider.get_auth_url.return_value = "https://threads.example/auth"
 
         url = reverse("social_accounts:connect", kwargs={"workspace_id": workspace.id})
         with patch("apps.social_accounts.views._get_provider_for_platform", return_value=mock_provider):
-            response = authenticated_client.post(url, {"platform": "facebook"})
+            response = authenticated_client.post(url, {"platform": "threads"})
 
         assert response.status_code == 302
         assert authenticated_client.session[OAUTH_SESSION_KEY]["code_verifier"] is None
@@ -382,6 +391,7 @@ class TestReconnectView:
             platform="tiktok",
             account_platform_id="open-1",
             account_name="My TikTok",
+            provider="direct",
         )
 
         mock_provider = MagicMock()
@@ -1041,6 +1051,7 @@ class TestDisconnectView:
             account_platform_id="123",
             account_name="Test Page",
             oauth_access_token="token123",
+            provider="direct",
         )
         url = reverse(
             "social_accounts:disconnect",
@@ -1100,6 +1111,7 @@ class TestDisconnectView:
             account_name="Test Masto",
             instance_url="https://mastodon.example",
             oauth_access_token="masto-token",
+            provider="direct",
         )
         url = reverse(
             "social_accounts:disconnect",

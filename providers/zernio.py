@@ -271,12 +271,20 @@ class ZernioClient:
 
     # -------------------------------------------------------------- connect
 
-    def get_connect_url(self, platform: str, *, profile_id: str, redirect_url: str) -> str:
+    def get_connect_url(
+        self,
+        platform: str,
+        *,
+        profile_id: str,
+        redirect_url: str,
+        reconnect_account_id: str | None = None,
+    ) -> str:
         """The hosted Zernio OAuth URL for one platform. One tap for the user.
 
         Only :data:`SUPPORTED_PLATFORMS` are served - anything else (X above
         all) is refused here, before a request could connect something the
-        owner excluded.
+        owner excluded. ``reconnect_account_id`` refreshes that exact existing
+        account (Zernio's reconnectAccountId) instead of adding a new one.
         """
         if platform not in SUPPORTED_PLATFORMS:
             raise ZernioError(
@@ -284,9 +292,12 @@ class ZernioClient:
                 code="unsupported_platform",
                 retryable=False,
             )
+        params = {"profileId": profile_id, "redirect_url": redirect_url}
+        if reconnect_account_id:
+            params["reconnectAccountId"] = reconnect_account_id
         data = self._get_json(
             f"/connect/{platform}",
-            params={"profileId": profile_id, "redirect_url": redirect_url},
+            params=params,
         )
         # The documented shape carries ``authUrl``; accept a nested ``data``
         # envelope so a harmless API-side re-wrap cannot break connect.
@@ -319,6 +330,23 @@ class ZernioClient:
             if v
         }
         return self._get_json("/accounts", params=params).get("accounts", [])
+
+    def delete_account(self, account_id: str) -> bool:
+        """Disconnect one connected account. True when it was there to remove.
+
+        A 404 is NOT an error here: Zernio documents that repeating the call
+        on an already-disconnected account returns 404 and does not re-run the
+        disconnect, so a missing account is the end state the caller wanted.
+        Returns False for that case so callers can log the difference.
+        """
+        try:
+            response = self._request("DELETE", f"/accounts/{account_id}")
+            self._raise_for_status(response)
+        except ZernioError as exc:
+            if exc.status_code == 404:
+                return False
+            raise
+        return True
 
     # ---------------------------------------------------------------- posts
 

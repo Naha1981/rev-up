@@ -210,6 +210,21 @@ def connect_platform(request, workspace_id):
     configured_platforms = _get_configured_platforms(request.org.id)
     visible_platform_choices = _get_visible_platform_choices()
 
+    # Zernio-managed platforms never show the old direct-OAuth button (owner
+    # decision: no Meta/LinkedIn/TikTok developer app in RevUp). When Zernio
+    # is configured they read as configured and post to the Zernio flow; when
+    # it is not, they read as unavailable - there is deliberately no fallback.
+    from .zernio_connect import ZERNIO_HIDDEN_GRID_PLATFORMS, ZERNIO_MANAGED_PLATFORMS, zernio_ready
+
+    zernio_on = zernio_ready()
+    if zernio_on:
+        configured_platforms |= set(ZERNIO_MANAGED_PLATFORMS)
+        visible_platform_choices = [
+            (value, label) for value, label in visible_platform_choices if value not in ZERNIO_HIDDEN_GRID_PLATFORMS
+        ]
+    else:
+        configured_platforms -= set(ZERNIO_MANAGED_PLATFORMS)
+
     if request.method == "GET":
         return render(
             request,
@@ -218,6 +233,7 @@ def connect_platform(request, workspace_id):
                 "workspace_id": workspace_id,
                 "platform_choices": visible_platform_choices,
                 "configured_platforms": configured_platforms,
+                "zernio_platforms": set(ZERNIO_MANAGED_PLATFORMS) if zernio_on else set(),
             },
         )
 
@@ -226,6 +242,23 @@ def connect_platform(request, workspace_id):
     if platform not in dict(visible_platform_choices):
         messages.error(request, "This platform is not available.")
         return redirect("social_accounts:connect", workspace_id=workspace_id)
+
+    from .zernio_connect import ZERNIO_MANAGED_PLATFORMS as _ZMANAGED
+    from .zernio_connect import start_zernio_connect
+    from .zernio_connect import zernio_ready as _zready
+
+    if platform in _ZMANAGED:
+        if not _zready():
+            messages.error(request, "Connecting accounts is temporarily unavailable. Please try again later.")
+            return redirect("social_accounts:connect", workspace_id=workspace_id)
+        from providers.zernio import ZernioError as _ZernioError
+
+        try:
+            return start_zernio_connect(request, request.workspace, platform)
+        except _ZernioError:
+            logger.exception("Zernio connect failed to start for %s", platform)
+            messages.error(request, "Could not start the connection. Please try again.")
+            return redirect("social_accounts:connect", workspace_id=workspace_id)
 
     if platform not in configured_platforms:
         messages.error(
@@ -759,6 +792,22 @@ def reconnect(request, workspace_id, account_id):
     account = get_object_or_404(SocialAccount.objects.for_workspace(workspace_id), id=account_id)
     platform = account.platform
 
+    if account.provider == "zernio":
+        from providers.zernio import ZernioError as _ZernioError
+
+        from .zernio_connect import start_zernio_connect
+        from .zernio_connect import zernio_ready as _zready
+
+        if not _zready():
+            messages.error(request, "Reconnecting is temporarily unavailable. Please try again later.")
+            return redirect("social_accounts:list", workspace_id=workspace_id)
+        try:
+            return start_zernio_connect(request, request.workspace, platform, reconnect_account=account)
+        except _ZernioError:
+            logger.exception("Zernio reconnect failed to start for %s", account)
+            messages.error(request, "Could not start the reconnection. Please try again.")
+            return redirect("social_accounts:list", workspace_id=workspace_id)
+
     if platform == PlatformCredential.Platform.BLUESKY:
         return redirect("social_accounts:connect_bluesky", workspace_id=workspace_id)
     if platform == PlatformCredential.Platform.MASTODON:
@@ -863,26 +912,47 @@ def disconnect(request, workspace_id, account_id):
             return render(request, "social_accounts/partials/_empty.html")
         return redirect("social_accounts:list", workspace_id=workspace_id)
 
-    # Stop the platform pushing us this account's activity before we drop the
-    # token that would let us unsubscribe.
-    if account.oauth_access_token:
-        unsubscribe_account_webhooks(account)
+    if account.provider == "zernio":
+        # Zernio holds the platform tokens; disconnect there first. A 404
+        # means it is already gone (the end state we want); a retryable
+        # failure aborts the local delete so the account is not left billed
+        # and connected on Zernio's side while invisible here.
+        from providers.zernio import ZernioClient, ZernioError
+
+        try:
+            with ZernioClient() as zclient:
+                removed = zclient.delete_account(account.provider_account_id) if account.provider_account_id else False
+            if not removed and account.provider_account_id:
+                logger.info("Zernio account %s was already disconnected", account.provider_account_id)
+        except ZernioError:
+            logger.exception("Zernio disconnect failed for %s", account)
+            messages.error(request, "Could not reach the connection service. Please try again in a moment.")
+            if request.headers.get("HX-Request"):
+                return _render_account_card(request, account, workspace_id)
+            return redirect("social_accounts:list", workspace_id=workspace_id)
+    else:
+        # Stop the platform pushing us this account's activity before we drop the
+        # token that would let us unsubscribe.
+        if account.oauth_access_token:
+            unsubscribe_account_webhooks(account)
 
     # Try to revoke token. The account's own credentials, not just the org's:
     # a Mastodon grant lives on the account's instance, under that instance's
     # app registration, and revoking without them calls an empty base URL.
-    try:
-        from apps.publisher.engine import _resolve_publish_credentials
-        from providers import get_provider
+    # Zernio accounts hold no platform token here - nothing to revoke.
+    if account.provider != "zernio":
+        try:
+            from apps.publisher.engine import _resolve_publish_credentials
+            from providers import get_provider
 
-        provider = get_provider(account.platform, _resolve_publish_credentials(account))
-        if account.revocation_token:
-            provider.revoke_token(account.revocation_token)
-    except Exception:
-        logger.warning(
-            "Failed to revoke token for %s, proceeding with disconnect",
-            account,
-        )
+            provider = get_provider(account.platform, _resolve_publish_credentials(account))
+            if account.revocation_token:
+                provider.revoke_token(account.revocation_token)
+        except Exception:
+            logger.warning(
+                "Failed to revoke token for %s, proceeding with disconnect",
+                account,
+            )
 
     # Delete posts that ONLY target this account (will be fully orphaned).
     # Multi-platform posts keep their other PlatformPost targets via cascade.
@@ -1046,6 +1116,9 @@ def _create_or_update_account(
         account_platform_id=profile.platform_id,
         defaults={
             **analytics_defaults,
+            # This helper is the direct-OAuth creation path; Zernio-connected
+            # accounts are upserted by zernio_connect.sync_zernio_accounts.
+            "provider": "direct",
             "account_name": profile.name,
             "account_handle": profile.handle or "",
             "avatar_url": profile.avatar_url or "",
