@@ -72,6 +72,7 @@ class Contact(models.Model):
         "workspaces.Workspace", on_delete=models.CASCADE, related_name="receptionist_contacts"
     )
     wa_id = models.CharField(max_length=32, help_text="WhatsApp id (phone digits)")
+    zernio_conversation_id = models.CharField(max_length=64, blank=True, default="")
     name = models.CharField(max_length=120, blank=True)
     tags = models.JSONField(default=list, blank=True)
     needs_human = models.BooleanField(default=False)

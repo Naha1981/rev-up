@@ -1,9 +1,9 @@
 """Receptionist: tenant isolation, dry-run drafting, escalation, intake."""
 
 import json
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from apps.organizations.models import Organization
@@ -264,3 +264,100 @@ class RealPayloadShapeTests(TestCase):
         self.assertEqual(contact.wa_id, "27672347593")
         self.assertEqual(contact.name, "Thabiso")
         self.assertTrue(Message.objects.filter(contact=contact, direction="outbound", is_draft=True).exists())
+
+
+class SandboxSendTests(TestCase):
+    """The sandbox send guard: only the sandbox account + the owner's demo number."""
+
+    def _fixtures(self):
+        ws = _workspace("Send WS")
+        BusinessProfile.objects.create(workspace=ws, business_name="Send Dental", is_active=True)
+        return ws
+
+    def _channel(self, ws, account):
+        return ZernioChannel.objects.create(workspace=ws, zernio_account_id=account)
+
+    def _draft(self, ws, contact):
+        return Message.objects.create(
+            workspace=ws,
+            contact=contact,
+            direction=Message.Direction.OUTBOUND,
+            sender_type=Message.SenderType.AI,
+            body="Hi! Yes, we work Saturdays.",
+            is_draft=True,
+        )
+
+    @override_settings(ZERNIO_API_KEY="k", ZERNIO_BASE_URL="https://zernio.test/api/v1")
+    @patch("apps.receptionist.sending.httpx.post")
+    def test_guard_allows_sandbox_account_and_demo_number(self, mock_post):
+        from apps.receptionist.sending import SANDBOX_ACCOUNT_ID, send_draft
+
+        mock_post.return_value = Mock(
+            status_code=200, content=b'{"message":{"id":"zm1"}}', json=lambda: {"message": {"id": "zm1"}}
+        )
+        ws = self._fixtures()
+        channel = self._channel(ws, SANDBOX_ACCOUNT_ID)
+        contact = Contact.objects.create(workspace=ws, wa_id="27672347593", zernio_conversation_id="conv1")
+        draft = self._draft(ws, contact)
+        self.assertTrue(send_draft(channel, contact, draft))
+        draft.refresh_from_db()
+        self.assertFalse(draft.is_draft)
+        self.assertEqual(draft.zernio_message_id, "zm1")
+
+    @override_settings(ZERNIO_API_KEY="k", ZERNIO_BASE_URL="https://zernio.test/api/v1")
+    @patch("apps.receptionist.sending.httpx.post")
+    def test_guard_refuses_other_number(self, mock_post):
+        from apps.receptionist.sending import SANDBOX_ACCOUNT_ID, send_draft
+
+        ws = self._fixtures()
+        channel = self._channel(ws, SANDBOX_ACCOUNT_ID)
+        contact = Contact.objects.create(workspace=ws, wa_id="27820001122", zernio_conversation_id="conv1")
+        draft = self._draft(ws, contact)
+        self.assertFalse(send_draft(channel, contact, draft))
+        mock_post.assert_not_called()
+        draft.refresh_from_db()
+        self.assertTrue(draft.is_draft)
+
+    @override_settings(ZERNIO_API_KEY="k", ZERNIO_BASE_URL="https://zernio.test/api/v1")
+    @patch("apps.receptionist.sending.httpx.post")
+    def test_guard_refuses_non_sandbox_account(self, mock_post):
+        from apps.receptionist.sending import send_draft
+
+        ws = self._fixtures()
+        channel = self._channel(ws, "some-real-account")
+        contact = Contact.objects.create(workspace=ws, wa_id="27672347593", zernio_conversation_id="conv1")
+        draft = self._draft(ws, contact)
+        self.assertFalse(send_draft(channel, contact, draft))
+        mock_post.assert_not_called()
+
+    @override_settings(ZERNIO_API_KEY="k", ZERNIO_BASE_URL="https://zernio.test/api/v1")
+    @patch("apps.receptionist.sending.httpx.post")
+    def test_webhook_captures_conversation_and_autosends(self, mock_post):
+        from apps.receptionist.sending import SANDBOX_ACCOUNT_ID
+        from apps.receptionist.webhooks import handle_inbox_message
+
+        mock_post.return_value = Mock(
+            status_code=200, content=b'{"message":{"id":"zm9"}}', json=lambda: {"message": {"id": "zm9"}}
+        )
+        ws = self._fixtures()
+        self._channel(ws, SANDBOX_ACCOUNT_ID)
+        payload = {
+            "type": "message.received",
+            "message": {
+                "id": "z-in-1",
+                "direction": "incoming",
+                "text": "Do you work Saturdays?",
+                "sender": {"phoneNumber": "+27672347593", "name": "Nahalabs"},
+                "account": {"accountId": SANDBOX_ACCOUNT_ID},
+            },
+            "conversation": {"id": "conv-real-1", "participantName": "Nahalabs"},
+        }
+        with patch("apps.receptionist.webhooks.draft_reply") as mock_draft:
+            mock_draft.return_value = Mock(body="Yes, 8:00-13:00.", intake={}, escalate=False)
+            handle_inbox_message(payload)
+        contact = Contact.objects.get(workspace=ws, wa_id="27672347593")
+        self.assertEqual(contact.zernio_conversation_id, "conv-real-1")
+        outbound = Message.objects.get(workspace=ws, direction=Message.Direction.OUTBOUND)
+        self.assertFalse(outbound.is_draft)
+        self.assertEqual(outbound.zernio_message_id, "zm9")
+        mock_post.assert_called_once()

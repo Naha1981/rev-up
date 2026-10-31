@@ -56,11 +56,15 @@ def handle_inbox_message(payload: dict) -> None:
     zernio_message_id = str(message.get("_id") or message.get("id") or "")
 
     with transaction.atomic():
-        contact, _ = Contact.objects.get_or_create(
+        conversation_id = str(conversation.get("id") or conversation.get("conversationId") or "")
+        contact, created = Contact.objects.get_or_create(
             workspace=workspace,
             wa_id=wa_id,
-            defaults={"name": sender_name},
+            defaults={"name": sender_name, "zernio_conversation_id": conversation_id},
         )
+        if not created and conversation_id and contact.zernio_conversation_id != conversation_id:
+            contact.zernio_conversation_id = conversation_id
+            contact.save(update_fields=["zernio_conversation_id", "updated_at"])
         if (
             zernio_message_id
             and Message.objects.filter(workspace=workspace, zernio_message_id=zernio_message_id).exists()
@@ -87,7 +91,7 @@ def handle_inbox_message(payload: dict) -> None:
         if draft.escalate and not contact.needs_human:
             contact.needs_human = True
             contact.save(update_fields=["needs_human", "updated_at"])
-        Message.objects.create(
+        outbound = Message.objects.create(
             workspace=workspace,
             contact=contact,
             direction=Message.Direction.OUTBOUND,
@@ -96,6 +100,13 @@ def handle_inbox_message(payload: dict) -> None:
             is_draft=True,
         )
         _apply_intake(workspace, contact, profile.industry, draft.intake)
+
+    from .sending import send_draft
+
+    try:
+        send_draft(channel, contact, outbound)
+    except Exception:
+        logger.exception("receptionist: sandbox send failed for contact %s", contact.id)
 
 
 def _apply_intake(workspace, contact, industry: str, intake: dict) -> None:
