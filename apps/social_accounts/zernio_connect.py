@@ -273,10 +273,10 @@ def zernio_callback(request):
                 "TikTok needs every permission accepted on its screen. Try again and accept them all.",
             )
         elif error in ("no_facebook_pages", "platform_requires_selection"):
-            messages.error(request, detail or "No suitable account was found to connect.")
+            messages.error(request, "No suitable account was found to connect.")
         else:
-            messages.error(request, detail or "The connection did not finish. Please try again.")
-        logger.info("Zernio connect ended with error=%s platform=%s", error, platform)
+            messages.error(request, "The connection did not finish. Please try again.")
+        logger.info("Zernio connect ended with error=%s platform=%s detail=%s", error, platform, detail)
         return _back_to_grid()
 
     connected_platform = request.GET.get("connected", "")
