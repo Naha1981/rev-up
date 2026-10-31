@@ -73,7 +73,7 @@ def test_allauth_mail_is_marked_transactional_before_the_header_is_stripped(acco
     changes, this is what notices."""
     from allauth.account.adapter import get_adapter
 
-    msg = get_adapter().render_mail("account/email/password_reset_key", account.email, {})
+    msg = get_adapter().render_mail("account/email/password_reset_key", account.email, {"user": account})
 
     assert msg.extra_headers.get(EMAIL_CLASS_HEADER) == "transactional"
 
