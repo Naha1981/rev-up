@@ -42,20 +42,24 @@ def handle_inbox_message(payload: dict) -> None:
         return
 
     direction = message.get("direction") or ("outbound" if message.get("fromMe") else "inbound")
-    if direction != "inbound":
+    if direction not in ("inbound", "incoming"):
         return
-    sender = message.get("from") or message.get("sender") or ""
-    wa_id = str(sender).split("@")[0].lstrip("+")
+    sender = message.get("sender") or {}
+    if isinstance(sender, str):
+        sender = {"id": sender}
+    wa_id = (sender.get("phoneNumber") or "").lstrip("+") or str(sender.get("id") or "").split("@")[0].lstrip("+")
     body = (message.get("text") or message.get("body") or "").strip()
     if not wa_id or not body:
         return
+    conversation = payload.get("conversation") or {}
+    sender_name = sender.get("name") or conversation.get("participantName") or ""
     zernio_message_id = str(message.get("_id") or message.get("id") or "")
 
     with transaction.atomic():
         contact, _ = Contact.objects.get_or_create(
             workspace=workspace,
             wa_id=wa_id,
-            defaults={"name": message.get("senderName") or ""},
+            defaults={"name": sender_name},
         )
         if (
             zernio_message_id

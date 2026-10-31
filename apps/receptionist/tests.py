@@ -24,8 +24,8 @@ def _payload(account_id, wa="27821234567", text="Hi, do you open on Saturdays?",
         "event": "message.received",
         "message": {
             "id": mid,
-            "direction": "inbound",
-            "from": wa,
+            "direction": "incoming",
+            "sender": {"id": wa, "phoneNumber": "+" + wa},
             "text": text,
             "account": {"accountId": account_id},
         },
@@ -223,3 +223,44 @@ class ViewTests(TestCase):
         resp = self.client.get(f"/workspace/{self.ws.id}/receptionist/")
         self.assertContains(resp, "Patient One")
         self.assertNotContains(resp, "Stranger")
+
+
+class RealPayloadShapeTests(TestCase):
+    """The actual Zernio message.received schema (from their OpenAPI spec)."""
+
+    def setUp(self):
+        self.ws = _workspace("gg-funerals")
+        BusinessProfile.objects.create(workspace=self.ws, industry="funeral", business_name="GG Funerals")
+        ZernioChannel.objects.create(workspace=self.ws, zernio_account_id="acct-sandbox")
+
+    @patch("apps.receptionist.webhooks.draft_reply")
+    def test_real_payload_shape(self, mock_draft):
+        from apps.receptionist.services import ReplyDraft
+
+        mock_draft.return_value = ReplyDraft(body="Our condolences. May I take a callback number?", intake={})
+        handle_inbox_message(
+            {
+                "id": "evt-1",
+                "event": "message.received",
+                "message": {
+                    "id": "zmsg-1",
+                    "conversationId": "conv-1",
+                    "platform": "whatsapp",
+                    "direction": "incoming",
+                    "text": "Hi, do you work Saturdays?",
+                    "sender": {
+                        "id": "27672347593",
+                        "phoneNumber": "+27672347593",
+                        "name": "Thabiso",
+                    },
+                    "attachments": [],
+                    "isRead": False,
+                },
+                "conversation": {"id": "conv-1", "participantName": "Thabiso"},
+                "account": {"id": "x", "accountId": "acct-sandbox", "platform": "whatsapp"},
+            }
+        )
+        contact = Contact.objects.get(workspace=self.ws)
+        self.assertEqual(contact.wa_id, "27672347593")
+        self.assertEqual(contact.name, "Thabiso")
+        self.assertTrue(Message.objects.filter(contact=contact, direction="outbound", is_draft=True).exists())
