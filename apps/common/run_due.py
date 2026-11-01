@@ -99,6 +99,13 @@ def _due_tasks_exist() -> bool:
     return Task.objects.unlocked(now).filter(run_at__lte=now, failed_at=None).exists()
 
 
+# Paths that must never touch the database. Render's health check hits
+# /health/ around the clock; if the due-task check queried the task table on
+# those pings the serverless database would never scale to zero, which is the
+# whole point of the event-driven design.
+_QUIET_PREFIXES = ("/health/", "/internal/run-due/", "/robots.txt", "/favicon", "/static/", "/media/")
+
+
 class RequestTaskDrainMiddleware:
     """After any real request, drain due background tasks in a daemon thread.
 
@@ -113,8 +120,8 @@ class RequestTaskDrainMiddleware:
 
     def __call__(self, request):
         response = self.get_response(request)
-        if request.path.startswith("/internal/run-due/"):
-            return response  # the endpoint drains for itself
+        if request.path.startswith(_QUIET_PREFIXES):
+            return response  # the run-due endpoint drains for itself
         try:
             if _due_tasks_exist():
                 threading.Thread(target=_drain_due_tasks, daemon=True, name="request-task-drain").start()

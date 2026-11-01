@@ -77,7 +77,7 @@ class TestRequestDrainMiddleware:
             lambda target=None, **kw: started.append(target) or type("T", (), {"start": lambda self: None})(),
         )
         Task.objects.create(task_name=_probe_task.name, task_params="[[], {}]", run_at=timezone.now())
-        client.get("/health/")
+        client.get("/")
         assert started, "no drain thread started for a request with due tasks"
 
     def test_request_without_due_tasks_starts_nothing(self, client, monkeypatch):
@@ -87,7 +87,7 @@ class TestRequestDrainMiddleware:
             "apps.common.run_due.threading.Thread",
             lambda target=None, **kw: started.append(target) or type("T", (), {"start": lambda self: None})(),
         )
-        client.get("/health/")
+        client.get("/")
         assert not started
 
     def test_drain_actually_runs_due_task(self):
@@ -97,3 +97,22 @@ class TestRequestDrainMiddleware:
         _drain_due_tasks(seconds=5)
         assert _ran
         assert not Task.objects.filter(task_name=_probe_task.name).exists()
+
+
+@pytest.mark.django_db
+class TestQuietPaths:
+    """Health-check and asset paths never touch the task table: if they did,
+    the platform's around-the-clock health pings would pin the serverless
+    database awake and defeat scale-to-zero."""
+
+    def test_health_check_skips_due_task_query(self, client, monkeypatch):
+        calls = []
+        monkeypatch.setattr("apps.common.run_due._due_tasks_exist", lambda: calls.append(1) or False)
+        client.get("/health/")
+        assert not calls
+
+    def test_real_page_checks_due_tasks(self, client, monkeypatch):
+        calls = []
+        monkeypatch.setattr("apps.common.run_due._due_tasks_exist", lambda: calls.append(1) or False)
+        client.get("/")
+        assert calls
