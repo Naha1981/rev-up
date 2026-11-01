@@ -1,0 +1,68 @@
+name: Health watch
+
+# Free downtime alerting inside the existing repo: every 10 minutes, check
+# the live health endpoint. On failure, open one issue (GitHub emails the
+# owner); on recovery, close it. No third-party monitor account needed.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check live health
+        id: probe
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 https://revup.nahalabs.co.za/health/ || echo "000")
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+      - name: Open an alert issue on failure
+        if: steps.probe.outputs.status != '200'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { status } = { status: "${{ steps.probe.outputs.status }}" };
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: "open", labels: "health-watch", per_page: 1,
+            });
+            if (existing.data.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.data[0].number,
+                body: `Still failing at ${new Date().toISOString()} (HTTP ${status}).`,
+              });
+              return;
+            }
+            await github.rest.issues.create({
+              owner: context.repo.owner, repo: context.repo.repo,
+              title: `RevUp health check failing (HTTP ${status})`,
+              body: `The live health endpoint https://revup.nahalabs.co.za/health/ returned HTTP ${status} at ${new Date().toISOString()}. This issue auto-closes when the site recovers.`,
+              labels: ["health-watch"],
+            });
+      - name: Close the alert issue on recovery
+        if: steps.probe.outputs.status == '200'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: "open", labels: "health-watch", per_page: 5,
+            });
+            for (const issue of existing.data) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `Recovered at ${new Date().toISOString()} - health endpoint returns 200 again.`,
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number, state: "closed",
+              });
+            }
