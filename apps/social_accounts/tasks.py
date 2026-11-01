@@ -65,7 +65,10 @@ def _check_social_account_health(account_id: str):
     try:
         provider = get_provider(account.platform, credentials)
     except ValueError:
-        logger.error("Health check: no provider for platform %s", account.platform)
+        # Connectable through the provider but with no publish-engine support
+        # yet: there is nothing to health-check, so skip quietly. Error level
+        # would page Sentry on every check for a state that is expected.
+        logger.warning("Health check: no provider for platform %s, skipping", account.platform)
         return
 
     # Accounts on these platforms that were connected before we recorded
