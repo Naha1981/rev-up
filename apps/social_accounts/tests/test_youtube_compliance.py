@@ -212,14 +212,20 @@ def test_missing_scope_is_retryable_and_does_not_force_existing_reconnection(cha
 
 
 def test_history_keeps_180_days_and_drops_arbitrary_old_response_payloads(channel):
+    # The retention cutoff is computed on the America/Los_Angeles calendar
+    # date; anchor the fixture dates the same way or the test flips whenever
+    # UTC and LA disagree on the date (23:xx UTC runs).
+    from zoneinfo import ZoneInfo
+
     now = timezone.now()
+    history_today = now.astimezone(ZoneInfo("America/Los_Angeles")).date()
     old = AccountInsightsSnapshot.objects.create(
-        social_account=channel, metric_key="views", date=now.date() - timedelta(days=181), value=4
+        social_account=channel, metric_key="views", date=history_today - timedelta(days=181), value=4
     )
     retained = AccountInsightsSnapshot.objects.create(
         social_account=channel,
         metric_key="views",
-        date=now.date() - timedelta(days=179),
+        date=history_today - timedelta(days=179),
         value=3,
         raw={"source": "youtube_analytics", "copied_profile": "Old"},
     )
