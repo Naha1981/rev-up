@@ -146,6 +146,15 @@ class Booking(models.Model):
     contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="bookings")
     service = models.CharField(max_length=200, blank=True)
     preferred_time = models.CharField(max_length=200, blank=True)
+    scheduled_start = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Confirmed date and time, Johannesburg local time. Empty until confirmed.",
+    )
+    duration_minutes = models.PositiveIntegerField(default=60, help_text="How long the booking blocks on the calendar.")
+    google_event_id = models.CharField(
+        max_length=200, blank=True, help_text="Google Calendar event created for this booking."
+    )
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.REQUESTED)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

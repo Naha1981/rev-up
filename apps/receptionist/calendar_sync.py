@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 
 import httpx
 from django.conf import settings
@@ -173,10 +173,93 @@ def parse_requested_day(text: str, today: date | None = None) -> date | None:
     return None
 
 
-def create_booking_event(conn: CalendarConnection, booking: Booking) -> bool:
-    """Create one calendar event for a confirmed booking. False when skipped."""
-    day = parse_requested_day(booking.preferred_time)
+_TIME_WORDS = {
+    "early morning": 7,
+    "morning": 9,
+    "midday": 12,
+    "noon": 12,
+    "lunch": 12,
+    "afternoon": 14,
+    "evening": 17,
+}
+
+_EVENT_TZ = "Africa/Johannesburg"
+
+
+def parse_requested_time(text: str) -> time | None:
+    """Best-effort clock time for free text like 'Tuesday 9am' or '14:30'.
+
+    Word times follow the plain meaning a customer expects: morning 09:00,
+    midday 12:00, afternoon 14:00, evening 17:00. Returns None when nothing
+    time-like is present.
+    """
+    if not text:
+        return None
+    t = text.lower()
+    m = re.search(r"\b(\d{1,2})[:h](\d{2})\s*(am|pm)?\b", t)
+    if not m:
+        m = re.search(r"\b(\d{1,2})\s*(am|pm)\b", t)
+    if m:
+        hour = int(m.group(1))
+        minute = int(m.group(2)) if m.group(2) and ":" in m.group(0) or "h" in m.group(0) else 0
+        if m.lastindex and m.group(m.lastindex) in ("am", "pm"):
+            if m.group(m.lastindex) == "pm" and hour < 12:
+                hour += 12
+            if m.group(m.lastindex) == "am" and hour == 12:
+                hour = 0
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            return time(hour, minute)
+    for word, hour in sorted(_TIME_WORDS.items(), key=lambda kv: -len(kv[0])):
+        if word in t:
+            return time(hour, 0)
+    return None
+
+
+def booking_slot(booking: Booking, today: date | None = None) -> datetime | None:
+    """The booking's Johannesburg-local start as an aware datetime, or None."""
+    day = parse_requested_day(booking.preferred_time, today)
     if day is None:
+        return None
+    clock = parse_requested_time(booking.preferred_time) or time(9, 0)
+    return timezone.make_aware(datetime.combine(day, clock))
+
+
+def slot_conflicts(workspace, start: datetime, duration_minutes: int, exclude_id=None) -> Booking | None:
+    """The confirmed booking whose slot overlaps this one, if any."""
+    end = start + timedelta(minutes=duration_minutes)
+    others = Booking.objects.filter(
+        workspace=workspace,
+        status=Booking.Status.CONFIRMED,
+        scheduled_start__isnull=False,
+    )
+    if exclude_id is not None:
+        others = others.exclude(id=exclude_id)
+    for other in others:
+        other_end = other.scheduled_start + timedelta(minutes=other.duration_minutes)
+        if other.scheduled_start < end and start < other_end:
+            return other
+    return None
+
+
+def _event_body(booking: Booking, start: datetime) -> dict:
+    start = timezone.localtime(start)
+    end = start + timedelta(minutes=booking.duration_minutes)
+    customer = booking.contact.name or booking.contact.wa_id
+    return {
+        "summary": f"{booking.service or 'Booking'} - {customer}",
+        "description": (
+            f"Confirmed RevUp booking.\nCustomer: {customer}\nWhatsApp: +{booking.contact.wa_id}"
+            f"\nCustomer asked for: {booking.preferred_time or '-'}"
+        ),
+        "start": {"dateTime": start.isoformat(), "timeZone": _EVENT_TZ},
+        "end": {"dateTime": end.isoformat(), "timeZone": _EVENT_TZ},
+    }
+
+
+def create_booking_event(conn: CalendarConnection, booking: Booking) -> bool:
+    """Create the calendar event for a confirmed booking. False when skipped."""
+    start_dt = booking.scheduled_start or booking_slot(booking)
+    if start_dt is None:
         logger.info("calendar: no date in %r, skipping event for booking %s", booking.preferred_time, booking.id)
         return False
     try:
@@ -184,26 +267,81 @@ def create_booking_event(conn: CalendarConnection, booking: Booking) -> bool:
     except Exception:
         logger.exception("calendar: token refresh failed for workspace %s", conn.workspace_id)
         return False
-    customer = booking.contact.name or booking.contact.wa_id
-    event = {
-        "summary": f"{booking.service or 'Booking'} - {customer}",
-        "description": (
-            f"Confirmed RevUp booking.\nCustomer: {customer}\nWhatsApp: +{booking.contact.wa_id}"
-            f"\nCustomer asked for: {booking.preferred_time or '-'}"
-        ),
-        "start": {"date": day.isoformat()},
-        "end": {"date": (day + timedelta(days=1)).isoformat()},
-    }
     try:
         resp = httpx.post(
             EVENTS_URL.format(calendar=conn.calendar_id or "primary"),
             headers={"Authorization": f"Bearer {token}"},
-            json=event,
+            json=_event_body(booking, start_dt),
             timeout=_TIMEOUT,
         )
         resp.raise_for_status()
     except Exception:
         logger.exception("calendar: event create failed for booking %s", booking.id)
         return False
-    logger.info("calendar: event created for booking %s on %s", booking.id, day)
+    event_id = ""
+    try:
+        candidate = resp.json().get("id", "")
+        if isinstance(candidate, str):
+            event_id = candidate
+    except Exception:
+        logger.exception("calendar: could not read event id for booking %s", booking.id)
+    if event_id and booking.google_event_id != event_id:
+        booking.google_event_id = event_id
+        booking.save(update_fields=["google_event_id"])
+    logger.info("calendar: event created for booking %s on %s", booking.id, start_dt)
+    return True
+
+
+def update_booking_event(conn: CalendarConnection, booking: Booking) -> bool:
+    """Move an existing calendar event after a reschedule. False when skipped."""
+    if not booking.google_event_id:
+        return create_booking_event(conn, booking)
+    start_dt = booking.scheduled_start or booking_slot(booking)
+    if start_dt is None:
+        return False
+    try:
+        token = valid_token(conn)
+    except Exception:
+        logger.exception("calendar: token refresh failed for workspace %s", conn.workspace_id)
+        return False
+    url = f"{EVENTS_URL.format(calendar=conn.calendar_id or 'primary')}/{booking.google_event_id}"
+    try:
+        resp = httpx.patch(
+            url,
+            headers={"Authorization": f"Bearer {token}"},
+            json=_event_body(booking, start_dt),
+            timeout=_TIMEOUT,
+        )
+        if resp.status_code in (404, 410):
+            booking.google_event_id = ""
+            booking.save(update_fields=["google_event_id"])
+            return create_booking_event(conn, booking)
+        resp.raise_for_status()
+    except Exception:
+        logger.exception("calendar: event update failed for booking %s", booking.id)
+        return False
+    logger.info("calendar: event updated for booking %s on %s", booking.id, start_dt)
+    return True
+
+
+def delete_booking_event(conn: CalendarConnection, booking: Booking) -> bool:
+    """Remove the calendar event when a booking is cancelled. Always True when gone."""
+    if not booking.google_event_id:
+        return True
+    try:
+        token = valid_token(conn)
+    except Exception:
+        logger.exception("calendar: token refresh failed for workspace %s", conn.workspace_id)
+        return False
+    url = f"{EVENTS_URL.format(calendar=conn.calendar_id or 'primary')}/{booking.google_event_id}"
+    try:
+        resp = httpx.delete(url, headers={"Authorization": f"Bearer {token}"}, timeout=_TIMEOUT)
+        if resp.status_code not in (200, 204, 404, 410):
+            resp.raise_for_status()
+    except Exception:
+        logger.exception("calendar: event delete failed for booking %s", booking.id)
+        return False
+    booking.google_event_id = ""
+    booking.save(update_fields=["google_event_id"])
+    logger.info("calendar: event deleted for booking %s", booking.id)
     return True

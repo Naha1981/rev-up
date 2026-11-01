@@ -1071,7 +1071,8 @@ class CalendarConnectionTests(TestCase):
         body = event_calls[0].kwargs["json"]
         self.assertIn("Fix leaking geyser", body["summary"])
         self.assertIn("Mr Nkosi", body["summary"])
-        self.assertIn("date", body["start"])
+        self.assertIn("dateTime", body["start"])
+        self.assertEqual(body["start"]["timeZone"], "Africa/Johannesburg")
 
     @patch("apps.receptionist.sending.send_draft", return_value=True)
     def test_confirm_without_connection_skips_calendar(self, _send):
@@ -1113,3 +1114,218 @@ class CalendarConnectionTests(TestCase):
         resp = self.client.post(f"/workspace/{self.ws.id}/receptionist/calendar/disconnect/")
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(CalendarConnection.objects.count(), 0)
+
+
+class BookingTimeSlotTests(TestCase):
+    """Confirmed bookings hold a real slot, clashes are blocked, and the
+    calendar event follows confirm, reschedule and cancel."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        from apps.members.models import WorkspaceMembership
+
+        user_model = get_user_model()
+        self.ws = _workspace("slot-plumbing")
+        self.user = user_model.objects.create_user(
+            email="slots@example.com", password="x" * 20, tos_accepted_at=timezone.now()
+        )
+        WorkspaceMembership.objects.create(user=self.user, workspace=self.ws)
+        self.profile = BusinessProfile.objects.create(
+            workspace=self.ws, industry="trades", business_name="Slot Plumbing"
+        )
+        self.channel = ZernioChannel.objects.create(workspace=self.ws, zernio_account_id="acct-slot")
+        self.contact = Contact.objects.create(workspace=self.ws, wa_id="27821112222", name="Sipho")
+
+    def _booking(self, preferred="Tuesday morning", status="requested", **kw):
+        return Booking.objects.create(
+            workspace=self.ws,
+            contact=self.contact,
+            service="Fix leaking geyser",
+            preferred_time=preferred,
+            status=status,
+            **kw,
+        )
+
+    def _connection(self):
+        return CalendarConnection.objects.create(
+            workspace=self.ws,
+            google_email="owner@example.com",
+            access_token="ya29.test",
+            refresh_token="refresh-test",
+            token_expiry=timezone.now() + timedelta(hours=1),
+            calendar_id="primary",
+        )
+
+    # --- parsing ---
+
+    def test_parse_requested_time_words_and_clocks(self):
+        from apps.receptionist.calendar_sync import parse_requested_time
+
+        self.assertEqual(parse_requested_time("Tuesday morning").hour, 9)
+        self.assertEqual(parse_requested_time("Tuesday afternoon").hour, 14)
+        self.assertEqual(parse_requested_time("Tuesday 2pm").hour, 14)
+        self.assertEqual(parse_requested_time("Tuesday 2:30 pm").hour, 14)
+        self.assertEqual(parse_requested_time("Tuesday 2:30 pm").minute, 30)
+        self.assertEqual(parse_requested_time("Tuesday 14:30").hour, 14)
+        self.assertEqual(parse_requested_time("Tuesday 09h15").hour, 9)
+        self.assertIsNone(parse_requested_time("Tuesday"))
+
+    def test_booking_slot_combines_day_and_time(self):
+        from apps.receptionist.calendar_sync import booking_slot
+
+        booking = self._booking(preferred="Tuesday 2pm")
+        slot = booking_slot(booking, today=date(2026, 11, 1))
+        self.assertEqual(slot.date(), date(2026, 11, 3))
+        self.assertEqual(slot.hour, 14)
+        self.assertEqual(slot.utcoffset().total_seconds(), 2 * 3600)
+
+    def test_booking_slot_defaults_to_nine_am(self):
+        from apps.receptionist.calendar_sync import booking_slot
+
+        booking = self._booking(preferred="Tuesday")
+        slot = booking_slot(booking, today=date(2026, 11, 1))
+        self.assertEqual(slot.hour, 9)
+
+    def test_booking_slot_none_without_a_day(self):
+        from apps.receptionist.calendar_sync import booking_slot
+
+        booking = self._booking(preferred="whenever suits you")
+        self.assertIsNone(booking_slot(booking))
+
+    # --- confirm ---
+
+    @patch("apps.receptionist.sending.send_draft", return_value=True)
+    def test_confirm_saves_the_slot(self, _send):
+        self.client.force_login(self.user)
+        booking = self._booking(preferred="tomorrow 10:00")
+        resp = self.client.post(f"/workspace/{self.ws.id}/receptionist/bookings/{booking.id}/confirm/")
+        self.assertEqual(resp.status_code, 302)
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, "confirmed")
+        self.assertIsNotNone(booking.scheduled_start)
+        self.assertEqual(timezone.localtime(booking.scheduled_start).hour, 10)
+
+    @patch("apps.receptionist.sending.send_draft", return_value=True)
+    def test_confirm_blocks_a_clashing_slot(self, _send):
+        self.client.force_login(self.user)
+        from apps.receptionist.calendar_sync import booking_slot
+
+        first = self._booking(preferred="tomorrow 10:00", status="confirmed")
+        first.scheduled_start = booking_slot(first)
+        first.save(update_fields=["scheduled_start"])
+        second = self._booking(preferred="tomorrow 10:30")
+        resp = self.client.post(f"/workspace/{self.ws.id}/receptionist/bookings/{second.id}/confirm/", follow=True)
+        second.refresh_from_db()
+        self.assertEqual(second.status, "requested")
+        self.assertContains(resp, "already taken")
+
+    @patch("apps.receptionist.sending.send_draft", return_value=True)
+    def test_confirm_allows_a_free_slot_on_the_same_day(self, _send):
+        self.client.force_login(self.user)
+        from apps.receptionist.calendar_sync import booking_slot
+
+        first = self._booking(preferred="tomorrow 10:00", status="confirmed")
+        first.scheduled_start = booking_slot(first)
+        first.save(update_fields=["scheduled_start"])
+        second = self._booking(preferred="tomorrow 2pm")
+        self.client.post(f"/workspace/{self.ws.id}/receptionist/bookings/{second.id}/confirm/")
+        second.refresh_from_db()
+        self.assertEqual(second.status, "confirmed")
+
+    # --- calendar events ---
+
+    @patch("apps.receptionist.calendar_sync.httpx.post")
+    @patch("apps.receptionist.sending.send_draft", return_value=True)
+    def test_confirm_creates_a_timed_event_and_stores_its_id(self, _send, mock_post):
+        self.client.force_login(self.user)
+        self._connection()
+        mock_post.return_value = Mock(status_code=200, json=lambda: {"id": "evt-123"})
+        mock_post.return_value.raise_for_status = lambda: None
+        booking = self._booking(preferred="tomorrow 10:00")
+        self.client.post(f"/workspace/{self.ws.id}/receptionist/bookings/{booking.id}/confirm/")
+        booking.refresh_from_db()
+        self.assertEqual(booking.google_event_id, "evt-123")
+        body = mock_post.call_args.kwargs["json"]
+        self.assertIn("dateTime", body["start"])
+        self.assertEqual(body["start"]["timeZone"], "Africa/Johannesburg")
+        self.assertEqual(
+            body["end"]["dateTime"], timezone.localtime(booking.scheduled_start + timedelta(minutes=60)).isoformat()
+        )
+
+    @patch("apps.receptionist.calendar_sync.httpx.patch")
+    def test_reschedule_moves_the_calendar_event(self, mock_patch):
+        self.client.force_login(self.user)
+        self._connection()
+        mock_patch.return_value = Mock(status_code=200)
+        mock_patch.return_value.raise_for_status = lambda: None
+        booking = self._booking(preferred="tomorrow 10:00", status="confirmed", google_event_id="evt-9")
+        from apps.receptionist.calendar_sync import booking_slot
+
+        booking.scheduled_start = booking_slot(booking)
+        booking.save(update_fields=["scheduled_start"])
+        resp = self.client.post(
+            f"/workspace/{self.ws.id}/receptionist/bookings/{booking.id}/reschedule/",
+            {"new_time": "tomorrow 3pm"},
+        )
+        self.assertEqual(resp.status_code, 302)
+        booking.refresh_from_db()
+        self.assertEqual(timezone.localtime(booking.scheduled_start).hour, 15)
+        self.assertIn("evt-9", mock_patch.call_args.args[0])
+
+    @patch("apps.receptionist.calendar_sync.httpx.patch")
+    def test_reschedule_blocks_a_clash(self, mock_patch):
+        self.client.force_login(self.user)
+        self._connection()
+        from apps.receptionist.calendar_sync import booking_slot
+
+        first = self._booking(preferred="tomorrow 10:00", status="confirmed")
+        first.scheduled_start = booking_slot(first)
+        first.save(update_fields=["scheduled_start"])
+        second = self._booking(preferred="tomorrow 2pm", status="confirmed", google_event_id="evt-2")
+        second.scheduled_start = booking_slot(second)
+        second.save(update_fields=["scheduled_start"])
+        resp = self.client.post(
+            f"/workspace/{self.ws.id}/receptionist/bookings/{second.id}/reschedule/",
+            {"new_time": "tomorrow 10:30"},
+            follow=True,
+        )
+        second.refresh_from_db()
+        self.assertEqual(timezone.localtime(second.scheduled_start).hour, 14)
+        self.assertContains(resp, "already taken")
+        mock_patch.assert_not_called()
+
+    def test_reschedule_rejects_text_without_a_time(self):
+        self.client.force_login(self.user)
+        booking = self._booking(status="confirmed")
+        resp = self.client.post(
+            f"/workspace/{self.ws.id}/receptionist/bookings/{booking.id}/reschedule/",
+            {"new_time": "whenever"},
+            follow=True,
+        )
+        self.assertContains(resp, "could not read a date or time")
+
+    @patch("apps.receptionist.calendar_sync.httpx.delete")
+    def test_cancel_removes_the_calendar_event(self, mock_delete):
+        self.client.force_login(self.user)
+        self._connection()
+        mock_delete.return_value = Mock(status_code=204)
+        mock_delete.return_value.raise_for_status = lambda: None
+        booking = self._booking(status="confirmed", google_event_id="evt-7")
+        self.client.post(f"/workspace/{self.ws.id}/receptionist/bookings/{booking.id}/cancel/")
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, "cancelled")
+        self.assertEqual(booking.google_event_id, "")
+        self.assertIn("evt-7", mock_delete.call_args.args[0])
+
+    @patch("apps.receptionist.calendar_sync.httpx.delete")
+    def test_cancel_treats_a_missing_event_as_gone(self, mock_delete):
+        self._connection()
+        mock_delete.return_value = Mock(status_code=404)
+        booking = self._booking(status="confirmed", google_event_id="evt-gone")
+        from apps.receptionist import calendar_sync
+
+        conn = CalendarConnection.objects.get(workspace=self.ws)
+        self.assertTrue(calendar_sync.delete_booking_event(conn, booking))
+        booking.refresh_from_db()
+        self.assertEqual(booking.google_event_id, "")

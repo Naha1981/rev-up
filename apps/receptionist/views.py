@@ -212,8 +212,22 @@ def booking_action(request, workspace_id, booking_id, action):
     workspace = _get_workspace(request, workspace_id)
     booking = get_object_or_404(Booking, id=booking_id, workspace=workspace)
     if action == "confirm" and booking.status == Booking.Status.REQUESTED:
+        from . import calendar_sync
+
+        slot = calendar_sync.booking_slot(booking)
+        if slot is not None:
+            clash = calendar_sync.slot_conflicts(workspace, slot, booking.duration_minutes)
+            if clash is not None:
+                who = clash.contact.name or clash.contact.wa_id
+                messages.error(
+                    request,
+                    f"That time is already taken by {who} ({clash.service or 'booking'} "
+                    f"at {timezone.localtime(clash.scheduled_start):%H:%M}). Use Change time to pick another slot.",
+                )
+                return redirect("receptionist:bookings", workspace_id=workspace.id)
+            booking.scheduled_start = slot
         booking.status = Booking.Status.CONFIRMED
-        booking.save(update_fields=["status"])
+        booking.save(update_fields=["status", "scheduled_start"])
         when = booking.preferred_time or "the requested time"
         what = booking.service or "your booking"
         reply = Message.objects.create(
@@ -232,8 +246,6 @@ def booking_action(request, workspace_id, booking_id, action):
                 send_draft(channel, booking.contact, reply)
             except Exception:
                 logger.exception("receptionist: booking confirmation send failed for %s", booking.contact.id)
-        from . import calendar_sync
-
         conn = CalendarConnection.objects.filter(workspace=workspace).first()
         if conn is not None:
             calendar_sync.create_booking_event(conn, booking)
@@ -253,7 +265,52 @@ def booking_action(request, workspace_id, booking_id, action):
     elif action == "cancel" and booking.status in (Booking.Status.REQUESTED, Booking.Status.CONFIRMED):
         booking.status = Booking.Status.CANCELLED
         booking.save(update_fields=["status"])
-        messages.success(request, "Booking cancelled.")
+        from . import calendar_sync
+
+        conn = CalendarConnection.objects.filter(workspace=workspace).first()
+        if conn is not None:
+            calendar_sync.delete_booking_event(conn, booking)
+        messages.success(request, "Booking cancelled and removed from the calendar.")
+    elif action == "reschedule" and booking.status in (Booking.Status.REQUESTED, Booking.Status.CONFIRMED):
+        from . import calendar_sync
+
+        new_time = (request.POST.get("new_time") or "").strip()
+        slot = (
+            calendar_sync.booking_slot(
+                booking,
+            )
+            if not new_time
+            else None
+        )
+        if new_time:
+            booking.preferred_time = new_time
+            slot = calendar_sync.booking_slot(booking)
+        if slot is None:
+            messages.error(
+                request,
+                "I could not read a date or time in that. Try something like 'Tuesday 2pm' or '5 Nov 09:00'.",
+            )
+            return redirect("receptionist:bookings", workspace_id=workspace.id)
+        clash = calendar_sync.slot_conflicts(workspace, slot, booking.duration_minutes, exclude_id=booking.id)
+        if clash is not None:
+            who = clash.contact.name or clash.contact.wa_id
+            messages.error(
+                request,
+                f"That time is already taken by {who} ({clash.service or 'booking'} "
+                f"at {timezone.localtime(clash.scheduled_start):%H:%M}). Pick another slot.",
+            )
+            return redirect("receptionist:bookings", workspace_id=workspace.id)
+        booking.scheduled_start = slot
+        booking.save(update_fields=["preferred_time", "scheduled_start"])
+        if booking.status == Booking.Status.CONFIRMED:
+            conn = CalendarConnection.objects.filter(workspace=workspace).first()
+            if conn is not None:
+                calendar_sync.update_booking_event(conn, booking)
+            messages.success(
+                request, f"Booking moved to {timezone.localtime(slot):%a %-d %b, %H:%M} and the calendar updated."
+            )
+        else:
+            messages.success(request, f"Time saved: {timezone.localtime(slot):%a %-d %b, %H:%M}.")
     return redirect("receptionist:bookings", workspace_id=workspace.id)
 
 
