@@ -274,7 +274,9 @@ SITE_ID = 1
 # django-allauth
 ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*"]
-ACCOUNT_EMAIL_VERIFICATION = env("ACCOUNT_EMAIL_VERIFICATION", default="mandatory")
+# Product rule (owner, 1 Nov 2026): email confirmation must never gate or
+# block signup/login. The confirmation mail still goes out; verifying is optional.
+ACCOUNT_EMAIL_VERIFICATION = env("ACCOUNT_EMAIL_VERIFICATION", default="optional")
 # Abuse protection: throttle credential stuffing, signup spam and email-bombing.
 # Format is allauth's "<count>/<window>[/scope]" (m/h/d windows, ip/user/key scopes).
 ACCOUNT_RATE_LIMITS = {
