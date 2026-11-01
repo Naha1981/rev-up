@@ -348,6 +348,23 @@ class BookingTests(TestCase):
         mock_send.assert_called_once_with(self.channel, booking.contact, reply)
 
     @patch("apps.receptionist.sending.send_draft", return_value=True)
+    def test_confirm_banner_says_customer_told_when_sent(self, mock_send):
+        self.client.force_login(self.user)
+        booking = self._booking()
+        resp = self.client.post(f"/workspace/{self.ws.id}/receptionist/bookings/{booking.id}/confirm/", follow=True)
+        self.assertContains(resp, "Booking confirmed and the customer has been told on WhatsApp.")
+
+    @patch("apps.receptionist.sending.send_draft", return_value=False)
+    def test_confirm_banner_says_held_when_guard_blocks(self, mock_send):
+        self.client.force_login(self.user)
+        booking = self._booking()
+        resp = self.client.post(f"/workspace/{self.ws.id}/receptionist/bookings/{booking.id}/confirm/", follow=True)
+        self.assertContains(resp, "The WhatsApp confirmation was not sent")
+        self.assertNotContains(resp, "the customer has been told on WhatsApp")
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, "confirmed")
+
+    @patch("apps.receptionist.sending.send_draft", return_value=True)
     def test_confirm_ignored_when_not_requested(self, mock_send):
         self.client.force_login(self.user)
         booking = self._booking(status="cancelled")

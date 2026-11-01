@@ -239,17 +239,24 @@ def booking_action(request, workspace_id, booking_id, action):
             is_draft=True,
         )
         channel = ZernioChannel.objects.filter(workspace=workspace).first()
+        delivered = False
         if channel is not None:
             from .sending import send_draft
 
             try:
-                send_draft(channel, booking.contact, reply)
+                delivered = send_draft(channel, booking.contact, reply)
             except Exception:
                 logger.exception("receptionist: booking confirmation send failed for %s", booking.contact.id)
         conn = CalendarConnection.objects.filter(workspace=workspace).first()
         if conn is not None:
             calendar_sync.create_booking_event(conn, booking)
-        messages.success(request, "Booking confirmed and the customer has been told on WhatsApp.")
+        if delivered:
+            messages.success(request, "Booking confirmed and the customer has been told on WhatsApp.")
+        else:
+            messages.success(
+                request,
+                "Booking confirmed. The WhatsApp confirmation was not sent - it is saved as a draft in the inbox.",
+            )
     elif action == "done" and booking.status == Booking.Status.CONFIRMED:
         booking.status = Booking.Status.DONE
         booking.save(update_fields=["status"])
