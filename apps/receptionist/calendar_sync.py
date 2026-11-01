@@ -235,8 +235,11 @@ def slot_conflicts(workspace, start: datetime, duration_minutes: int, exclude_id
     if exclude_id is not None:
         others = others.exclude(id=exclude_id)
     for other in others:
-        other_end = other.scheduled_start + timedelta(minutes=other.duration_minutes)
-        if other.scheduled_start < end and start < other_end:
+        other_start = other.scheduled_start
+        if other_start is None:  # narrowed by the isnull filter; keeps mypy honest
+            continue
+        other_end = other_start + timedelta(minutes=other.duration_minutes)
+        if other_start < end and start < other_end:
             return other
     return None
 
