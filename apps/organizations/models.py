@@ -39,6 +39,13 @@ class Organization(models.Model):
 
     PLAN_PRICES_RAND = {"starter": 499, "growth": 999, "business-pro": 1999}
 
+    # Per-tier monthly allowances (his call, 1 Nov 2026): the AI receptionist
+    # costs real money per reply, so each tier carries a monthly reply
+    # allowance and a connected-channel limit. Past the allowance the
+    # conversation flips to a human instead of burning shared quota.
+    PLAN_MONTHLY_REPLIES = {"starter": 500, "growth": 1000, "business-pro": 2500}
+    PLAN_CHANNEL_LIMITS = {"starter": 1, "growth": 2, "business-pro": 3}
+
     class SubscriptionStatus(models.TextChoices):
         TRIAL = "trial", "Free trial"
         ACTIVE = "active", "Active"
@@ -64,6 +71,12 @@ class Organization(models.Model):
 
             self.trial_started_at = timezone.now()
         super().save(*args, **kwargs)
+
+    def monthly_reply_allowance(self) -> int:
+        return self.PLAN_MONTHLY_REPLIES.get(self.plan, self.PLAN_MONTHLY_REPLIES["starter"])
+
+    def channel_allowance(self) -> int:
+        return self.PLAN_CHANNEL_LIMITS.get(self.plan, self.PLAN_CHANNEL_LIMITS["starter"])
 
     def trial_state(self, now=None):
         """(status, day 1-based, days_left). Active orgs short-circuit."""

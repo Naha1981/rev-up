@@ -10,6 +10,13 @@ from apps.members.models import OrgMembership, WorkspaceMembership
 
 from .models import Workspace
 
+
+def _usage_snapshot(org):
+    from apps.receptionist.limits import usage_snapshot
+
+    return usage_snapshot(org)
+
+
 PLAN_CARDS = [
     {
         "id": "starter",
@@ -288,5 +295,6 @@ def workspace_billing(request, workspace_id):
             "trial_day": day,
             "days_left": days_left,
             "pay_url": f"https://wa.me/{number}?text={quote_plus(text)}",
+            "usage": _usage_snapshot(org),
         },
     )

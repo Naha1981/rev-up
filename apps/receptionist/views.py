@@ -468,7 +468,6 @@ def connect_whatsapp(request, workspace_id):
     """Start the hosted WhatsApp connect flow for this workspace."""
     workspace = _get_workspace(request, workspace_id)
     from apps.social_accounts.zernio_connect import (
-        CAPACITY_MESSAGE,
         ZernioCapacityError,
         start_zernio_connect,
         zernio_ready,
@@ -480,8 +479,8 @@ def connect_whatsapp(request, workspace_id):
         return redirect("receptionist:setup", workspace_id=workspace.id)
     try:
         return start_zernio_connect(request, workspace, "whatsapp")
-    except ZernioCapacityError:
-        messages.warning(request, CAPACITY_MESSAGE)
+    except ZernioCapacityError as exc:
+        messages.warning(request, exc.user_message)
         return redirect("receptionist:setup", workspace_id=workspace.id)
     except ZernioError:
         messages.error(request, "Could not start the connection. Please try again.")

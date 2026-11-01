@@ -102,6 +102,17 @@ def handle_inbox_message(payload: dict) -> None:
     # Per-tenant draft budget: one abusive or runaway tenant must not burn the
     # shared free AI quota. Past the cap the conversation stays in the inbox
     # flagged for a human instead of getting an AI reply.
+    # Tier allowance first: past the org's monthly reply allowance the
+    # conversation flips to a human - no AI spend, no silent failure.
+    from .limits import replies_over_allowance
+
+    if replies_over_allowance(workspace.organization):
+        if not contact.needs_human:
+            contact.needs_human = True
+            contact.save(update_fields=["needs_human", "updated_at"])
+        logger.info("receptionist: workspace %s at monthly reply allowance, human flagged", workspace.id)
+        return
+
     max_drafts = int(getattr(settings, "RECEPTIONIST_MAX_DRAFTS_PER_DAY", 300))
     today_count = Message.objects.filter(
         workspace=workspace,

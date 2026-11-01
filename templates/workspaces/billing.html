@@ -36,6 +36,22 @@
   </div>
 
   <div class="mt-5 rounded-2xl border border-gray-200 bg-white px-4 py-4">
+    <div class="rounded-xl border border-gray-200 bg-white px-4 py-3 space-y-2">
+      <div class="flex justify-between text-sm">
+        <span class="text-gray-600">AI replies this month</span>
+        <span class="font-medium text-gray-900">{{ usage.replies_used }} of {{ usage.replies_limit }}</span>
+      </div>
+      <div class="h-1.5 rounded-full bg-gray-100">
+        <div class="h-1.5 rounded-full {% if usage.replies_pct >= 100 %}bg-red-500{% elif usage.near_limit %}bg-amber-500{% else %}bg-blue-600{% endif %}" style="width: {{ usage.replies_pct }}%"></div>
+      </div>
+      <div class="flex justify-between text-sm">
+        <span class="text-gray-600">Connected channels</span>
+        <span class="font-medium text-gray-900">{{ usage.channels_used }} of {{ usage.channels_limit }}</span>
+      </div>
+      {% if usage.near_limit %}
+      <p class="text-xs text-amber-700">Close to your plan limit. Upgrade below to keep the receptionist answering.</p>
+      {% endif %}
+    </div>
     <p class="text-sm text-gray-600">No setup fee. Cancel any time.</p>
     <div class="mt-3 flex items-center justify-between">
       <span class="text-sm text-gray-500">Your payment reference</span>

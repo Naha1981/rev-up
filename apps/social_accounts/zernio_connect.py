@@ -38,7 +38,15 @@ CAPACITY_MESSAGE = "New account connections are full right now. Your setup is sa
 
 
 class ZernioCapacityError(Exception):
-    """The connected-account plan limit is reached; connect must wait."""
+    """A connection cap is reached; connect must wait.
+
+    user_message distinguishes the shared-provider cap (default, try later)
+    from the workspace's own tier channel allowance (upgrade path).
+    """
+
+    def __init__(self, *args, user_message: str | None = None):
+        super().__init__(*args)
+        self.user_message = user_message or CAPACITY_MESSAGE
 
 
 # Pending connect state, stashed between the grid POST and the callback.
@@ -216,6 +224,18 @@ def start_zernio_connect(request, workspace, platform: str, *, reconnect_account
     slug = ZERNIO_PLATFORM_SLUGS[platform]
     if reconnect_account is None and zernio_slots_full():
         raise ZernioCapacityError("connected-account plan limit reached")
+    if reconnect_account is None:
+        from apps.receptionist.limits import channels_over_allowance
+
+        if channels_over_allowance(workspace.organization):
+            limit = workspace.organization.channel_allowance()
+            raise ZernioCapacityError(
+                "tier channel allowance reached",
+                user_message=(
+                    f"Your plan includes {limit} connected channel{'s' if limit != 1 else ''}. "
+                    "Disconnect one or upgrade your plan to connect more."
+                ),
+            )
     profile = get_or_create_workspace_profile(workspace)
     redirect_url = request.build_absolute_uri(reverse("social_accounts:zernio_callback"))
     with ZernioClient() as client:
@@ -256,8 +276,8 @@ def connect_zernio(request, workspace_id, platform):
         return redirect("social_accounts:connect", workspace_id=workspace_id)
     try:
         return start_zernio_connect(request, request.workspace, platform)
-    except ZernioCapacityError:
-        messages.warning(request, CAPACITY_MESSAGE)
+    except ZernioCapacityError as exc:
+        messages.warning(request, exc.user_message)
         return redirect("social_accounts:connect", workspace_id=workspace_id)
     except ZernioError:
         logger.exception("Zernio connect failed to start for %s", platform)
