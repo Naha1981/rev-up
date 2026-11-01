@@ -1,0 +1,28 @@
+name: Run due background jobs
+
+# Free timer inside the existing repo: every 15 minutes, poke the app's
+# internal endpoint so due background tasks (review follow-ups, inbox
+# nudges) run without an always-on worker. The endpoint rejects calls
+# without the token (404), and the token only ever lives in this repo's
+# Actions secrets and the app's environment.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  run-due:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Trigger due jobs
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer ${{ secrets.INTERNAL_CRON_TOKEN }}" \
+            --max-time 30 \
+            https://revup.nahalabs.co.za/internal/run-due/)
+          echo "run-due responded: $status"
+          test "$status" = "200"
