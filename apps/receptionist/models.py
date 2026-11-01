@@ -53,6 +53,12 @@ class BusinessProfile(models.Model):
     pricing_data = models.JSONField(default=dict, blank=True, help_text="Price list in ZAR")
     banking_details = models.JSONField(default=dict, blank=True)
     payment_link_url = models.URLField(blank=True)
+    google_review_url = models.URLField(
+        blank=True, help_text="The business's own Google review link, used in review requests"
+    )
+    review_requests_enabled = models.BooleanField(
+        default=False, help_text="Owner switch: send the check-in, review request and reminder pipeline"
+    )
     emergency_contact_phone = models.CharField(max_length=32, blank=True)
     call_out_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     custom_rules = models.TextField(blank=True)
@@ -102,6 +108,16 @@ class Contact(models.Model):
     name = models.CharField(max_length=120, blank=True)
     tags = models.JSONField(default=list, blank=True)
     needs_human = models.BooleanField(default=False)
+    opted_out = models.BooleanField(
+        default=False, help_text="Customer replied STOP: no automated messages without fresh consent"
+    )
+    review_status = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        help_text="Review pipeline position: check_in_sent, review_requested, clicked, issue_flagged, unsubscribed",
+    )
+    issue_note = models.TextField(blank=True, help_text="Latest issue flagged from a check-in reply")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -271,3 +287,56 @@ class TradeDispatch(models.Model):
     call_out_fee_quoted = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     status = models.CharField(max_length=20, choices=IntakeStatus.choices, default=IntakeStatus.NEW)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class ReviewLink(models.Model):
+    """Tracked short link to the business's Google review page (/r/<code>)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        "workspaces.Workspace", on_delete=models.CASCADE, related_name="receptionist_review_links"
+    )
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="review_links")
+    short_code = models.CharField(max_length=12, unique=True)
+    original_url = models.URLField()
+    clicked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"/r/{self.short_code} -> {self.original_url}"
+
+
+class ReviewEvent(models.Model):
+    """One scheduled pipeline step: check-in, review request or reminder."""
+
+    class Step(models.TextChoices):
+        CHECK_IN = "check_in", "Check-in"
+        REVIEW_REQUEST = "review_request", "Review request"
+        REMINDER = "reminder", "Reminder"
+
+    class Status(models.TextChoices):
+        SCHEDULED = "scheduled", "Scheduled"
+        SENDING = "sending", "Sending"
+        SENT = "sent", "Sent"
+        CANCELLED = "cancelled", "Cancelled"
+        FAILED = "failed", "Failed"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        "workspaces.Workspace", on_delete=models.CASCADE, related_name="receptionist_review_events"
+    )
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="review_events")
+    booking = models.ForeignKey(Booking, on_delete=models.SET_NULL, null=True, blank=True, related_name="review_events")
+    step = models.CharField(max_length=16, choices=Step.choices)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.SCHEDULED)
+    scheduled_for = models.DateTimeField()
+    sent_at = models.DateTimeField(null=True, blank=True)
+    error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["scheduled_for"]
+        indexes = [models.Index(fields=["status", "scheduled_for"], name="reviewevent_due")]
+
+    def __str__(self) -> str:
+        return f"{self.step} for {self.contact.wa_id} at {self.scheduled_for} ({self.status})"

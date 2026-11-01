@@ -68,6 +68,16 @@
     <label class="block text-sm font-medium text-gray-700">Payment link
       <input name="payment_link_url" value="{{ profile.payment_link_url|default:"" }}" class="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5" />
     </label>
+    <label class="block text-sm font-medium text-gray-700">Google review link
+      <input name="google_review_url" value="{{ profile.google_review_url|default:"" }}" placeholder="https://g.page/r/..." class="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5" />
+    </label>
+    <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+      <input type="checkbox" name="review_requests_enabled" value="1" {% if profile and profile.review_requests_enabled %}checked{% endif %} class="rounded border-gray-300" />
+      Ask customers for a Google review after each completed booking
+    </label>
+    {% if not reviews_available %}
+    <p class="-mt-2 text-xs text-gray-500">Review requests are available on Growth and Business Pro.</p>
+    {% endif %}
     <label class="block text-sm font-medium text-gray-700">Emergency contact number
       <input name="emergency_contact_phone" value="{{ profile.emergency_contact_phone|default:"" }}" class="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5" />
     </label>

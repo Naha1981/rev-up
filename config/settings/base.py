@@ -502,6 +502,11 @@ if SENTRY_DSN:
 ZERNIO_ENABLED = env.bool("ZERNIO_ENABLED", default=False)
 ZERNIO_API_KEY = env("ZERNIO_API_KEY", default="")
 ZERNIO_BASE_URL = env("ZERNIO_BASE_URL", default="https://zernio.com/api/v1")
+
+# Review-request pipeline after a done booking (check-in, review ask,
+# reminder). Real sends stay OFF until explicitly enabled here AND per
+# workspace on the receptionist setup page.
+REVIEW_AUTOMATION_ENABLED = env.bool("REVIEW_AUTOMATION_ENABLED", default=False)
 ZERNIO_WEBHOOK_SECRET = env("ZERNIO_WEBHOOK_SECRET", default="")
 
 # Platform credentials env vars (cloud version)

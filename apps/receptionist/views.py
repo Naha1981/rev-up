@@ -97,6 +97,8 @@ def setup(request, workspace_id):
             "operating_hours": {"text": hours} if hours else {},
             "pricing_data": pricing,
             "payment_link_url": (request.POST.get("payment_link_url") or "").strip(),
+            "google_review_url": (request.POST.get("google_review_url") or "").strip(),
+            "review_requests_enabled": request.POST.get("review_requests_enabled") == "1",
             "emergency_contact_phone": (request.POST.get("emergency_contact_phone") or "").strip(),
             "custom_rules": (request.POST.get("custom_rules") or "").strip(),
         }
@@ -148,6 +150,7 @@ def setup(request, workspace_id):
             "hours_text": hours_text,
             "channel": channel,
             "wa_accounts": wa_accounts,
+            "reviews_available": _reviews_available(workspace),
             "calendar": calendar,
             "calendar_ready": calendar_sync.configured(),
             "connect_ready": connect_ready,
@@ -235,6 +238,18 @@ def booking_action(request, workspace_id, booking_id, action):
         if conn is not None:
             calendar_sync.create_booking_event(conn, booking)
         messages.success(request, "Booking confirmed and the customer has been told on WhatsApp.")
+    elif action == "done" and booking.status == Booking.Status.CONFIRMED:
+        booking.status = Booking.Status.DONE
+        booking.save(update_fields=["status"])
+        # A finished job starts the review pipeline (check-in, review
+        # request, reminder). A pipeline hiccup must never break the board.
+        try:
+            from . import reviews as _reviews
+
+            _reviews.start_pipeline(booking)
+        except Exception:
+            logger.exception("reviews: pipeline start failed for booking %s", booking.id)
+        messages.success(request, "Booking marked done.")
     elif action == "cancel" and booking.status in (Booking.Status.REQUESTED, Booking.Status.CONFIRMED):
         booking.status = Booking.Status.CANCELLED
         booking.save(update_fields=["status"])
@@ -485,3 +500,26 @@ def connect_whatsapp(request, workspace_id):
     except ZernioError:
         messages.error(request, "Could not start the connection. Please try again.")
         return redirect("receptionist:setup", workspace_id=workspace.id)
+
+
+def _reviews_available(workspace) -> bool:
+    organization = getattr(workspace, "organization", None)
+    if organization is None:
+        return True
+    from .reviews import REVIEW_PLANS
+
+    return organization.plan in REVIEW_PLANS
+
+
+def review_redirect(request, code: str):
+    """Public tracked review link: record the click, then send the customer
+    to the business's own Google review page."""
+    from django.http import HttpResponseNotFound
+    from django.shortcuts import redirect as _redir
+
+    from . import reviews as _reviews
+
+    url = _reviews.record_click(code)
+    if url is None:
+        return HttpResponseNotFound("Link not found")
+    return _redir(url)

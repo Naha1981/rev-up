@@ -81,6 +81,19 @@ def handle_inbox_message(payload: dict) -> None:
             zernio_message_id=zernio_message_id,
         )
 
+    # Opt-out keywords cancel the review pipeline immediately and block any
+    # restart without fresh consent; the stored inbound message is the record.
+    from . import reviews as _reviews
+
+    if body.strip().upper() in _reviews.OPT_OUT_KEYWORDS:
+        _reviews.unsubscribe_contact(contact)
+        return
+
+    # A negative reply right after the pipeline check-in flags an issue for
+    # the owner. It never suppresses the review request (Google policy).
+    if contact.review_status == "check_in_sent" and _reviews.looks_negative(body):
+        _reviews.flag_issue(contact, body)
+
     # A customer who wrote again is the safest moment to clear any held
     # replies (send budget was exhausted, or the provider was down).
     from django.utils import timezone as _tz
