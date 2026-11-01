@@ -10,6 +10,7 @@ from django.views.static import serve
 
 from apps.accounts.views import health_check
 from apps.common.run_due import run_due
+from apps.productanalytics import views as productanalytics_views
 from apps.receptionist import views as receptionist_views
 from apps.workspaces import payfast_views
 
@@ -28,6 +29,7 @@ urlpatterns = [
     path("health/", health_check, name="health_check"),
     path("internal/run-due/", run_due, name="internal_run_due"),
     path("billing/payfast/notify/", payfast_views.notify, name="payfast_notify"),
+    path("product-analytics/", productanalytics_views.dashboard, name="product_analytics"),
     path("billing/payfast/return/", payfast_views.payfast_return, name="payfast_return"),
     path("billing/payfast/cancel/", payfast_views.payfast_cancel, name="payfast_cancel"),
     path("r/<str:code>/", receptionist_views.review_redirect, name="review_redirect"),

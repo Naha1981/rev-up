@@ -54,6 +54,7 @@ LOCAL_APPS = [
     "apps.accounts",
     "apps.organizations",
     "apps.workspaces",
+    "apps.productanalytics",
     "apps.members",
     "apps.settings_manager",
     "apps.credentials",
@@ -107,6 +108,7 @@ MIDDLEWARE = [
     "csp.middleware.CSPMiddleware",
     "apps.api.usage.CountUncountedApiCallsMiddleware",
     "apps.common.run_due.RequestTaskDrainMiddleware",
+    "apps.productanalytics.middleware.ProductAnalyticsMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"

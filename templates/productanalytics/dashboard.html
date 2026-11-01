@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product analytics</title>
+<style>
+  body { font-family: -apple-system, Helvetica, Arial, sans-serif; margin: 2rem auto; max-width: 720px; color: #1a1a1a; }
+  h1 { font-size: 1.4rem; }
+  h2 { font-size: 1rem; color: #555; margin-top: 2rem; }
+  table { border-collapse: collapse; width: 100%; margin-top: .5rem; }
+  td, th { text-align: left; padding: .4rem .6rem; border-bottom: 1px solid #eee; font-size: .9rem; }
+  .cards { display: flex; gap: 1rem; }
+  .card { flex: 1; border: 1px solid #e5e5e5; border-radius: 12px; padding: 1rem; }
+  .num { font-size: 1.6rem; font-weight: 600; }
+  .label { color: #777; font-size: .8rem; }
+</style>
+</head>
+<body>
+<h1>Product analytics (last 30 days)</h1>
+{% for label, c in cards %}
+{% endfor %}
+<div class="cards">
+  <div class="card"><div class="num">{{ today.views }}</div><div class="label">views today</div></div>
+  <div class="card"><div class="num">{{ today.uniques }}</div><div class="label">visitors today</div></div>
+  <div class="card"><div class="num">{{ today.signups }}</div><div class="label">signups today</div></div>
+</div>
+<div class="cards" style="margin-top:1rem">
+  <div class="card"><div class="num">{{ week.views }}</div><div class="label">views, 7 days</div></div>
+  <div class="card"><div class="num">{{ month.views }}</div><div class="label">views, 30 days</div></div>
+  <div class="card"><div class="num">{{ month.signups }}</div><div class="label">signups, 30 days</div></div>
+</div>
+<h2>Top pages</h2>
+<table>{% for p in top_pages %}<tr><td>{{ p.path }}</td><td>{{ p.n }}</td></tr>{% empty %}<tr><td>No visits yet</td></tr>{% endfor %}</table>
+<h2>Per day</h2>
+<table><tr><th>Day</th><th>Views</th><th>Visitors</th></tr>{% for d in daily %}<tr><td>{{ d.day }}</td><td>{{ d.n }}</td><td>{{ d.uniques }}</td></tr>{% empty %}<tr><td>No visits yet</td></tr>{% endfor %}</table>
+</body>
+</html>
