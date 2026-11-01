@@ -129,7 +129,12 @@
                 in {{ org_membership.organization.name }}
             </span>
         </div>
-    </div>
+    
+        <div class="mb-4">
+          <a href="{% url 'accounts:export_my_data' %}" class="text-sm underline" style="color: var(--primary);">Download my data</a>
+          <p class="text-xs mt-1" style="color: var(--text-tertiary);">Get everything we hold about your account as a JSON file (POPIA).</p>
+        </div>
+</div>
     {% endif %}    
 
     <!-- Divider -->
