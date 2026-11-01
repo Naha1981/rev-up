@@ -132,12 +132,24 @@ def get_or_create_workspace_profile(workspace) -> WorkspaceProviderProfile:
     return record
 
 
+# Reverse of ZERNIO_PLATFORM_SLUGS for the sync path. instagram_login shares
+# the "instagram" slug (same hosted flow), WhatsApp numbers belong to the
+# receptionist, and linkedin needs the metadata split, so those three are
+# handled explicitly below.
+_REVERSE_ZERNIO_SLUGS = {
+    slug: platform
+    for platform, slug in ZERNIO_PLATFORM_SLUGS.items()
+    if platform not in ("instagram_login", "whatsapp", "linkedin_personal", "linkedin_company")
+}
+
+
 def _our_platform_for(zernio_account: dict) -> str | None:
     """Our platform value for a Zernio account object, or None to skip it.
 
     LinkedIn comes back as one "linkedin" platform; Zernio marks organization
     accounts in metadata.organizationInfo, which is what splits our
-    (Company Page) from (Personal Profile).
+    (Company Page) from (Personal Profile). WhatsApp numbers power the
+    receptionist, never the social grid.
     """
     platform = zernio_account.get("platform", "")
     if platform == "linkedin":
@@ -145,9 +157,9 @@ def _our_platform_for(zernio_account: dict) -> str | None:
         if metadata.get("organizationInfo"):
             return "linkedin_company"
         return "linkedin_personal"
-    if platform in ("facebook", "instagram", "tiktok"):
-        return platform
-    return None
+    if platform == "whatsapp":
+        return None
+    return _REVERSE_ZERNIO_SLUGS.get(platform)
 
 
 def sync_zernio_accounts(workspace, provider_profile, *, client: ZernioClient | None = None) -> list[SocialAccount]:

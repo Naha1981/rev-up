@@ -464,7 +464,7 @@ class TestSyncZernioAccounts:
 
     def test_unsupported_platform_skipped(self, workspace):
         profile = self._profile(workspace)
-        client = _client({"/accounts": {"accounts": [_account_payload(platform="twitter")]}})
+        client = _client({"/accounts": {"accounts": [_account_payload(platform="snapchat")]}})
         synced = sync_zernio_accounts(workspace, profile, client=client)
         assert synced == []
         assert SocialAccount.objects.count() == 0
@@ -759,3 +759,40 @@ class TestPlanCapacity:
         assert response.status_code == 302
         messages = [str(m) for m in response.wsgi_request._messages]
         assert any("full right now" in m for m in messages)
+
+
+class TestOurPlatformFor:
+    """The sync path must import every platform the connect grid sells."""
+
+    def test_youtube_maps(self):
+        from apps.social_accounts.zernio_connect import _our_platform_for
+
+        assert _our_platform_for({"platform": "youtube"}) == "youtube"
+
+    def test_google_business_maps_from_zernio_slug(self):
+        from apps.social_accounts.zernio_connect import _our_platform_for
+
+        assert _our_platform_for({"platform": "googlebusiness"}) == "google_business"
+
+    def test_every_grid_platform_round_trips(self):
+        from apps.social_accounts.zernio_connect import (
+            ZERNIO_HIDDEN_GRID_PLATFORMS,
+            ZERNIO_PLATFORM_SLUGS,
+            _our_platform_for,
+        )
+
+        skipped = {"linkedin_personal", "linkedin_company", "whatsapp"} | set(ZERNIO_HIDDEN_GRID_PLATFORMS)
+        for platform, slug in ZERNIO_PLATFORM_SLUGS.items():
+            if platform in skipped:
+                continue
+            assert _our_platform_for({"platform": slug}) == platform, slug
+
+    def test_whatsapp_is_not_a_social_account(self):
+        from apps.social_accounts.zernio_connect import _our_platform_for
+
+        assert _our_platform_for({"platform": "whatsapp"}) is None
+
+    def test_unknown_platform_skipped(self):
+        from apps.social_accounts.zernio_connect import _our_platform_for
+
+        assert _our_platform_for({"platform": "snapchat"}) is None
