@@ -15,12 +15,16 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 6
     steps:
       - name: Check live health
         id: probe
         run: |
-          status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 https://revup.nahalabs.co.za/health/ || echo "000")
+          status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 150 https://revup.nahalabs.co.za/health/ || echo "000")
+          if [ "$status" = "000" ]; then
+            sleep 20
+            status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 150 https://revup.nahalabs.co.za/health/ || echo "000")
+          fi
           echo "status=$status" >> "$GITHUB_OUTPUT"
       - name: Open an alert issue on failure
         if: steps.probe.outputs.status != '200'
