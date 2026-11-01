@@ -80,3 +80,74 @@ def test_non_complete_status_fails(merchant):
         p.return_value.text = "VALID"
         ok, reason = payfast.verify_itn(_post(payment_status="PENDING"))
     assert not ok and "PENDING" in reason
+
+
+# ---- view tests ----
+
+from django.test import Client  # noqa: E402
+
+from apps.accounts.models import User  # noqa: E402
+from apps.members.models import WorkspaceMembership  # noqa: E402
+from apps.organizations.models import Organization  # noqa: E402
+from apps.workspaces.models import Workspace  # noqa: E402
+
+
+def _owner_with_workspace():
+    from django.utils import timezone
+
+    org = Organization.objects.create(name="Pay Org", plan="starter")
+    user = User.objects.create_user(
+        email=f"pay-{timezone.now().timestamp()}@example.com", password="x" * 20, tos_accepted_at=timezone.now()
+    )
+    ws = Workspace.objects.create(name="Pay Biz", organization=org)
+    WorkspaceMembership.objects.create(user=user, workspace=ws, workspace_role="owner")
+    return org, user, ws
+
+
+def test_checkout_renders_auto_submit_form_with_signed_params(merchant, db):
+    org, user, ws = _owner_with_workspace()
+    c = Client()
+    c.force_login(user)
+    resp = c.post(f"/workspaces/{ws.id}/billing/payfast/", {"plan": "growth"})
+    assert resp.status_code == 200
+    body = resp.content.decode()
+    assert "sandbox.payfast.co.za/eng/process" in body
+    assert f"{org.payment_reference}-growth" in body
+    assert "999.00" in body
+    assert "signature" in body
+    assert "RevUp Growth (monthly)" in body
+
+
+def test_checkout_rejects_unknown_plan(merchant, db):
+    org, user, ws = _owner_with_workspace()
+    c = Client()
+    c.force_login(user)
+    assert c.post(f"/workspaces/{ws.id}/billing/payfast/", {"plan": "platinum"}).status_code == 400
+
+
+def test_itn_activates_plan_and_stores_token(merchant, db):
+    org, user, ws = _owner_with_workspace()
+    org.payment_reference = "RU-ABC12345"
+    org.save()
+    data = _post(m_payment_id="RU-ABC12345-growth", token="tok-123")
+    with mock.patch("apps.workspaces.payfast.requests.post") as p:
+        p.return_value.text = "VALID"
+        resp = Client().post("/billing/payfast/notify/", data)
+    assert resp.status_code == 200
+    org.refresh_from_db()
+    assert org.plan == "growth"
+    assert org.subscription_status == "active"
+    assert org.payfast_token == "tok-123"
+
+
+def test_itn_tampered_is_400_and_changes_nothing(merchant, db):
+    org, user, ws = _owner_with_workspace()
+    org.payment_reference = "RU-ABC12345"
+    org.save()
+    data = _post(m_payment_id="RU-ABC12345-growth")
+    data["amount_gross"] = "1.00"
+    resp = Client().post("/billing/payfast/notify/", data)
+    assert resp.status_code == 400
+    org.refresh_from_db()
+    assert org.plan == "starter"
+    assert org.subscription_status == "trial"

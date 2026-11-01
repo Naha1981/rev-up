@@ -59,6 +59,9 @@ class Organization(models.Model):
     )
     trial_started_at = models.DateTimeField(blank=True, null=True)
     payment_reference = models.CharField(max_length=20, blank=True, default="")
+    # PayFast subscription token, set by the verified ITN when a plan goes
+    # active; used if the subscription ever needs cancelling.
+    payfast_token = models.CharField(max_length=64, blank=True, default="")
 
     class Meta:
         db_table = "organizations_organization"

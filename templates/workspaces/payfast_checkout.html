@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redirecting to secure payment</title>
+</head>
+<body style="font-family: -apple-system, Helvetica, Arial, sans-serif; text-align: center; padding-top: 4rem; color: #222;">
+<p>Taking you to the secure payment page for RevUp {{ card.name }} (R{{ card.price_fmt }}/month){% if sandbox %} - test mode, no real charge{% endif %}&hellip;</p>
+<form id="pay" method="post" action="{{ process_url }}">
+  {% for k, v in params.items %}<input type="hidden" name="{{ k }}" value="{{ v }}">
+  {% endfor %}
+  <noscript><button type="submit">Continue to payment</button></noscript>
+</form>
+<script>document.getElementById("pay").submit();</script>
+</body>
+</html>

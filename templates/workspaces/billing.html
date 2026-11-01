@@ -60,7 +60,14 @@
       <span class="text-sm text-gray-500">Your payment reference</span>
       <span class="font-mono font-semibold text-gray-900">{{ org.payment_reference }}</span>
     </div>
-    <a href="{{ pay_url }}" class="mt-4 block rounded-xl bg-blue-600 px-4 py-2.5 text-center text-sm font-medium text-white">Pay by WhatsApp - R{{ card.price_fmt }}/month</a>
+    {% if payfast_available %}
+    <form method="post" action="{% url 'workspaces:billing_payfast' workspace.id %}" class="mt-4">
+      {% csrf_token %}
+      <input type="hidden" name="plan" value="{{ card.id }}">
+      <button type="submit" class="block w-full rounded-xl bg-green-600 px-4 py-2.5 text-center text-sm font-medium text-white">Pay by card - R{{ card.price_fmt }}/month{% if payfast_sandbox %} (test mode){% endif %}</button>
+    </form>
+    {% endif %}
+    <a href="{{ pay_url }}" class="mt-2 block rounded-xl bg-blue-600 px-4 py-2.5 text-center text-sm font-medium text-white">Pay by WhatsApp - R{{ card.price_fmt }}/month</a>
     <p class="mt-3 text-xs text-gray-500">Tap Pay by WhatsApp and your reference goes with the message automatically. Use the same reference on your EFT so we can match your payment.</p>
   </div>
 </div>

@@ -256,6 +256,18 @@ def approvals_settings(request, workspace_id):
     )
 
 
+def _payfast_available() -> bool:
+    from apps.workspaces import payfast
+
+    return payfast.configured()
+
+
+def _payfast_sandbox() -> bool:
+    from apps.workspaces import payfast
+
+    return payfast.sandbox()
+
+
 @login_required
 def workspace_billing(request, workspace_id):
     from urllib.parse import quote_plus
@@ -296,5 +308,7 @@ def workspace_billing(request, workspace_id):
             "days_left": days_left,
             "pay_url": f"https://wa.me/{number}?text={quote_plus(text)}",
             "usage": _usage_snapshot(org),
+            "payfast_available": _payfast_available(),
+            "payfast_sandbox": _payfast_sandbox(),
         },
     )
