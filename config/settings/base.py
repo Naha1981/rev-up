@@ -106,6 +106,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "csp.middleware.CSPMiddleware",
     "apps.api.usage.CountUncountedApiCallsMiddleware",
+    "apps.common.run_due.RequestTaskDrainMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"

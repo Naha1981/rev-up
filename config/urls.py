@@ -9,6 +9,7 @@ from django.urls import include, path, re_path
 from django.views.static import serve
 
 from apps.accounts.views import health_check
+from apps.common.run_due import run_due
 
 
 def robots_txt(request):
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("health/", health_check, name="health_check"),
+    path("internal/run-due/", run_due, name="internal_run_due"),
     path("robots.txt", robots_txt, name="robots_txt"),
     path("accounts/", include("apps.accounts.urls")),
     path("accounts/", include("allauth.urls")),

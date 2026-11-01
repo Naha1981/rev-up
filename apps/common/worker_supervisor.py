@@ -40,7 +40,11 @@ def _worker_loop():
 def start_worker_supervisor():
     """Start the supervisor thread once per process, unless disabled."""
     global _started
-    if os.environ.get("WORKER_ENABLED", "true") == "false":
+    # Default OFF: the event-driven design (inline execution + cron-drained
+    # /internal/run-due/) replaces the 24/7 poller, which pinned the
+    # serverless database awake and burned the free compute quota. Set
+    # WORKER_ENABLED=true explicitly to bring the old in-process worker back.
+    if os.environ.get("WORKER_ENABLED", "false") != "true":
         return
     with _lock:
         if _started:

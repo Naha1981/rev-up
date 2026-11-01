@@ -1,4 +1,5 @@
 from .base import *  # noqa: F401, F403
+from .base import env  # noqa: F401  (explicit re-export for F405)
 
 DEBUG = False
 
@@ -51,3 +52,10 @@ LOGGING = {
         },
     },
 }
+
+# Event-driven task execution: tasks created during a request run inline in a
+# thread instead of waiting for a 24/7 poller; the /internal/run-due/ cron
+# endpoint (token below) drains time-scheduled tasks every ~15 minutes. The
+# database is then free to scale to zero between real work.
+BACKGROUND_TASK_RUN_ASYNC = True
+INTERNAL_CRON_TOKEN = env("INTERNAL_CRON_TOKEN", default="")
