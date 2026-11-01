@@ -106,7 +106,8 @@ class TestUsageSnapshot:
         assert snap["replies_pct"] == 0
         assert snap["channels_used"] == 1
         assert snap["channels_limit"] == 1
-        assert snap["near_limit"] is True  # channels at limit
+        assert snap["near_limit"] is False  # replies well under 80%
+        assert snap["channels_full"] is True  # channels at limit
 
 
 @pytest.mark.django_db

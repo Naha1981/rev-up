@@ -59,5 +59,6 @@ def usage_snapshot(organization, now=None) -> dict:
         "replies_pct": min(100, round(replies_used * 100 / reply_limit)) if reply_limit else 100,
         "channels_used": channels_used,
         "channels_limit": channel_limit,
-        "near_limit": replies_used >= 0.8 * reply_limit or channels_used >= channel_limit,
+        "near_limit": replies_used >= 0.8 * reply_limit,
+        "channels_full": channels_used >= channel_limit,
     }
