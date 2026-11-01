@@ -39,16 +39,33 @@ def drain_due_tasks(seconds: int = DRAIN_SECONDS) -> int:
     requests on worker threads). Returns the number of tasks run.
     """
     from background_task.tasks import autodiscover, tasks
-    from django.test import override_settings
+    from django.conf import settings as dj_settings
 
     autodiscover()  # the registry is lazy; only the management command did this before
     deadline = time.monotonic() + seconds
     ran = 0
     # Run synchronously even when production enables RUN_ASYNC: the drain IS
     # the worker, so pool dispatch would only make completion unobservable.
-    with override_settings(BACKGROUND_TASK_RUN_ASYNC=False):
+    # This mutates the holder that is current NOW and restores the value (never
+    # the holder stack). override_settings() cannot be used here: the drain runs
+    # on a daemon thread, and its disable() writes back a saved holder - if a
+    # test's settings override was popped while the drain was mid-flight, the
+    # stale holder is resurrected and every later test sees its values.
+    wrapped = dj_settings._wrapped
+    had_flag = hasattr(wrapped, "BACKGROUND_TASK_RUN_ASYNC")
+    previous = getattr(wrapped, "BACKGROUND_TASK_RUN_ASYNC", None)
+    wrapped.BACKGROUND_TASK_RUN_ASYNC = False
+    try:
         while time.monotonic() < deadline and tasks.run_next_task():
             ran += 1
+    finally:
+        if had_flag:
+            wrapped.BACKGROUND_TASK_RUN_ASYNC = previous
+        else:
+            try:
+                delattr(wrapped, "BACKGROUND_TASK_RUN_ASYNC")
+            except AttributeError:
+                pass
     return ran
 
 
