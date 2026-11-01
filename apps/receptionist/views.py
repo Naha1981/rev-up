@@ -511,15 +511,48 @@ def _reviews_available(workspace) -> bool:
     return organization.plan in REVIEW_PLANS
 
 
+# Link-preview crawlers fetch shared links without a person opening them.
+# Counting those as clicks would cancel genuine reminders, so they are
+# served the card but never recorded.
+_PREVIEW_BOT_UA = (
+    "whatsapp",
+    "facebookexternalhit",
+    "twitterbot",
+    "slackbot",
+    "telegrambot",
+    "discordbot",
+    "linkedinbot",
+)
+
+
 def review_redirect(request, code: str):
-    """Public tracked review link: record the click, then send the customer
-    to the business's own Google review page."""
+    """Public tracked review link.
+
+    Humans get an instant redirect to the business's own review page.
+    Chat apps only fetch the link to build a preview card, so the page
+    carries clean business-branded card metadata (name, a short line, a
+    neutral star image) and their fetch is never counted as a click.
+    """
     from django.http import HttpResponseNotFound
-    from django.shortcuts import redirect as _redir
+    from django.shortcuts import render
+    from django.templatetags.static import static
 
     from . import reviews as _reviews
+    from .models import ReviewLink
 
-    url = _reviews.record_click(code)
-    if url is None:
+    link = ReviewLink.objects.filter(short_code=code).select_related("workspace").first()
+    if link is None:
         return HttpResponseNotFound("Link not found")
-    return _redir(url)
+    ua = request.META.get("HTTP_USER_AGENT", "").lower()
+    if not any(bot in ua for bot in _PREVIEW_BOT_UA):
+        _reviews.record_click(code)
+    card_image = request.build_absolute_uri(static("receptionist/review-card.png"))
+    return render(
+        request,
+        "receptionist/review_redirect.html",
+        {
+            "business_name": link.workspace.name,
+            "target_url": link.original_url,
+            "card_image": card_image,
+        },
+    )

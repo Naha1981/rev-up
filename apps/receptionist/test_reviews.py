@@ -157,8 +157,9 @@ class TestClickCancelsReminder:
         contact = _contact(ws)
         ReviewLink.objects.create(workspace=ws, contact=contact, short_code="redir123", original_url=GOOGLE_URL)
         resp = Client().get("/r/redir123/")
-        assert resp.status_code == 302
-        assert resp["Location"] == GOOGLE_URL
+        assert resp.status_code == 200
+        body = resp.content.decode()
+        assert GOOGLE_URL in body  # instant redirect target carried in the card page
         assert ReviewLink.objects.get(short_code="redir123").clicked_at is not None
 
     def test_unknown_code_404s(self):
@@ -353,3 +354,41 @@ class TestWebhookOptOutAndFlag:
         contact.refresh_from_db()
         assert contact.review_status == "issue_flagged"
         assert contact.needs_human
+
+
+def _link():
+    ws = _workspace()
+    contact = Contact.objects.create(workspace=ws, wa_id="27000000001", name="Pat")
+    return ReviewLink.objects.create(
+        workspace=ws,
+        contact=contact,
+        short_code="cardtest1",
+        original_url="https://reviews.example.com/biz",
+    )
+
+
+class ReviewRedirectCardTests:
+    def test_human_gets_card_with_business_name_and_click_recorded(self):
+        link = _link()
+        resp = Client().get(f"/r/{link.short_code}/", HTTP_USER_AGENT="Mozilla/5.0 (iPhone)")
+        assert resp.status_code == 200
+        body = resp.content.decode()
+        assert link.workspace.name in body
+        assert "og:image" in body
+        assert "review-card.png" in body
+        assert link.original_url in body
+        link.refresh_from_db()
+        assert link.clicked_at is not None
+
+    def test_whatsapp_preview_fetch_not_counted_as_click(self):
+        link = _link()
+        resp = Client().get(
+            f"/r/{link.short_code}/",
+            HTTP_USER_AGENT="WhatsApp/2.26.1.0 A",
+        )
+        assert resp.status_code == 200
+        link.refresh_from_db()
+        assert link.clicked_at is None
+
+    def test_unknown_code_404(self):
+        assert Client().get("/r/doesnotexist/").status_code == 404

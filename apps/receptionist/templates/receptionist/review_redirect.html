@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ business_name }} - quick review</title>
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{ business_name }}">
+<meta property="og:description" content="Tap to leave a quick review - it takes about 30 seconds.">
+<meta property="og:image" content="{{ card_image }}">
+<meta name="twitter:card" content="summary_large_image">
+<meta http-equiv="refresh" content="0; url={{ target_url }}">
+</head>
+<body style="font-family: -apple-system, Helvetica, Arial, sans-serif; text-align: center; padding-top: 4rem; color: #222;">
+<p>Taking you to leave your review&hellip;</p>
+<p><a href="{{ target_url }}">Continue</a></p>
+<script>window.location.replace("{{ target_url|escapejs }}");</script>
+</body>
+</html>
