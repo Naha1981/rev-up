@@ -505,6 +505,12 @@ if SENTRY_DSN:
 # social publishing cleanly. There is no fallback provider to switch to.
 ZERNIO_ENABLED = env.bool("ZERNIO_ENABLED", default=False)
 ZERNIO_API_KEY = env("ZERNIO_API_KEY", default="")
+
+# PayFast plan billing (sandbox first). Blank credentials disable card checkout.
+PAYFAST_MERCHANT_ID = env("PAYFAST_MERCHANT_ID", default="")
+PAYFAST_MERCHANT_KEY = env("PAYFAST_MERCHANT_KEY", default="")
+PAYFAST_PASSPHRASE = env("PAYFAST_PASSPHRASE", default="")
+PAYFAST_SANDBOX = env.bool("PAYFAST_SANDBOX", default=True)
 ZERNIO_BASE_URL = env("ZERNIO_BASE_URL", default="https://zernio.com/api/v1")
 
 # Review-request pipeline after a done booking (check-in, review ask,
