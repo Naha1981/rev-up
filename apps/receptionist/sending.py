@@ -27,7 +27,9 @@ logger = logging.getLogger(__name__)
 # demo number. Sandbox sessions can only message opted-in numbers; this list
 # is the code-level hard limit on top of that.
 SANDBOX_ACCOUNT_ID = "6a180a034c7f364ffded3c9c"
-SANDBOX_SEND_ALLOWLIST = frozenset({"27672347593"})
+# 27672347593: the owner's demo number (067). 27612980377: his 061 number,
+# added for the approved end-to-end review-pipeline test on the real send path.
+SANDBOX_SEND_ALLOWLIST = frozenset({"27672347593", "27612980377"})
 
 _TIMEOUT = 20
 
