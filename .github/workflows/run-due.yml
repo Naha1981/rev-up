@@ -21,7 +21,7 @@ jobs:
       - name: Trigger due jobs
         run: |
           status=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-            -H "Authorization: Bearer ${{ secrets.INTERNAL_CRON_TOKEN }}" \
+            -H "X-Run-Due-Token: ${{ secrets.INTERNAL_CRON_TOKEN }}" \
             --max-time 30 \
             https://revup.nahalabs.co.za/internal/run-due/)
           echo "run-due responded: $status"
