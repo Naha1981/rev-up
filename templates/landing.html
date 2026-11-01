@@ -4,10 +4,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RevUp - Social media that works while you work</title>
-<meta name="description" content="RevUp watches local demand, drafts your posts, answers enquiries and publishes to your channels. Built for South African businesses by NahaLabs.">
-<meta property="og:title" content="RevUp - Social media that works while you work">
-<meta property="og:description" content="Demand radar, AI post drafts, WhatsApp responder and multi-channel publishing in one dashboard.">
+<title>RevUp - Never miss an enquiry. Get more 5-star reviews.</title>
+<meta name="description" content="RevUp answers your business WhatsApp like a friendly receptionist and turns happy customers into 5-star Google reviews. Built for South African small businesses by NahaLabs.">
+<meta property="og:title" content="RevUp - Never miss an enquiry. Get more 5-star reviews.">
+<meta property="og:description" content="A WhatsApp receptionist that answers enquiries and books appointments, plus a Google review booster. Free for 7 days, then from R499 a month.">
 <meta property="og:type" content="website">
 <link rel="icon" href="{% static 'favicon/favicon.ico' %}" sizes="any">
 <link rel="icon" type="image/svg+xml" href="{% static 'favicon/favicon.svg' %}">
@@ -59,6 +59,7 @@ footer a{color:var(--ink2);text-decoration:none}
 footer a:hover{color:var(--brand)}
 .foot-links{display:flex;gap:20px;flex-wrap:wrap}
 .alt{background:var(--bg)}
+.badge-soon{display:inline-block;background:var(--brand-soft);color:var(--brand-dark);font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;vertical-align:middle;margin-left:6px;text-transform:uppercase;letter-spacing:.4px}
 @media(max-width:640px){
   .hero{padding:56px 0 44px}
   nav{padding:16px 0}
@@ -72,52 +73,60 @@ footer a:hover{color:var(--brand)}
     <a class="logo" href="/"><img src="{% static 'brand/revup-light.png' %}" alt="RevUp" style="height:34px;width:auto"></a>
     <div class="nav-links">
       <a class="btn btn-ghost" href="{% url 'account_login' %}">Log in</a>
-      <a class="btn btn-primary" href="{% url 'account_signup' %}">Start free</a>
+      <a class="btn btn-primary" href="{% url 'account_signup' %}">Start free trial</a>
     </div>
   </nav>
 
   <header class="hero">
-    <span class="eyebrow">Built for South African businesses</span>
-    <h1>Social media that works while you work</h1>
-    <p class="sub">RevUp watches what your local customers are talking about, drafts posts in your voice, answers enquiries on WhatsApp, and publishes to your channels. You stay in control of every word.</p>
+    <span class="eyebrow">Built for South African small businesses</span>
+    <h1>Never miss an enquiry. Get more 5-star reviews.</h1>
+    <p class="sub">RevUp answers your business WhatsApp like a friendly receptionist, day and night, and turns your happy customers into 5-star Google reviews. You stay in control of every word.</p>
     <div class="hero-cta">
-      <a class="btn btn-primary" href="{% url 'account_signup' %}">Create your free account</a>
+      <a class="btn btn-primary" href="{% url 'account_signup' %}">Start your free trial</a>
       <a class="btn btn-ghost" href="{% url 'account_login' %}">Log in</a>
     </div>
-    <p class="trust">Set up in minutes. No technical skills needed.</p>
+    <p class="trust">Set up in minutes. No technical skills needed. Free for 7 days, then from R499 a month. Cancel anytime.</p>
   </header>
 </div>
 
 <div class="alt">
 <section class="wrap">
-  <h2 class="section-title">Everything your business needs to be seen</h2>
-  <p class="section-sub">One dashboard replaces the guesswork, the blank page and the unanswered messages.</p>
+  <h2 class="section-title">Working for you from day one</h2>
+  <p class="section-sub">No agency, no retainer, no waiting on anyone. These parts are live today.</p>
   <div class="grid">
-    <div class="card"><div class="icon">📡</div><h3>Demand radar</h3><p>See what people in your area are searching for and talking about in your industry, so every post rides real demand instead of guesses.</p></div>
-    <div class="card"><div class="icon">✍️</div><h3>AI post drafts</h3><p>Get ready-to-review post drafts tuned to your industry and city. Edit anything, approve what you like, skip what you don't.</p></div>
-    <div class="card"><div class="icon">💬</div><h3>WhatsApp responder</h3><p>Pair your business WhatsApp with a code and RevUp drafts replies to customer enquiries, with your tone and your qualifying questions.</p></div>
-    <div class="card"><div class="icon">📅</div><h3>Calendar &amp; scheduling</h3><p>Plan a week of posts in one sitting. Queue them once and RevUp publishes on schedule to your connected channels.</p></div>
-    <div class="card"><div class="icon">✅</div><h3>Approvals &amp; client portal</h3><p>Nothing goes live without your yes. Share a magic link with partners or clients so they can approve posts without an account.</p></div>
-    <div class="card"><div class="icon">📈</div><h3>Analytics</h3><p>See what landed: views, engagement and follower movement per post and per channel, in plain language.</p></div>
+    <div class="card"><div class="icon">💬</div><h3>WhatsApp receptionist</h3><p>Answers customer enquiries on your business WhatsApp, day and night. It books appointments into your calendar and hands over to you when a person should step in.</p></div>
+    <div class="card"><div class="icon">⭐</div><h3>Google review booster</h3><p>Spots your happiest customers and asks for a Google review at the right moment. More 5-star reviews, without the awkward asking.</p></div>
+    <div class="card"><div class="icon">📅</div><h3>Calendar bookings</h3><p>Appointments land on your Google Calendar at the right time, South African time zone. Double-bookings are blocked for you.</p></div>
+    <div class="card"><div class="icon">📈</div><h3>Your numbers, in plain language</h3><p>See enquiries answered, bookings made and reviews gained. No spreadsheets, no jargon.</p></div>
   </div>
 </section>
 </div>
 
 <section class="wrap">
+  <h2 class="section-title">And the rest of the platform</h2>
+  <p class="section-sub">We are building these next. Honest labels: if it says coming soon, it is not live yet.</p>
+  <div class="grid">
+    <div class="card"><div class="icon">✍️</div><h3>Social post drafts <span class="badge-soon">Coming soon</span></h3><p>Ready-to-review posts in your voice, tuned to your trade and your town. You approve every word before anything goes out.</p></div>
+    <div class="card"><div class="icon">📣</div><h3>Publishing to Facebook &amp; Instagram <span class="badge-soon">Coming soon</span></h3><p>Queue a week of posts in one sitting. RevUp publishes them for you on the channels you connect.</p></div>
+    <div class="card"><div class="icon">📡</div><h3>Demand radar <span class="badge-soon">Coming soon</span></h3><p>See what people in your area are asking for, so you can offer it before your competitors do.</p></div>
+  </div>
+</section>
+
+<section class="wrap">
   <h2 class="section-title">Up and running in three steps</h2>
-  <p class="section-sub">No agency, no retainers, no waiting on anyone.</p>
+  <p class="section-sub">Free for 7 days. Then from R499 a month, cancel anytime.</p>
   <div class="steps">
-    <div class="step"><div class="step-num"></div><div><h3>Create your account</h3><p>Sign up with your email and pick your industry - restaurants, property, clinics, dealerships and more.</p></div></div>
-    <div class="step"><div class="step-num"></div><div><h3>Connect your channels</h3><p>Link your social channels and pair your WhatsApp number with a code. Your workspace assembles itself around your industry.</p></div></div>
-    <div class="step"><div class="step-num"></div><div><h3>Review and approve</h3><p>RevUp drafts posts and replies for you. Approve, edit or discard - then watch them publish and perform.</p></div></div>
+    <div class="step"><div class="step-num"></div><div><h3>Create your account</h3><p>Sign up with your email. No card needed for the free trial.</p></div></div>
+    <div class="step"><div class="step-num"></div><div><h3>Pair your WhatsApp</h3><p>Connect your business WhatsApp with a code and link your Google Calendar. That is all the receptionist needs.</p></div></div>
+    <div class="step"><div class="step-num"></div><div><h3>Stay in control</h3><p>Watch every conversation as it happens. Step in whenever you like - the receptionist only says what you would.</p></div></div>
   </div>
 </section>
 
 <div class="wrap">
   <div class="cta-band">
-    <h2>Your customers are already talking. Join them.</h2>
-    <p>Create your account and have your first drafts waiting today.</p>
-    <a class="btn btn-primary" href="{% url 'account_signup' %}">Start free</a>
+    <h2>Your next customer is messaging you right now.</h2>
+    <p>Start your free trial and never miss another enquiry.</p>
+    <a class="btn btn-primary" href="{% url 'account_signup' %}">Start free trial</a>
   </div>
 </div>
 
