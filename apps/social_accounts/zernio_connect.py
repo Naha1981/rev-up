@@ -34,6 +34,13 @@ from .models import SocialAccount, WorkspaceProviderProfile
 
 logger = logging.getLogger(__name__)
 
+CAPACITY_MESSAGE = "New account connections are full right now. Your setup is saved - please try again a little later."
+
+
+class ZernioCapacityError(Exception):
+    """The connected-account plan limit is reached; connect must wait."""
+
+
 # Pending connect state, stashed between the grid POST and the callback.
 ZERNIO_SESSION_KEY = "zernio_connect"
 
@@ -69,6 +76,24 @@ ZERNIO_HIDDEN_GRID_PLATFORMS = frozenset({"instagram_login"})
 def zernio_ready() -> bool:
     """True when the Zernio connect path can serve a user right now."""
     return bool(getattr(settings, "ZERNIO_ENABLED", False) and getattr(settings, "ZERNIO_API_KEY", ""))
+
+
+def zernio_slots_full() -> bool:
+    """True when every connected-account slot on the current plan is taken.
+
+    Counts active connected accounts across ALL profiles (the plan limit is
+    account-wide, not per workspace). Fails open on API errors: a flaky
+    capacity check must not block a tenant who actually has a slot - Zernio's
+    own error page and our callback message cover that case instead.
+    """
+    limit = int(getattr(settings, "ZERNIO_ACCOUNT_LIMIT", 2) or 2)
+    try:
+        with ZernioClient() as client:
+            active = [a for a in client.list_accounts() if a.get("isActive", True)]
+    except ZernioError:
+        logger.exception("Zernio capacity check failed; letting the connect flow decide")
+        return False
+    return len(active) >= limit
 
 
 def zernio_slug_for(platform: str) -> str | None:
@@ -189,6 +214,8 @@ def start_zernio_connect(request, workspace, platform: str, *, reconnect_account
     same checks and stash the same session state.
     """
     slug = ZERNIO_PLATFORM_SLUGS[platform]
+    if reconnect_account is None and zernio_slots_full():
+        raise ZernioCapacityError("connected-account plan limit reached")
     profile = get_or_create_workspace_profile(workspace)
     redirect_url = request.build_absolute_uri(reverse("social_accounts:zernio_callback"))
     with ZernioClient() as client:
@@ -229,6 +256,9 @@ def connect_zernio(request, workspace_id, platform):
         return redirect("social_accounts:connect", workspace_id=workspace_id)
     try:
         return start_zernio_connect(request, request.workspace, platform)
+    except ZernioCapacityError:
+        messages.warning(request, CAPACITY_MESSAGE)
+        return redirect("social_accounts:connect", workspace_id=workspace_id)
     except ZernioError:
         logger.exception("Zernio connect failed to start for %s", platform)
         messages.error(request, "Could not start the connection. Please try again.")
@@ -274,6 +304,8 @@ def zernio_callback(request):
             )
         elif error in ("no_facebook_pages", "platform_requires_selection"):
             messages.error(request, "No suitable account was found to connect.")
+        elif "limit" in (error + " " + detail).lower() or "capacity" in (error + " " + detail).lower():
+            messages.warning(request, CAPACITY_MESSAGE)
         else:
             messages.error(request, "The connection did not finish. Please try again.")
         logger.info("Zernio connect ended with error=%s platform=%s detail=%s", error, platform, detail)

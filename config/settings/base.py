@@ -315,6 +315,7 @@ GOOGLE_AUTH_CLIENT_SECRET = env("GOOGLE_AUTH_CLIENT_SECRET", default="")
 
 # Google Calendar connection for receptionist bookings (owner connects their
 # own calendar; confirmed bookings appear there). Empty disables the button.
+ZERNIO_ACCOUNT_LIMIT = env.int("ZERNIO_ACCOUNT_LIMIT", default=2)
 GOOGLE_CALENDAR_CLIENT_ID = env("GOOGLE_CALENDAR_CLIENT_ID", default="")
 GOOGLE_CALENDAR_CLIENT_SECRET = env("GOOGLE_CALENDAR_CLIENT_SECRET", default="")
 

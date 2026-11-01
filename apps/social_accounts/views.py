@@ -184,7 +184,9 @@ def connect_platform(request, workspace_id):
         messages.error(request, "This platform is not available.")
         return redirect("social_accounts:connect", workspace_id=workspace_id)
 
+    from .zernio_connect import CAPACITY_MESSAGE as _CAPMSG
     from .zernio_connect import ZERNIO_MANAGED_PLATFORMS as _ZMANAGED
+    from .zernio_connect import ZernioCapacityError as _ZCap
     from .zernio_connect import start_zernio_connect
     from .zernio_connect import zernio_ready as _zready
 
@@ -196,6 +198,9 @@ def connect_platform(request, workspace_id):
 
         try:
             return start_zernio_connect(request, request.workspace, platform)
+        except _ZCap:
+            messages.warning(request, _CAPMSG)
+            return redirect("social_accounts:connect", workspace_id=workspace_id)
         except _ZernioError:
             logger.exception("Zernio connect failed to start for %s", platform)
             messages.error(request, "Could not start the connection. Please try again.")
@@ -523,6 +528,8 @@ def reconnect(request, workspace_id, account_id):
     if account.provider == "zernio":
         from providers.zernio import ZernioError as _ZernioError
 
+        from .zernio_connect import CAPACITY_MESSAGE as _CAPMSG
+        from .zernio_connect import ZernioCapacityError as _ZCap
         from .zernio_connect import start_zernio_connect
         from .zernio_connect import zernio_ready as _zready
 
@@ -531,6 +538,9 @@ def reconnect(request, workspace_id, account_id):
             return redirect("social_accounts:list", workspace_id=workspace_id)
         try:
             return start_zernio_connect(request, request.workspace, platform, reconnect_account=account)
+        except _ZCap:
+            messages.warning(request, _CAPMSG)
+            return redirect("social_accounts:list", workspace_id=workspace_id)
         except _ZernioError:
             logger.exception("Zernio reconnect failed to start for %s", account)
             messages.error(request, "Could not start the reconnection. Please try again.")

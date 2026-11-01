@@ -654,3 +654,108 @@ class TestDeleteAccountClient:
         with pytest.raises(ZernioError) as exc_info:
             client.delete_account("a1")
         assert exc_info.value.retryable is True
+
+
+# ------------------------------------------------------------------
+# Plan capacity (connected-account limit)
+# ------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+class TestPlanCapacity:
+    def _post(self, client, workspace, platform):
+        url = reverse("social_accounts:connect_zernio", kwargs={"workspace_id": workspace.id, "platform": platform})
+        return client.post(url)
+
+    def _routes(self, accounts):
+        return {
+            "/accounts": {"accounts": accounts},
+            "/profiles": {"profile": {"_id": PROFILE_ID, "name": "Test WS"}},
+            "/connect/facebook": {"authUrl": "https://zernio.com/connect/facebook?token=abc", "state": "s"},
+        }
+
+    def test_full_plan_blocks_new_connect_with_waiting_message(
+        self, authenticated_client, workspace, zernio_on, monkeypatch, settings
+    ):
+        settings.ZERNIO_ACCOUNT_LIMIT = 2
+        full = [
+            {"_id": "a1", "isActive": True},
+            {"_id": "a2", "isActive": True},
+        ]
+        monkeypatch.setattr(
+            "apps.social_accounts.zernio_connect.ZernioClient", lambda *a, **k: _client(self._routes(full))
+        )
+        response = self._post(authenticated_client, workspace, "facebook")
+        assert response.status_code == 302
+        assert response.url == reverse("social_accounts:connect", kwargs={"workspace_id": workspace.id})
+        assert ZERNIO_SESSION_KEY not in authenticated_client.session
+        messages = [str(m) for m in response.wsgi_request._messages]
+        assert any("full right now" in m for m in messages)
+        assert not WorkspaceProviderProfile.objects.filter(workspace=workspace).exists()
+
+    def test_open_slot_lets_connect_proceed(self, authenticated_client, workspace, zernio_on, monkeypatch, settings):
+        settings.ZERNIO_ACCOUNT_LIMIT = 2
+        one = [{"_id": "a1", "isActive": True}]
+        monkeypatch.setattr(
+            "apps.social_accounts.zernio_connect.ZernioClient", lambda *a, **k: _client(self._routes(one))
+        )
+        response = self._post(authenticated_client, workspace, "facebook")
+        assert response.status_code == 302
+        assert response.url == "https://zernio.com/connect/facebook?token=abc"
+
+    def test_inactive_accounts_do_not_count(self, authenticated_client, workspace, zernio_on, monkeypatch, settings):
+        settings.ZERNIO_ACCOUNT_LIMIT = 2
+        inactive = [{"_id": "a1", "isActive": False}, {"_id": "a2", "isActive": False}]
+        monkeypatch.setattr(
+            "apps.social_accounts.zernio_connect.ZernioClient", lambda *a, **k: _client(self._routes(inactive))
+        )
+        response = self._post(authenticated_client, workspace, "facebook")
+        assert response.url == "https://zernio.com/connect/facebook?token=abc"
+
+    def test_capacity_check_fails_open_on_api_error(
+        self, authenticated_client, workspace, zernio_on, monkeypatch, settings
+    ):
+        settings.ZERNIO_ACCOUNT_LIMIT = 2
+        routes = self._routes([])
+        routes["/accounts"] = [500, {"error": "boom"}]
+        monkeypatch.setattr("apps.social_accounts.zernio_connect.ZernioClient", lambda *a, **k: _client(routes))
+        response = self._post(authenticated_client, workspace, "facebook")
+        assert response.url == "https://zernio.com/connect/facebook?token=abc"
+
+    def test_reconnect_bypasses_capacity(self, authenticated_client, workspace, zernio_on, monkeypatch, settings):
+        from apps.social_accounts.zernio_connect import start_zernio_connect
+
+        settings.ZERNIO_ACCOUNT_LIMIT = 0  # even a zero limit must not block reconnects
+        account = SocialAccount.objects.create(
+            workspace=workspace,
+            platform="facebook",
+            account_platform_id="native1",
+            provider="zernio",
+            provider_account_id=ACCOUNT_ID,
+        )
+        monkeypatch.setattr(
+            "apps.social_accounts.zernio_connect.ZernioClient", lambda *a, **k: _client(self._routes([]))
+        )
+        request = authenticated_client.get("/").wsgi_request
+        response = start_zernio_connect(request, workspace, "facebook", reconnect_account=account)
+        assert response.status_code == 302
+        assert response.url.startswith("https://zernio.com/connect/facebook")
+
+    def test_callback_limit_error_shows_waiting_message(
+        self, authenticated_client, user, workspace, zernio_on, monkeypatch
+    ):
+        session = authenticated_client.session
+        session[ZERNIO_SESSION_KEY] = {
+            "workspace_id": str(workspace.id),
+            "platform": "whatsapp",
+            "profile_id": PROFILE_ID,
+            "user_id": str(user.id),
+        }
+        session.save()
+        url = reverse("social_accounts:zernio_callback")
+        response = authenticated_client.get(
+            url, {"error": "account_limit_reached", "platform": "whatsapp", "error_message": "plan limit"}
+        )
+        assert response.status_code == 302
+        messages = [str(m) for m in response.wsgi_request._messages]
+        assert any("full right now" in m for m in messages)
