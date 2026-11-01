@@ -12,6 +12,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core import signing
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -23,6 +24,7 @@ from apps.workspaces.models import Workspace
 from .models import (
     Booking,
     BusinessProfile,
+    CalendarConnection,
     Contact,
     DentalAppointment,
     FuneralClaim,
@@ -109,6 +111,9 @@ def setup(request, workspace_id):
     if profile and profile.operating_hours:
         hours_text = profile.operating_hours.get("text", "")
     channel = ZernioChannel.objects.filter(workspace=workspace).first()
+    from . import calendar_sync
+
+    calendar = CalendarConnection.objects.filter(workspace=workspace).first()
     wa_accounts: list[dict] = []
     connect_ready = False
     if channel is None:
@@ -143,6 +148,8 @@ def setup(request, workspace_id):
             "hours_text": hours_text,
             "channel": channel,
             "wa_accounts": wa_accounts,
+            "calendar": calendar,
+            "calendar_ready": calendar_sync.configured(),
             "connect_ready": connect_ready,
         },
     )
@@ -222,6 +229,11 @@ def booking_action(request, workspace_id, booking_id, action):
                 send_draft(channel, booking.contact, reply)
             except Exception:
                 logger.exception("receptionist: booking confirmation send failed for %s", booking.contact.id)
+        from . import calendar_sync
+
+        conn = CalendarConnection.objects.filter(workspace=workspace).first()
+        if conn is not None:
+            calendar_sync.create_booking_event(conn, booking)
         messages.success(request, "Booking confirmed and the customer has been told on WhatsApp.")
     elif action == "cancel" and booking.status in (Booking.Status.REQUESTED, Booking.Status.CONFIRMED):
         booking.status = Booking.Status.CANCELLED
@@ -350,6 +362,65 @@ def _send_quote_message(request, workspace, profile, quote, body: str) -> None:
         send_draft(channel, quote.contact, reply)
     except Exception:
         logger.exception("receptionist: quote send failed for %s", quote.contact.id)
+
+
+@login_required
+@require_GET
+def calendar_connect(request, workspace_id):
+    workspace = _get_workspace(request, workspace_id)
+    from . import calendar_sync
+
+    if not calendar_sync.configured():
+        messages.error(request, "Calendar connection is not available yet - NahaLabs is enabling it.")
+        return redirect("receptionist:setup", workspace_id=workspace.id)
+    return redirect(calendar_sync.authorize_url(workspace.id, request.user.id))
+
+
+@login_required
+@require_http_methods(["POST"])
+def calendar_disconnect(request, workspace_id):
+    workspace = _get_workspace(request, workspace_id)
+    CalendarConnection.objects.filter(workspace=workspace).delete()
+    messages.success(request, "Google Calendar disconnected.")
+    return redirect("receptionist:setup", workspace_id=workspace.id)
+
+
+@login_required
+@require_GET
+def calendar_callback(request):
+    """Top-level OAuth callback: state carries the signed workspace + user."""
+    from . import calendar_sync
+
+    try:
+        state = calendar_sync.read_state(request.GET.get("state", ""))
+    except signing.BadSignature:
+        raise PermissionDenied("Bad calendar connect state.") from None
+    workspace = _get_workspace(request, state["ws"])
+    if state["u"] != str(request.user.id):
+        raise PermissionDenied("Calendar connect was started by someone else.")
+    code = request.GET.get("code", "")
+    if not code:
+        messages.error(request, "Google did not complete the connection.")
+        return redirect("receptionist:setup", workspace_id=workspace.id)
+    tokens = calendar_sync.exchange_code(code)
+    access = tokens.get("access_token", "")
+    refresh = tokens.get("refresh_token", "")
+    if not access or not refresh:
+        messages.error(request, "Google did not return the access we need - please try connecting again.")
+        return redirect("receptionist:setup", workspace_id=workspace.id)
+    from django.utils import timezone as _tz
+
+    CalendarConnection.objects.update_or_create(
+        workspace=workspace,
+        defaults={
+            "google_email": calendar_sync.fetch_email(access),
+            "access_token": access,
+            "refresh_token": refresh,
+            "token_expiry": _tz.now() + timedelta(seconds=int(tokens.get("expires_in", 3600))),
+        },
+    )
+    messages.success(request, "Google Calendar connected - confirmed bookings now appear there.")
+    return redirect("receptionist:setup", workspace_id=workspace.id)
 
 
 @login_required

@@ -11,6 +11,8 @@ import uuid
 
 from django.db import models
 
+from apps.common.encryption import EncryptedTextField
+
 
 class Industry(models.TextChoices):
     PLUMBER = "plumber", "Plumbing"
@@ -138,6 +140,24 @@ class Booking(models.Model):
 
     def __str__(self) -> str:
         return f"{self.service or 'Booking'} - {self.contact.wa_id} ({self.status})"
+
+
+class CalendarConnection(models.Model):
+    """One Google Calendar connection per workspace, for confirmed bookings."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.OneToOneField(
+        "workspaces.Workspace", on_delete=models.CASCADE, related_name="receptionist_calendar"
+    )
+    google_email = models.EmailField(blank=True)
+    access_token = EncryptedTextField(blank=True, default="")
+    refresh_token = EncryptedTextField(blank=True, default="")
+    token_expiry = models.DateTimeField(null=True, blank=True)
+    calendar_id = models.CharField(max_length=200, default="primary")
+    connected_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"Calendar for {self.workspace.name} ({self.google_email or 'no email'})"
 
 
 class Quote(models.Model):

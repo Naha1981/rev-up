@@ -1,7 +1,7 @@
 """Receptionist: tenant isolation, dry-run drafting, escalation, intake."""
 
 import json
-from datetime import timedelta
+from datetime import date, timedelta
 from unittest.mock import Mock, patch
 
 from django.test import TestCase, override_settings
@@ -11,7 +11,17 @@ from django.utils import timezone
 from apps.organizations.models import Organization
 from apps.workspaces.models import Workspace
 
-from .models import Booking, BusinessProfile, Contact, FuneralClaim, Message, Quote, TradeDispatch, ZernioChannel
+from .models import (
+    Booking,
+    BusinessProfile,
+    CalendarConnection,
+    Contact,
+    FuneralClaim,
+    Message,
+    Quote,
+    TradeDispatch,
+    ZernioChannel,
+)
 from .services import needs_human
 from .webhooks import handle_inbox_message
 
@@ -971,3 +981,135 @@ class WhatsAppConnectTests(TestCase):
         ]
         self.client.post(f"/workspace/{ws.id}/receptionist/setup/bind-whatsapp/", {"account_id": "acc-other"})
         self.assertFalse(ZernioChannel.objects.filter(workspace=ws).exists())
+
+
+class CalendarConnectionTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        from apps.members.models import WorkspaceMembership
+
+        user_model = get_user_model()
+        self.ws = _workspace("pp-calendar")
+        self.user = user_model.objects.create_user(
+            email="cal@example.com", password="x" * 20, tos_accepted_at=timezone.now()
+        )
+        WorkspaceMembership.objects.create(user=self.user, workspace=self.ws)
+        BusinessProfile.objects.create(workspace=self.ws, industry="plumber", business_name="PP Plumbing")
+        ZernioChannel.objects.create(workspace=self.ws, zernio_account_id="acct-pp")
+
+    def _booking(self, preferred="Tuesday morning"):
+        contact = Contact.objects.create(workspace=self.ws, wa_id="27820001111", name="Mr Nkosi")
+        return Booking.objects.create(
+            workspace=self.ws, contact=contact, service="Fix leaking geyser", preferred_time=preferred
+        )
+
+    def test_connect_hidden_when_not_configured(self):
+        self.client.force_login(self.user)
+        resp = self.client.get(f"/workspace/{self.ws.id}/receptionist/setup/")
+        self.assertNotContains(resp, "Connect Google Calendar")
+
+    @override_settings(GOOGLE_CALENDAR_CLIENT_ID="cid", GOOGLE_CALENDAR_CLIENT_SECRET="sec")
+    def test_connect_button_and_redirect_to_google(self):
+        self.client.force_login(self.user)
+        resp = self.client.get(f"/workspace/{self.ws.id}/receptionist/setup/")
+        self.assertContains(resp, "Connect Google Calendar")
+        resp = self.client.get(f"/workspace/{self.ws.id}/receptionist/calendar/connect/")
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("accounts.google.com", resp["Location"])
+        self.assertIn("calendar.events", resp["Location"])
+        self.assertIn("access_type=offline", resp["Location"])
+
+    @override_settings(GOOGLE_CALENDAR_CLIENT_ID="cid", GOOGLE_CALENDAR_CLIENT_SECRET="sec")
+    @patch("apps.receptionist.calendar_sync.fetch_email", return_value="owner@pp.co.za")
+    @patch("apps.receptionist.calendar_sync.httpx.post")
+    def test_callback_stores_encrypted_connection(self, mock_post, _email):
+        from apps.receptionist import calendar_sync
+
+        self.client.force_login(self.user)
+        mock_post.return_value = Mock(
+            status_code=200,
+            raise_for_status=lambda: None,
+            json=lambda: {"access_token": "acc-1", "refresh_token": "ref-1", "expires_in": 3600},
+        )
+        state = calendar_sync.sign_state(self.ws.id, self.user.id)
+        resp = self.client.get(f"/receptionist/google-calendar/callback/?code=abc&state={state}")
+        self.assertEqual(resp.status_code, 302)
+        conn = CalendarConnection.objects.get(workspace=self.ws)
+        self.assertEqual(conn.access_token, "acc-1")
+        self.assertEqual(conn.refresh_token, "ref-1")
+        self.assertEqual(conn.google_email, "owner@pp.co.za")
+        # stored encrypted at rest, not plaintext
+        from django.db import connection as db_conn
+
+        with db_conn.cursor() as c:
+            c.execute("select access_token from receptionist_calendarconnection")
+            raw = c.fetchone()[0]
+        self.assertNotEqual(raw, "acc-1")
+
+    @override_settings(GOOGLE_CALENDAR_CLIENT_ID="cid", GOOGLE_CALENDAR_CLIENT_SECRET="sec")
+    def test_callback_rejects_bad_state(self):
+        self.client.force_login(self.user)
+        resp = self.client.get("/receptionist/google-calendar/callback/?code=abc&state=forged")
+        self.assertEqual(resp.status_code, 403)
+
+    @override_settings(GOOGLE_CALENDAR_CLIENT_ID="cid", GOOGLE_CALENDAR_CLIENT_SECRET="sec")
+    @patch("apps.receptionist.sending.send_draft", return_value=True)
+    @patch("apps.receptionist.calendar_sync.httpx.post")
+    def test_confirm_creates_calendar_event(self, mock_post, _send):
+        self.client.force_login(self.user)
+        CalendarConnection.objects.create(
+            workspace=self.ws,
+            access_token="acc",
+            refresh_token="ref",
+            token_expiry=timezone.now() + timedelta(hours=1),
+        )
+        booking = self._booking()
+        self.client.post(f"/workspace/{self.ws.id}/receptionist/bookings/{booking.id}/confirm/")
+        event_calls = [c for c in mock_post.call_args_list if "calendar/v3" in str(c)]
+        self.assertEqual(len(event_calls), 1)
+        body = event_calls[0].kwargs["json"]
+        self.assertIn("Fix leaking geyser", body["summary"])
+        self.assertIn("Mr Nkosi", body["summary"])
+        self.assertIn("date", body["start"])
+
+    @patch("apps.receptionist.sending.send_draft", return_value=True)
+    def test_confirm_without_connection_skips_calendar(self, _send):
+        self.client.force_login(self.user)
+        booking = self._booking()
+        resp = self.client.post(f"/workspace/{self.ws.id}/receptionist/bookings/{booking.id}/confirm/")
+        self.assertEqual(resp.status_code, 302)
+
+    def test_parse_requested_day(self):
+        from apps.receptionist.calendar_sync import parse_requested_day
+
+        monday = timezone.localdate() - timedelta(days=timezone.localdate().weekday())
+        self.assertEqual(parse_requested_day("today please", monday), monday)
+        self.assertEqual(parse_requested_day("tomorrow morning", monday), monday + timedelta(days=1))
+        self.assertEqual(parse_requested_day("Tuesday morning", monday), monday + timedelta(days=1))
+        self.assertEqual(parse_requested_day("monday next week", monday), monday + timedelta(days=7))
+        self.assertEqual(parse_requested_day("3 Nov", date(2026, 10, 30)), date(2026, 11, 3))
+        self.assertEqual(parse_requested_day("2026-12-05", monday), date(2026, 12, 5))
+        self.assertIsNone(parse_requested_day("whenever suits you", monday))
+        self.assertIsNone(parse_requested_day("", monday))
+
+    @patch("apps.receptionist.calendar_sync.httpx.post")
+    def test_unparseable_time_creates_no_event(self, mock_post):
+        from apps.receptionist.calendar_sync import create_booking_event
+
+        conn = CalendarConnection.objects.create(
+            workspace=self.ws,
+            access_token="acc",
+            refresh_token="ref",
+            token_expiry=timezone.now() + timedelta(hours=1),
+        )
+        booking = self._booking(preferred="whenever suits you")
+        self.assertFalse(create_booking_event(conn, booking))
+        mock_post.assert_not_called()
+
+    def test_disconnect(self):
+        self.client.force_login(self.user)
+        CalendarConnection.objects.create(workspace=self.ws, access_token="a", refresh_token="r")
+        resp = self.client.post(f"/workspace/{self.ws.id}/receptionist/calendar/disconnect/")
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(CalendarConnection.objects.count(), 0)

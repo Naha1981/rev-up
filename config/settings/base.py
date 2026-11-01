@@ -313,6 +313,11 @@ AUTHENTICATION_BACKENDS = [
 GOOGLE_AUTH_CLIENT_ID = env("GOOGLE_AUTH_CLIENT_ID", default="")
 GOOGLE_AUTH_CLIENT_SECRET = env("GOOGLE_AUTH_CLIENT_SECRET", default="")
 
+# Google Calendar connection for receptionist bookings (owner connects their
+# own calendar; confirmed bookings appear there). Empty disables the button.
+GOOGLE_CALENDAR_CLIENT_ID = env("GOOGLE_CALENDAR_CLIENT_ID", default="")
+GOOGLE_CALENDAR_CLIENT_SECRET = env("GOOGLE_CALENDAR_CLIENT_SECRET", default="")
+
 # Unsplash stock-photo search in the composer (optional; empty disables the feature)
 UNSPLASH_ACCESS_KEY = env("UNSPLASH_ACCESS_KEY", default="")
 
