@@ -49,12 +49,32 @@ def _post(**over):
         "amount_gross": "999.00",
         **over,
     }
-    data["signature"] = payfast.sign(data)
+    data["signature"] = payfast.sign_itn(data)
     return data
 
 
 def test_valid_itn_passes(merchant):
     data = _post()
+    with mock.patch("apps.workspaces.payfast.requests.post") as p:
+        p.return_value.text = "VALID"
+        ok, reason = payfast.verify_itn(data)
+    assert ok, reason
+
+
+def test_itn_with_empty_fields_signed_payfast_style_passes(merchant):
+    """Regression: real ITNs carry empty vars and PayFast signs them INCLUDED.
+
+    The first real sandbox ITN was rejected "bad signature" because the
+    outbound rule skips empties; PayFast's ITN rule keeps them.
+    """
+    data = _post(custom_str1="", custom_str2="", phone="")
+    # Re-sign with the empty fields included, the way PayFast actually signs.
+    import hashlib
+    from urllib.parse import quote_plus
+
+    payload = "&".join(f"{k}={quote_plus(v.strip())}" for k, v in data.items() if k != "signature")
+    payload += f"&passphrase={quote_plus('testpass')}"
+    data["signature"] = hashlib.md5(payload.encode()).hexdigest()
     with mock.patch("apps.workspaces.payfast.requests.post") as p:
         p.return_value.text = "VALID"
         ok, reason = payfast.verify_itn(data)

@@ -73,10 +73,25 @@ def build_subscription_params(org, card: dict, base_url: str) -> dict:
     return params
 
 
+def sign_itn(post_data: dict) -> str:
+    """ITN signature: every posted field except ``signature``, in posted order.
+
+    Unlike the outbound form, PayFast's ITN string INCLUDES empty variables -
+    their own sample keeps them - so an ITN (which always carries empties such
+    as custom_str1-5) never verifies against the outbound signing rule. First
+    real sandbox swipe proved this: the ITN was rejected "bad signature".
+    """
+    pairs = [f"{k}={quote_plus(str(v).strip())}" for k, v in post_data.items() if k != "signature"]
+    payload = "&".join(pairs)
+    if _passphrase():
+        payload += f"&passphrase={quote_plus(_passphrase())}"
+    return hashlib.md5(payload.encode()).hexdigest()
+
+
 def verify_itn(post_data: dict) -> tuple[bool, str]:
     """Validate an ITN callback. Returns (ok, reason)."""
     received = post_data.get("signature", "")
-    ours = sign({k: v for k, v in post_data.items() if k != "signature"})
+    ours = sign_itn(post_data)
     if not received or received != ours:
         return False, "bad signature"
     try:
