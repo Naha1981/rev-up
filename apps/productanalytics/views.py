@@ -29,10 +29,7 @@ def dashboard(request):
         }
 
     top_pages = (
-        events.filter(kind=ProductEvent.Kind.PAGE_VIEW)
-        .values("path")
-        .annotate(n=Count("id"))
-        .order_by("-n")[:10]
+        events.filter(kind=ProductEvent.Kind.PAGE_VIEW).values("path").annotate(n=Count("id")).order_by("-n")[:10]
     )
     daily = (
         events.filter(kind=ProductEvent.Kind.PAGE_VIEW)
