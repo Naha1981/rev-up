@@ -181,6 +181,40 @@ def test_generated_feed_falls_back_to_sa_feeds(workspace):
 
 
 @pytest.mark.django_db
+def test_null_feed_url_does_not_mark_workspace_custom(workspace):
+    from apps.radar.services import generate_feeds_for_all_workspaces
+    from apps.settings_manager.models import WorkspaceSetting
+
+    WorkspaceSetting.objects.create(workspace=workspace, key="radar.feed_url", value=None)
+    seen = []
+
+    def fetcher(url):
+        seen.append(url)
+        raise OSError("empty")
+
+    results = generate_feeds_for_all_workspaces(fetcher=fetcher)
+    assert str(workspace.id) in results
+    assert seen  # the workspace's feeds were actually fetched
+
+
+@pytest.mark.django_db
+def test_trade_feeds_run_even_when_google_news_has_stories(workspace):
+    from apps.radar.services import INDUSTRY_TRADE_FEEDS, generate_feed_for_workspace
+
+    workspace.industry = "restaurant"
+    workspace.save(update_fields=["industry"])
+    seen = []
+
+    def fetcher(url):
+        seen.append(url)
+        raise OSError("empty")
+
+    assert generate_feed_for_workspace(workspace, fetcher=fetcher) == 0
+    for trade_feed in INDUSTRY_TRADE_FEEDS["restaurant"]:
+        assert trade_feed in seen
+
+
+@pytest.mark.django_db
 def test_generated_feed_tries_trade_feeds_before_general(workspace):
     from apps.radar.services import INDUSTRY_TRADE_FEEDS, SA_FALLBACK_FEEDS, generate_feed_for_workspace
 

@@ -280,11 +280,21 @@ def generate_feed_for_workspace(workspace, *, fetcher=fetch_rss) -> int:
         detail.append(f"google news refused: {exc}")
         logger.warning("radar generator: google news failed for workspace %s: %s", workspace.id, exc)
     parsed = _parse_rss(raw) if raw else []
+    # Trade-matched SA feeds always run: Google News mostly returns general
+    # SA stories that rarely match a trade, so treating trade feeds as a
+    # fallback would starve the workspace of relevant signals.
+    for feed in INDUSTRY_TRADE_FEEDS.get(workspace.industry, []):
+        host = feed.split("/")[2]
+        try:
+            got = _parse_rss(fetcher(feed))
+            detail.append(f"{host}: {len(got)} stories")
+            parsed.extend(got)
+        except Exception as exc:
+            detail.append(f"{host} refused: {exc}")
+            logger.warning("radar generator: trade feed %s failed for workspace %s: %s", feed, workspace.id, exc)
     if not parsed:
-        # Fallback: trade-matched SA feeds first, then general SA news,
-        # all filtered by trade keywords below.
-        feeds = INDUSTRY_TRADE_FEEDS.get(workspace.industry, []) + SA_FALLBACK_FEEDS
-        for feed in feeds:
+        # Last resort: general SA news feeds, filtered by trade keywords below.
+        for feed in SA_FALLBACK_FEEDS:
             host = feed.split("/")[2]
             try:
                 got = _parse_rss(fetcher(feed))
@@ -293,13 +303,6 @@ def generate_feed_for_workspace(workspace, *, fetcher=fetch_rss) -> int:
             except Exception as exc:
                 detail.append(f"{host} refused: {exc}")
                 logger.warning("radar generator: fallback %s failed for workspace %s: %s", feed, workspace.id, exc)
-        if not parsed:
-            WorkspaceSetting.objects.update_or_create(
-                workspace=workspace,
-                key="radar.last_run",
-                defaults={"value": f"{timezone.now():%Y-%m-%d %H:%M} UTC: no items; " + "; ".join(detail)},
-            )
-            return 0
     keywords = [k.lower() for k in get_preset(workspace.industry).get("radar_keywords", []) if k]
     group = area or get_preset(workspace.industry).get("label", "Industry")
     created = 0
@@ -347,9 +350,13 @@ def generate_feeds_for_all_workspaces(*, fetcher=fetch_rss) -> dict:
 
     from apps.settings_manager.models import WorkspaceSetting
 
+    # A feed URL counts as custom only when it holds a real value: jsonb
+    # exact-match never sees SQL NULL, so a cleared (NULL) feed_url row would
+    # otherwise mark the workspace custom forever and skip its generated feed.
     custom = set(
         WorkspaceSetting.objects.filter(key="radar.feed_url")
-        .exclude(value__in=[None, ""])
+        .exclude(value__isnull=True)
+        .exclude(value="")
         .values_list("workspace_id", flat=True)
     )
     results: dict[str, int] = {}
