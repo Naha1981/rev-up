@@ -170,6 +170,13 @@ def poll_all_workspace_feeds(*, fetcher=fetch_feed) -> dict:
 
 MAX_GENERATED_QUERIES_PER_RUN = 20
 KEEP_ITEMS_PER_WORKSPACE = 25
+# Direct SA news RSS feeds, meant for hourly polling. Used when the Google
+# News query fails or returns nothing (it rate-limits datacenter IPs).
+SA_FALLBACK_FEEDS = [
+    "https://businesstech.co.za/news/feed/",
+    "https://www.thesouthafrican.com/feed/",
+    "https://www.sapeople.com/feed/",
+]
 _RSS_TIMEOUT = 20
 _TAG_RE = re.compile(r"<[^>]+>")
 
@@ -243,17 +250,38 @@ def generate_feed_for_workspace(workspace, *, fetcher=fetch_rss) -> int:
     area = (get_setting(workspace.id, "radar.area", workspace.organization_id, default="") or "").strip()
     query = generated_query_for(workspace, area)
     url = f"https://news.google.com/rss/search?q={quote_plus(query)}&hl=en-ZA&gl=ZA&ceid=ZA:en"
+    raw = b""
     try:
         raw = fetcher(url)
     except Exception as exc:
-        logger.warning("radar generator: fetch failed for workspace %s: %s", workspace.id, exc)
-        return 0
+        logger.warning("radar generator: google news failed for workspace %s: %s", workspace.id, exc)
+    parsed = _parse_rss(raw) if raw else []
+    if not parsed:
+        # Fallback: direct SA news feeds, filtered by trade keywords below.
+        for feed in SA_FALLBACK_FEEDS:
+            try:
+                parsed.extend(_parse_rss(fetcher(feed)))
+            except Exception as exc:
+                logger.warning("radar generator: fallback %s failed for workspace %s: %s", feed, workspace.id, exc)
+        if not parsed:
+            return 0
     keywords = [k.lower() for k in get_preset(workspace.industry).get("radar_keywords", []) if k]
     group = area or get_preset(workspace.industry).get("label", "Industry")
     created = 0
-    for item in _parse_rss(raw)[:15]:
+    seen_links: set[str] = set()
+    for item in parsed:
+        if item["link"] in seen_links:
+            continue
+        seen_links.add(item["link"])
+        hay_check = f"{item['title']} {item['summary']}".lower()
+        if keywords and not any(k in hay_check for k in keywords):
+            continue
+        if created >= 15:
+            break
         hay = f"{item['title']} {item['summary']}".lower()
         score = sum(1 for k in keywords if k in hay)
+        if area and area.lower() in hay:
+            score += 2
         try:
             with transaction.atomic():
                 _, was_created = RadarFeedItem.objects.get_or_create(

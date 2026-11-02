@@ -159,3 +159,37 @@ def test_generated_query_includes_area_and_country(workspace):
     workspace.save(update_fields=["industry"])
     q = generated_query_for(workspace, "Soweto")
     assert '"Soweto"' in q and '"South Africa"' in q and "OR" in q
+
+
+@pytest.mark.django_db
+def test_generated_feed_falls_back_to_sa_feeds(workspace):
+    from apps.radar.models import RadarFeedItem
+    from apps.radar.services import SA_FALLBACK_FEEDS, generate_feed_for_workspace
+
+    workspace.industry = "restaurant"
+    workspace.save(update_fields=["industry"])
+
+    def fetcher(url):
+        if "news.google.com" in url:
+            raise OSError("rss 429")
+        assert url in SA_FALLBACK_FEEDS
+        return RSS
+
+    created = generate_feed_for_workspace(workspace, fetcher=fetcher)
+    assert created == 2
+    assert RadarFeedItem.objects.filter(workspace=workspace).count() == 2
+
+
+@pytest.mark.django_db
+def test_generated_feed_skips_off_topic_items(workspace):
+    from apps.radar.models import RadarFeedItem
+    from apps.radar.services import generate_feed_for_workspace
+
+    workspace.industry = "restaurant"
+    workspace.save(update_fields=["industry"])
+    off_topic = RSS.replace(b"New burger spot opens in Soweto", b"Rugby squad announced for Saturday").replace(
+        b"A new restaurant brings flame-grilled food to the area.", b"Two changes to the starting fifteen."
+    )
+    created = generate_feed_for_workspace(workspace, fetcher=lambda url: off_topic)
+    assert created == 1
+    assert RadarFeedItem.objects.filter(workspace=workspace).count() == 1
