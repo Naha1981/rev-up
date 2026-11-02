@@ -214,7 +214,6 @@ class ReplyServiceTests(TestCase):
         _apply_intake(contact.workspace, contact, "trades", {"detail": "leaking geyser", "address": "12 Main Rd"})
         self.assertEqual(TradeDispatch.objects.get().address, "12 Main Rd")
 
-
     def test_restaurant_numeric_detail_becomes_table_for_n(self):
         """Regression: 'table for two' must not land on the board as service '2'."""
         from .models import Industry

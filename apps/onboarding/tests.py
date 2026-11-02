@@ -230,5 +230,7 @@ def test_pair_whatsapp_tick_counts_bound_receptionist_channel(workspace, user):
     from apps.receptionist.models import ZernioChannel
 
     assert not _has_receptionist_whatsapp(workspace.id)
-    ZernioChannel.objects.create(workspace=workspace, zernio_account_id=f"acct-{workspace.id}", phone_number="27600000001")
+    ZernioChannel.objects.create(
+        workspace=workspace, zernio_account_id=f"acct-{workspace.id}", phone_number="27600000001"
+    )
     assert _has_receptionist_whatsapp(workspace.id)
