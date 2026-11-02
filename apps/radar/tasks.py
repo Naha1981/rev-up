@@ -21,3 +21,15 @@ def poll_radar_feeds():
     results = poll_all_workspace_feeds()
     if results:
         logger.info("radar poll: %s", results)
+
+
+GENERATE_REPEAT_SECONDS = 60 * 60
+
+
+@background(schedule=0)
+def generate_radar_feed_items():
+    from .services import generate_feeds_for_all_workspaces
+
+    results = generate_feeds_for_all_workspaces()
+    if results:
+        logger.info("radar generate: %s", results)

@@ -44,11 +44,13 @@ def dashboard(request, workspace_id):
         feed_url = (request.POST.get("feed_url") or "").strip()
         account_id = (request.POST.get("social_account_id") or "").strip()
         max_items = (request.POST.get("max_items_per_run") or "").strip()
+        area = (request.POST.get("area") or "").strip()[:120]
         industry = (request.POST.get("industry") or "").strip()
         if industry in INDUSTRY_PRESETS and workspace.industry != industry:
             workspace.industry = industry
             workspace.save(update_fields=["industry"])
         _set_workspace_value(workspace, "radar.feed_url", feed_url or None)
+        _set_workspace_value(workspace, "radar.area", area or None)
         _set_workspace_value(workspace, "radar.social_account_id", account_id or None)
         _set_workspace_value(workspace, "radar.max_items_per_run", int(max_items) if max_items.isdigit() else None)
         messages.success(request, "Radar settings saved. The poller picks them up on its next run (every 15 min).")
@@ -67,6 +69,7 @@ def dashboard(request, workspace_id):
             feed_error = str(exc)
             logger.warning("radar dashboard: fetch failed for %s: %s", feed_url, exc)
 
+    area = (get_setting(workspace.id, "radar.area", org_id) or "").strip()
     ingested_links = set(RadarIngestedItem.objects.filter(workspace=workspace).values_list("link", flat=True))
     keywords = [k.lower() for k in get_preset(workspace.industry).get("radar_keywords", [])]
     items = []
@@ -74,6 +77,26 @@ def dashboard(request, workspace_id):
         hay = " ".join(str(item.get(k) or "") for k in ("title", "group", "source", "summary")).lower()
         relevant = not keywords or any(k in hay for k in keywords)
         items.append({**item, "ingested": item.get("link") in ingested_links, "relevant": relevant})
+    generated = False
+    if not feed_url:
+        from .models import RadarFeedItem
+
+        for row in RadarFeedItem.objects.filter(workspace=workspace)[:15]:
+            hay = f"{row.title} {row.summary}".lower()
+            relevant = not keywords or any(k in hay for k in keywords)
+            items.append(
+                {
+                    "title": row.title,
+                    "link": row.link,
+                    "source": row.source,
+                    "summary": row.summary,
+                    "group": row.group,
+                    "score": row.score,
+                    "ingested": row.link in ingested_links,
+                    "relevant": relevant,
+                }
+            )
+        generated = True
 
     drafts = (
         RadarIngestedItem.objects.filter(workspace=workspace, post__isnull=False)
@@ -92,6 +115,8 @@ def dashboard(request, workspace_id):
             "max_items": max_items or 3,
             "feed": feed,
             "feed_error": feed_error,
+            "generated": generated,
+            "area": area,
             "items": items,
             "industry_choices": INDUSTRY_CHOICES,
             "preset": get_preset(workspace.industry),

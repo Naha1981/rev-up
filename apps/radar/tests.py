@@ -110,3 +110,52 @@ class TestRadarIngest:
         result = ingest_feed_for_workspace(workspace, fetcher=_fetch(FEED))
         assert result == {"created": 0, "skipped": 0, "mode": "account-needs-reconnect"}
         assert RadarIngestedItem.objects.filter(workspace=workspace).count() == 0
+
+
+RSS = b"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+<item><title>New burger spot opens in Soweto</title><link>https://news.example/1</link>
+<source>Local Times</source><pubDate>Mon, 02 Nov 2026 05:00:00 GMT</pubDate>
+<description>&lt;p&gt;A new restaurant brings flame-grilled food to the area.&lt;/p&gt;</description></item>
+<item><title>Food prices rise across South Africa</title><link>https://news.example/2</link>
+<source>Daily News</source><pubDate>Mon, 02 Nov 2026 04:00:00 GMT</pubDate>
+<description>Restaurant input costs climb again.</description></item>
+</channel></rss>"""
+
+
+@pytest.mark.django_db
+def test_generated_feed_stores_items(workspace):
+    from apps.radar.models import RadarFeedItem
+    from apps.radar.services import generate_feed_for_workspace
+
+    workspace.industry = "restaurant"
+    workspace.save(update_fields=["industry"])
+    created = generate_feed_for_workspace(workspace, fetcher=lambda url: RSS)
+    assert created == 2
+    items = RadarFeedItem.objects.filter(workspace=workspace)
+    assert items.count() == 2
+    assert {i.source for i in items} == {"Local Times", "Daily News"}
+    # Dedup: a second run stores nothing new.
+    assert generate_feed_for_workspace(workspace, fetcher=lambda url: RSS) == 0
+
+
+@pytest.mark.django_db
+def test_generated_feed_fetch_failure_stores_nothing(workspace):
+    from apps.radar.models import RadarFeedItem
+    from apps.radar.services import generate_feed_for_workspace
+
+    def boom(url):
+        raise OSError("rss 429")
+
+    assert generate_feed_for_workspace(workspace, fetcher=boom) == 0
+    assert RadarFeedItem.objects.filter(workspace=workspace).count() == 0
+
+
+@pytest.mark.django_db
+def test_generated_query_includes_area_and_country(workspace):
+    from apps.radar.services import generated_query_for
+
+    workspace.industry = "restaurant"
+    workspace.save(update_fields=["industry"])
+    q = generated_query_for(workspace, "Soweto")
+    assert '"Soweto"' in q and '"South Africa"' in q and "OR" in q

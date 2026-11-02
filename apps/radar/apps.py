@@ -15,8 +15,11 @@ class RadarConfig(AppConfig):
         try:
             from apps.common.background import register_recurring_task
 
-            from .tasks import POLL_REPEAT_SECONDS, poll_radar_feeds
+            from .tasks import GENERATE_REPEAT_SECONDS, POLL_REPEAT_SECONDS, generate_radar_feed_items, poll_radar_feeds
 
             register_recurring_task(poll_radar_feeds, repeat=POLL_REPEAT_SECONDS, verbose_name="radar_poll_feeds")
+            register_recurring_task(
+                generate_radar_feed_items, repeat=GENERATE_REPEAT_SECONDS, verbose_name="radar_generate_feed_items"
+            )
         except Exception:  # background tables may not exist pre-migrate
             pass

@@ -14,7 +14,7 @@
         <form method="post" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
             {% csrf_token %}
             <div class="md:col-span-2">
-                <label class="block text-xs font-medium text-stone-500 mb-1">Feed URL</label>
+                <label class="block text-xs font-medium text-stone-500 mb-1">Feed URL (optional - leave empty and we build your radar for you)</label>
                 <input type="url" name="feed_url" value="{{ feed_url }}" placeholder="https://.../feed/pilot.json" class="w-full rounded-lg border-stone-300 text-sm">
             </div>
             <div>
@@ -33,6 +33,10 @@
                 <select name="industry" class="w-full rounded-lg border-stone-300 text-sm">
                     {% for key, label in industry_choices %}<option value="{{ key }}" {% if key == workspace.industry %}selected{% endif %}>{{ label }}</option>{% endfor %}
                 </select>
+            </div>
+            <div class="md:col-span-2">
+                <label class="block text-xs font-medium text-stone-500 mb-1">Your area (town or suburb)</label>
+                <input type="text" name="area" value="{{ area }}" placeholder="e.g. Soweto" maxlength="120" class="w-full rounded-lg border-stone-300 text-sm">
             </div>
             <div class="md:col-span-4">
                 <button type="submit" class="rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2">Save radar settings</button>
@@ -63,7 +67,7 @@
         {% endfor %}
     </div>
     {% elif not feed_error %}
-    <div class="bg-white rounded-xl border border-dashed border-stone-300 px-5 py-8 text-center text-sm text-stone-400 mb-6">Set a feed URL above to see live radar signals here.</div>
+    <div class="bg-white rounded-xl border border-dashed border-stone-300 px-5 py-8 text-center text-sm text-stone-400 mb-6">Your radar is gathering signals for your trade{% if area %} in {{ area }}{% endif %} - new items appear here within the hour.</div>
     {% endif %}
 
     <h2 class="text-sm font-semibold text-stone-800 mb-2">Radar-generated posts</h2>
