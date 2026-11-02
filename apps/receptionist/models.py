@@ -125,6 +125,7 @@ class Contact(models.Model):
     opted_out = models.BooleanField(
         default=False, help_text="Customer replied STOP: no automated messages without fresh consent"
     )
+    opted_out_at = models.DateTimeField(null=True, blank=True, help_text="When the customer replied STOP")
     review_status = models.CharField(
         max_length=20,
         blank=True,

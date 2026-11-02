@@ -10,6 +10,7 @@ urlpatterns = [
     path("setup/connect-whatsapp/", views.connect_whatsapp, name="connect_whatsapp"),
     path("bookings/", views.bookings, name="bookings"),
     path("quotes/", views.quotes, name="quotes"),
+    path("reviews/", views.review_dashboard, name="reviews"),
     path("calendar/connect/", views.calendar_connect, name="calendar_connect"),
     path("calendar/disconnect/", views.calendar_disconnect, name="calendar_disconnect"),
     path("quotes/<uuid:quote_id>/<str:action>/", views.quote_action, name="quote_action"),

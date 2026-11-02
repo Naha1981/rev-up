@@ -288,8 +288,9 @@ def record_click(short_code: str) -> str | None:
 def unsubscribe_contact(contact: Contact) -> int:
     """STOP: cancel every pending step and block restart without consent."""
     contact.opted_out = True
+    contact.opted_out_at = timezone.now()
     contact.review_status = "unsubscribed"
-    contact.save(update_fields=["opted_out", "review_status", "updated_at"])
+    contact.save(update_fields=["opted_out", "opted_out_at", "review_status", "updated_at"])
     cancelled = cancel_pending(contact)
     logger.info("reviews: contact %s opted out, %d pending steps cancelled", contact.id, cancelled)
     return cancelled

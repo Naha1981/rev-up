@@ -213,6 +213,28 @@ def bookings(request, workspace_id):
 
 
 @login_required
+def review_dashboard(request, workspace_id):
+    """The business's review numbers: asks, link opens, reminders, opt-outs."""
+    from . import review_stats
+
+    workspace = _get_workspace(request, workspace_id)
+    profile = getattr(workspace, "receptionist_profile", None)
+    months = review_stats.monthly_stats(workspace)
+    return render(
+        request,
+        "receptionist/review_dashboard.html",
+        {
+            "workspace": workspace,
+            "profile": profile,
+            "months": months,
+            "this_month": months[-1],
+            "totals": review_stats.totals(workspace),
+            "activity": review_stats.recent_activity(workspace),
+        },
+    )
+
+
+@login_required
 @require_http_methods(["POST"])
 def booking_action(request, workspace_id, booking_id, action):
     workspace = _get_workspace(request, workspace_id)

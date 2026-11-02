@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mx-auto w-full max-w-2xl px-4 py-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-xl font-semibold text-stone-900">Reviews</h1>
+    <div class="flex items-center gap-4">
+      <a href="{% url 'receptionist:inbox' workspace.id %}" class="text-sm font-medium text-orange-600">Inbox</a>
+      <a href="{% url 'receptionist:bookings' workspace.id %}" class="text-sm font-medium text-orange-600">Bookings</a>
+      <a href="{% url 'receptionist:setup' workspace.id %}" class="text-sm font-medium text-orange-600">Settings</a>
+    </div>
+  </div>
+  {% if not profile or not profile.review_requests_enabled %}
+  <div class="mt-6 rounded-2xl border border-stone-200 bg-white p-6 text-center">
+    <p class="text-stone-600">Review requests are off for this business. Switch them on in Settings, with your Google review link, and every step shows up on this page.</p>
+    <a href="{% url 'receptionist:setup' workspace.id %}" class="mt-4 inline-block rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-medium text-white">Open Settings</a>
+  </div>
+  {% else %}
+  <p class="mt-1 text-sm text-stone-500">What your review requests did for {{ profile.business_name|default:workspace.name }}.</p>
+
+  <h2 class="mt-6 text-sm font-semibold uppercase tracking-wide text-stone-500">This month</h2>
+  <div class="mt-3 grid grid-cols-2 gap-3">
+    <div class="rounded-2xl border border-stone-200 bg-white p-4">
+      <p class="text-2xl font-semibold text-stone-900">{{ this_month.asked }}</p>
+      <p class="mt-1 text-sm text-stone-600">customers asked for a review</p>
+    </div>
+    <div class="rounded-2xl border border-stone-200 bg-white p-4">
+      <p class="text-2xl font-semibold text-orange-600">{{ this_month.clicks }}</p>
+      <p class="mt-1 text-sm text-stone-600">opened your review link</p>
+    </div>
+    <div class="rounded-2xl border border-stone-200 bg-white p-4">
+      <p class="text-2xl font-semibold text-stone-900">{{ this_month.checkins }}</p>
+      <p class="mt-1 text-sm text-stone-600">check-ins sent after a job</p>
+    </div>
+    <div class="rounded-2xl border border-stone-200 bg-white p-4">
+      <p class="text-2xl font-semibold text-stone-900">{{ this_month.reminders }}</p>
+      <p class="mt-1 text-sm text-stone-600">reminders sent</p>
+    </div>
+    <div class="rounded-2xl border border-stone-200 bg-white p-4">
+      <p class="text-2xl font-semibold text-stone-900">{{ this_month.optouts }}</p>
+      <p class="mt-1 text-sm text-stone-600">people asked to stop messages</p>
+    </div>
+  </div>
+  <p class="mt-3 text-xs text-stone-500">Google keeps the final step private, so "opened your review link" counts every customer who went to your Google review page - your closest measure of new reviews.</p>
+  {% if totals.asked %}
+  <p class="mt-2 text-sm font-medium text-stone-700">So far, {{ totals.clicks }} of {{ totals.asked }} customers opened your review link after being asked.</p>
+  {% endif %}
+
+  <h2 class="mt-8 text-sm font-semibold uppercase tracking-wide text-stone-500">Month by month</h2>
+  <div class="mt-3 overflow-x-auto rounded-2xl border border-stone-200 bg-white">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-stone-200 text-left text-xs uppercase tracking-wide text-stone-500">
+          <th class="px-4 py-3 font-medium">Month</th>
+          <th class="px-3 py-3 font-medium text-right">Asked</th>
+          <th class="px-3 py-3 font-medium text-right">Opened link</th>
+          <th class="px-3 py-3 font-medium text-right">Check-ins</th>
+          <th class="px-3 py-3 font-medium text-right">Reminders</th>
+          <th class="px-3 py-3 font-medium text-right">Opted out</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in months reversed %}
+        <tr class="{% if not for.last %}border-b border-stone-100{% endif %}{% if m.current %} bg-orange-50{% endif %}">
+          <td class="px-4 py-2.5 font-medium text-stone-900">{% if m.current %}This month{% else %}{{ m.label }}{% endif %}</td>
+          <td class="px-3 py-2.5 text-right text-stone-700">{{ m.asked }}</td>
+          <td class="px-3 py-2.5 text-right font-medium text-orange-600">{{ m.clicks }}</td>
+          <td class="px-3 py-2.5 text-right text-stone-700">{{ m.checkins }}</td>
+          <td class="px-3 py-2.5 text-right text-stone-700">{{ m.reminders }}</td>
+          <td class="px-3 py-2.5 text-right text-stone-700">{{ m.optouts }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="border-t border-stone-200 bg-stone-50 font-medium">
+          <td class="px-4 py-2.5 text-stone-900">All time</td>
+          <td class="px-3 py-2.5 text-right text-stone-900">{{ totals.asked }}</td>
+          <td class="px-3 py-2.5 text-right text-orange-600">{{ totals.clicks }}</td>
+          <td class="px-3 py-2.5 text-right text-stone-900">{{ totals.checkins }}</td>
+          <td class="px-3 py-2.5 text-right text-stone-900">{{ totals.reminders }}</td>
+          <td class="px-3 py-2.5 text-right text-stone-900">{{ totals.optouts }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="mt-8 text-sm font-semibold uppercase tracking-wide text-stone-500">Latest activity</h2>
+  {% if activity %}
+  <div class="mt-3 space-y-2">
+    {% for row in activity %}
+    <div class="flex items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3">
+      <p class="text-sm text-stone-900"><span class="font-medium">{{ row.who }}</span> <span class="text-stone-600">{{ row.what }}</span></p>
+      <p class="shrink-0 text-xs text-stone-500">{{ row.when|date:"j M Y, H:i" }}</p>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="mt-3 rounded-2xl border border-stone-200 bg-white p-6 text-center text-sm text-stone-600">Nothing here yet. The moment your receptionist asks the first customer for a review, every step shows up on this page.</p>
+  {% endif %}
+  {% endif %}
+</div>
+{% endblock %}
