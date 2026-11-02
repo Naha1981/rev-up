@@ -70,6 +70,7 @@ def dashboard(request, workspace_id):
             logger.warning("radar dashboard: fetch failed for %s: %s", feed_url, exc)
 
     area = (get_setting(workspace.id, "radar.area", org_id) or "").strip()
+    last_run = get_setting(workspace.id, "radar.last_run", org_id) or ""
     ingested_links = set(RadarIngestedItem.objects.filter(workspace=workspace).values_list("link", flat=True))
     keywords = [k.lower() for k in get_preset(workspace.industry).get("radar_keywords", [])]
     items = []
@@ -117,6 +118,7 @@ def dashboard(request, workspace_id):
             "feed_error": feed_error,
             "generated": generated,
             "area": area,
+            "last_run": last_run,
             "items": items,
             "industry_choices": INDUSTRY_CHOICES,
             "preset": get_preset(workspace.industry),

@@ -250,20 +250,34 @@ def generate_feed_for_workspace(workspace, *, fetcher=fetch_rss) -> int:
     area = (get_setting(workspace.id, "radar.area", workspace.organization_id, default="") or "").strip()
     query = generated_query_for(workspace, area)
     url = f"https://news.google.com/rss/search?q={quote_plus(query)}&hl=en-ZA&gl=ZA&ceid=ZA:en"
+    from apps.settings_manager.models import WorkspaceSetting
+
+    detail = []
     raw = b""
     try:
         raw = fetcher(url)
+        detail.append(f"google news: {len(_parse_rss(raw))} stories")
     except Exception as exc:
+        detail.append(f"google news refused: {exc}")
         logger.warning("radar generator: google news failed for workspace %s: %s", workspace.id, exc)
     parsed = _parse_rss(raw) if raw else []
     if not parsed:
         # Fallback: direct SA news feeds, filtered by trade keywords below.
         for feed in SA_FALLBACK_FEEDS:
+            host = feed.split("/")[2]
             try:
-                parsed.extend(_parse_rss(fetcher(feed)))
+                got = _parse_rss(fetcher(feed))
+                detail.append(f"{host}: {len(got)} stories")
+                parsed.extend(got)
             except Exception as exc:
+                detail.append(f"{host} refused: {exc}")
                 logger.warning("radar generator: fallback %s failed for workspace %s: %s", feed, workspace.id, exc)
         if not parsed:
+            WorkspaceSetting.objects.update_or_create(
+                workspace=workspace,
+                key="radar.last_run",
+                defaults={"value": f"{timezone.now():%Y-%m-%d %H:%M} UTC: no items; " + "; ".join(detail)},
+            )
             return 0
     keywords = [k.lower() for k in get_preset(workspace.industry).get("radar_keywords", []) if k]
     group = area or get_preset(workspace.industry).get("label", "Industry")
@@ -297,6 +311,11 @@ def generate_feed_for_workspace(workspace, *, fetcher=fetch_rss) -> int:
     stale = RadarFeedItem.objects.filter(workspace=workspace).values_list("id", flat=True)[KEEP_ITEMS_PER_WORKSPACE:]
     if stale:
         RadarFeedItem.objects.filter(id__in=list(stale)).delete()
+    WorkspaceSetting.objects.update_or_create(
+        workspace=workspace,
+        key="radar.last_run",
+        defaults={"value": f"{timezone.now():%Y-%m-%d %H:%M} UTC: {created} new; " + "; ".join(detail)},
+    )
     return created
 
 
