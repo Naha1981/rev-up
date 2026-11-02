@@ -48,6 +48,8 @@
          @drop="dropOnColumn($event, '{{ col.id }}')">
         {% for idea in col.ideas %}
             {% include "composer/partials/idea_card.html" with idea=idea group_id=col.id %}
+        {% empty %}
+            <p class="px-3 py-4 text-xs text-stone-400 text-center">No ideas yet. Capture one with New Idea below.</p>
         {% endfor %}
     </div>
 

@@ -2658,25 +2658,25 @@ def clone_post_view(request, workspace_id, post_id):
 # ---------------------------------------------------------------------------
 
 
+def _ensure_default_idea_groups(workspace):
+    """Create the starter Kanban columns when a workspace has none.
+
+    Called from every path that reads or writes ideas (board render AND idea
+    creation), so an idea can never be saved with no group while the columns
+    only spring into existence on the first board visit.
+    """
+    groups = IdeaGroup.objects.for_workspace(workspace.id).order_by("position", "created_at")
+    if not groups.exists():
+        for name, pos in [("Unassigned", 0), ("To Do", 1), ("In Progress", 2), ("Done", 3)]:
+            IdeaGroup.objects.create(workspace=workspace, name=name, position=pos)
+        groups = IdeaGroup.objects.for_workspace(workspace.id).order_by("position", "created_at")
+    return groups
+
+
 def _idea_columns(workspace, tag=None):
     """Build Kanban columns from IdeaGroup for a workspace, optionally filtered by tag."""
-    groups = IdeaGroup.objects.for_workspace(workspace.id).order_by("position", "created_at")
-
-    # Ensure default groups exist for this workspace
-    if not groups.exists():
-        created_groups = {}
-        for name, pos in [("Unassigned", 0), ("To Do", 1), ("In Progress", 2), ("Done", 3)]:
-            created_groups[name] = IdeaGroup.objects.create(workspace=workspace, name=name, position=pos)
-        # Seed an introductory idea in the Unassigned column
-        Idea.objects.create(
-            workspace=workspace,
-            group=created_groups["Unassigned"],
-            title="This is a place to plan \u270d\ufe0f your content",
-            description="Save your Ideas before converting them into posts. Brainstorm, plan ahead, and keep everything organized in one place.",
-            status=Idea.Status.UNASSIGNED,
-            position=0,
-        )
-        groups = IdeaGroup.objects.for_workspace(workspace.id).order_by("position", "created_at")
+    groups = _ensure_default_idea_groups(workspace)
+    unassigned = groups.first()
 
     ideas_qs = (
         Idea.objects.for_workspace(workspace.id)
@@ -2691,7 +2691,9 @@ def _idea_columns(workspace, tag=None):
     for idea in ideas_qs:
         _prepare_idea_for_kanban(idea)
 
-        group_key = str(idea.group_id) if idea.group_id else ""
+        # Ideas saved before their workspace had columns carry no group; show
+        # them in Unassigned instead of dropping them off the board.
+        group_key = str(idea.group_id) if idea.group_id else (str(unassigned.id) if unassigned else "")
         if group_key in grouped_ideas:
             grouped_ideas[group_key].append(idea)
 
@@ -2966,12 +2968,14 @@ def idea_create(request, workspace_id):
     if not title:
         return HttpResponse("Title is required.", status=400)
 
-    # Assign to the specified group or default to the first group
+    # Assign to the specified group or default to the first group. Ensure the
+    # starter columns exist first: an idea created before the board was ever
+    # opened must still land in a visible column.
     group_id = request.POST.get("group")
     if group_id:
         group = IdeaGroup.objects.filter(id=group_id, workspace=workspace).first()
     else:
-        group = IdeaGroup.objects.for_workspace(workspace.id).order_by("position").first()
+        group = _ensure_default_idea_groups(workspace).first()
 
     has_multi_media_payload = "media_asset_ids" in request.POST
     media_asset_ids = _normalize_media_asset_ids(request.POST.get("media_asset_ids", ""))
