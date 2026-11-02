@@ -256,6 +256,30 @@ class ViewTests(TestCase):
         self.assertEqual(profile.industry, "dental")
         self.assertEqual(profile.pricing_data["Consultation"], "R850")
 
+    def test_setup_preselects_signup_industry_without_profile(self):
+        self.ws.industry = "restaurant"
+        self.ws.save(update_fields=["industry"])
+        self.client.force_login(self.user)
+        resp = self.client.get(f"/workspace/{self.ws.id}/receptionist/setup/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'value="restaurant" selected')
+
+    def test_setup_existing_profile_industry_wins(self):
+        self.ws.industry = "restaurant"
+        self.ws.save(update_fields=["industry"])
+        BusinessProfile.objects.create(workspace=self.ws, industry="dental", business_name="Smile Dental")
+        self.client.force_login(self.user)
+        resp = self.client.get(f"/workspace/{self.ws.id}/receptionist/setup/")
+        self.assertContains(resp, 'value="dental" selected')
+        self.assertNotContains(resp, 'value="restaurant" selected')
+
+    def test_setup_unmapped_signup_industry_defaults_general(self):
+        self.ws.industry = "general"
+        self.ws.save(update_fields=["industry"])
+        self.client.force_login(self.user)
+        resp = self.client.get(f"/workspace/{self.ws.id}/receptionist/setup/")
+        self.assertContains(resp, 'value="general" selected')
+
     def test_inbox_shows_only_own_contacts(self):
         self.client.force_login(self.user)
         BusinessProfile.objects.create(workspace=self.ws, industry="dental", business_name="Smile Dental")

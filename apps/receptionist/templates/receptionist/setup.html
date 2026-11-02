@@ -48,7 +48,7 @@
     {% csrf_token %}
     <label class="block text-sm font-medium text-stone-700">Business type
       <select name="industry" class="mt-1 w-full rounded-xl border border-stone-300 px-3 py-2.5">
-        {% for value, label in industries %}<option value="{{ value }}" {% if profile and profile.industry == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        {% for value, label in industries %}<option value="{{ value }}" {% if selected_industry == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
       </select>
     </label>
     <label class="block text-sm font-medium text-stone-700">Business name

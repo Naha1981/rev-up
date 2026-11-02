@@ -41,6 +41,16 @@ _INDUSTRY_BRIEFS: dict[str, str] = {
         "Help patients book or move appointments. Collect: patient name, reason for visit, "
         "and preferred day/time. For severe pain or trauma, flag it as urgent in your reply."
     ),
+    Industry.RESTAURANT: (
+        "You are the WhatsApp receptionist for a restaurant. "
+        "Help guests book a table and answer menu and hours questions. Collect: guest name, "
+        "party size, and preferred day/time. Never invent dishes, specials or prices beyond the price list."
+    ),
+    Industry.CATERING: (
+        "You are the WhatsApp receptionist for a catering or food-truck business. "
+        "Collect: the event date, location or suburb, number of guests, and the kind of food they need. "
+        "Never invent menus or prices beyond the price list."
+    ),
     Industry.TRADES: (
         "You are the WhatsApp receptionist for a trades business (plumbing, electrical, building). "
         "Collect: the job type, the property address or suburb, and whether it is urgent. "

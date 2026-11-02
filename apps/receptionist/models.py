@@ -36,8 +36,21 @@ class Industry(models.TextChoices):
     FINANCIAL_BROKER = "financial-broker", "Financial / insurance broker"
     FUNERAL = "funeral", "Funeral services"
     DENTAL = "dental", "Dental practice"
+    RESTAURANT = "restaurant", "Restaurant / cafe / takeaway"
+    CATERING = "catering", "Catering / food truck"
     TRADES = "trades", "Trades (general building & repairs)"
     GENERAL = "general", "General local service"
+
+
+# Workspace-level signup industry -> receptionist business type. The signup
+# pick drives radar presets; this maps it onto the receptionist profile so a
+# new workspace's setup screen preselects the owner's actual trade.
+WORKSPACE_INDUSTRY_MAP = {
+    "restaurant": Industry.RESTAURANT,
+    "real_estate": Industry.REAL_ESTATE,
+    "dental": Industry.DENTAL,
+    "auto": Industry.AUTO_WORKSHOP,
+}
 
 
 class BusinessProfile(models.Model):

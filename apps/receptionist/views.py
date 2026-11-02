@@ -108,6 +108,11 @@ def setup(request, workspace_id):
         messages.success(request, "Receptionist settings saved.")
         return redirect("receptionist:inbox", workspace_id=workspace.id)
 
+    from .models import WORKSPACE_INDUSTRY_MAP
+
+    selected_industry = (
+        profile.industry if profile else WORKSPACE_INDUSTRY_MAP.get(workspace.industry, Industry.GENERAL)
+    )
     pricing_text = _pricing_lines(profile.pricing_data) if profile and profile.pricing_data else ""
     hours_text = ""
     if profile and profile.operating_hours:
@@ -146,6 +151,7 @@ def setup(request, workspace_id):
             "workspace": workspace,
             "profile": profile,
             "industries": Industry.choices,
+            "selected_industry": selected_industry,
             "pricing_text": pricing_text,
             "hours_text": hours_text,
             "channel": channel,
