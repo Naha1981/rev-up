@@ -14,6 +14,7 @@ exposes nothing.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
 import time
@@ -51,7 +52,7 @@ def drain_due_tasks(seconds: int = DRAIN_SECONDS) -> int:
     # on a daemon thread, and its disable() writes back a saved holder - if a
     # test's settings override was popped while the drain was mid-flight, the
     # stale holder is resurrected and every later test sees its values.
-    wrapped = dj_settings._wrapped
+    wrapped = getattr(dj_settings, "_wrapped", dj_settings)
     had_flag = hasattr(wrapped, "BACKGROUND_TASK_RUN_ASYNC")
     previous = getattr(wrapped, "BACKGROUND_TASK_RUN_ASYNC", None)
     wrapped.BACKGROUND_TASK_RUN_ASYNC = False
@@ -62,10 +63,8 @@ def drain_due_tasks(seconds: int = DRAIN_SECONDS) -> int:
         if had_flag:
             wrapped.BACKGROUND_TASK_RUN_ASYNC = previous
         else:
-            try:
+            with contextlib.suppress(AttributeError):
                 delattr(wrapped, "BACKGROUND_TASK_RUN_ASYNC")
-            except AttributeError:
-                pass
     return ran
 
 
