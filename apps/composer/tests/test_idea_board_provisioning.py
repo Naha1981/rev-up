@@ -60,7 +60,10 @@ class IdeaBoardProvisioningTests(TestCase):
         # Pre-fix data: an idea saved with no group must still render.
         _idea_columns(self.workspace)  # create the columns
         orphan = Idea.objects.create(
-            workspace=self.workspace, author=self.user, title="Orphan", group=None,
+            workspace=self.workspace,
+            author=self.user,
+            title="Orphan",
+            group=None,
             status=Idea.Status.UNASSIGNED,
         )
         columns, _ = _idea_columns(self.workspace)
