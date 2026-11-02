@@ -610,18 +610,27 @@ def review_redirect(request, code: str):
     from . import reviews as _reviews
     from .models import ReviewLink
 
-    link = ReviewLink.objects.filter(short_code=code).select_related("workspace").first()
+    link = (
+        ReviewLink.objects.filter(short_code=code)
+        .select_related("workspace", "workspace__receptionist_profile")
+        .first()
+    )
     if link is None:
         return HttpResponseNotFound("Link not found")
     ua = request.META.get("HTTP_USER_AGENT", "").lower()
     if not any(bot in ua for bot in _PREVIEW_BOT_UA):
         _reviews.record_click(code)
     card_image = request.build_absolute_uri(static("receptionist/review-card.png"))
+    # The card speaks for the business, not the account: prefer the trading
+    # name from receptionist setup (workspace names default to the owner's
+    # personal name, which must never reach a customer's phone).
+    profile = getattr(link.workspace, "receptionist_profile", None)
+    business_name = (profile.business_name if profile else "") or link.workspace.name
     return render(
         request,
         "receptionist/review_redirect.html",
         {
-            "business_name": link.workspace.name,
+            "business_name": business_name,
             "target_url": link.original_url,
             "card_image": card_image,
         },

@@ -367,7 +367,25 @@ def _link():
     )
 
 
-class ReviewRedirectCardTests:
+class TestReviewRedirectCard:
+    def test_card_shows_trading_name_not_account_name(self):
+        # Signup names the workspace after the owner ("Jane's Workspace");
+        # the customer-facing card must carry the trading name from setup.
+        ws = _workspace()
+        ws.name = "Jane's Workspace"
+        ws.save(update_fields=["name"])
+        profile = ws.receptionist_profile
+        profile.business_name = "Jane's Bakery"
+        profile.save(update_fields=["business_name"])
+        contact = Contact.objects.create(workspace=ws, wa_id="27000000002", name="Pat")
+        link = ReviewLink.objects.create(
+            workspace=ws, contact=contact, short_code="cardname1", original_url="https://reviews.example.com/biz"
+        )
+        resp = Client().get(f"/r/{link.short_code}/", HTTP_USER_AGENT="Mozilla/5.0 (iPhone)")
+        body = resp.content.decode()
+        assert "Jane&#x27;s Bakery" in body or "Jane's Bakery" in body
+        assert "Jane&#x27;s Workspace" not in body and "Jane's Workspace" not in body
+
     def test_human_gets_card_with_business_name_and_click_recorded(self):
         link = _link()
         resp = Client().get(f"/r/{link.short_code}/", HTTP_USER_AGENT="Mozilla/5.0 (iPhone)")
