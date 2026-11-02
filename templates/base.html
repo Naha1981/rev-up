@@ -920,7 +920,7 @@
                     {% endfor %}
                 </div>
                 {% endif %}
-                <div class="flex-1 min-h-0 flex flex-col overflow-y-auto overflow-x-hidden">
+                <div class="flex-1 min-h-0 flex flex-col overflow-y-auto overflow-x-hidden{% if not checklist_dismissed and checklist_items %} pb-20 sm:pb-6{% endif %}">
                 {% block content %}{% endblock %}
                 </div>
             </main>

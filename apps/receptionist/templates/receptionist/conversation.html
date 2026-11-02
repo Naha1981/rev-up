@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="mx-auto w-full max-w-2xl px-4 py-6">
-  <a href="{% url 'receptionist:inbox' workspace.id %}" class="text-sm text-blue-600">&larr; Inbox</a>
-  <h1 class="mt-2 text-xl font-semibold text-gray-900">{{ contact.name|default:contact.wa_id }}</h1>
+  <a href="{% url 'receptionist:inbox' workspace.id %}" class="text-sm text-orange-600">&larr; Inbox</a>
+  <h1 class="mt-2 text-xl font-semibold text-stone-900">{{ contact.name|default:contact.wa_id }}</h1>
   {% if contact.needs_human %}<p class="mt-1 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">This customer is waiting for a person. The receptionist has stepped back.</p>{% endif %}
   <div class="mt-5 space-y-3">
     {% for m in msgs %}
     <div class="flex {% if m.direction == 'outbound' %}justify-end{% endif %}">
-      <div class="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm {% if m.direction == 'inbound' %}bg-gray-100 text-gray-900{% else %}{% if m.is_draft %}border border-blue-200 bg-blue-50 text-gray-900{% else %}bg-blue-600 text-white{% endif %}{% endif %}">
+      <div class="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm {% if m.direction == 'inbound' %}bg-stone-100 text-stone-900{% else %}{% if m.is_draft %}border border-orange-200 bg-orange-50 text-stone-900{% else %}bg-orange-500 text-white{% endif %}{% endif %}">
         {{ m.body }}
-        {% if m.is_draft %}<p class="mt-1 text-xs text-blue-600">Draft &middot; not sent yet</p>{% endif %}
+        {% if m.is_draft %}<p class="mt-1 text-xs text-orange-600">Draft &middot; not sent yet</p>{% endif %}
       </div>
     </div>
     {% endfor %}
