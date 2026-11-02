@@ -215,6 +215,22 @@ class ReplyServiceTests(TestCase):
         self.assertEqual(TradeDispatch.objects.get().address, "12 Main Rd")
 
 
+    def test_restaurant_numeric_detail_becomes_table_for_n(self):
+        """Regression: 'table for two' must not land on the board as service '2'."""
+        from .models import Industry
+        from .webhooks import _apply_intake
+
+        contact = Contact.objects.create(workspace=self_ws(), wa_id="27000000001")
+        _apply_intake(
+            contact.workspace, contact, Industry.RESTAURANT, {"detail": "2", "preferred_time": "Friday 19:00"}
+        )
+        from .models import Booking
+
+        booking = Booking.objects.get()
+        self.assertEqual(booking.service, "Table for 2")
+        self.assertEqual(booking.preferred_time, "Friday 19:00")
+
+
 def self_ws():
     return _workspace("dd-trades")
 

@@ -15,7 +15,7 @@ import logging
 from django.conf import settings
 from django.db import transaction
 
-from .models import Contact, Message, ZernioChannel
+from .models import Contact, Industry, Message, ZernioChannel
 from .services import draft_reply
 
 logger = logging.getLogger(__name__)
@@ -175,6 +175,11 @@ def _apply_intake(workspace, contact, industry: str, intake: dict) -> None:
     from .models import Booking, DentalAppointment, FuneralClaim, TradeDispatch
 
     detail = (intake.get("detail") or "").strip()
+    if industry == Industry.RESTAURANT and detail.isdigit():
+        # The model sometimes lifts just the party size out of "table for
+        # two"; "Table for 2" reads correctly on the board and in the
+        # confirmation reply.
+        detail = f"Table for {detail}"
     preferred = (intake.get("preferred_time") or "").strip()
     if detail or preferred:
         Booking.objects.create(

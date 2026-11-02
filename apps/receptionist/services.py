@@ -232,7 +232,8 @@ def draft_reply(profile: BusinessProfile, history: list[tuple[str, str]], incomi
         f"Conversation so far:\n{transcript}\nCustomer: {incoming}\n\n"
         "Reply with JSON only: "
         '{"reply": "...", "intake": {"name": "", "detail": "", "preferred_time": "", "address": "", "policy_number": ""}} '
-        "(fill only the intake fields the customer actually gave).\n"
+        "(fill only the intake fields the customer actually gave; make detail a short description "
+        "of what they want - for a restaurant booking use 'Table for N', never a bare number).\n"
         f"{_RULES}"
     )
 
