@@ -65,12 +65,16 @@ def dashboard(request, workspace_id):
     if request.method == "POST":
         enquiry = (request.POST.get("enquiry") or "").strip()
         if len(enquiry) < 20:
-            messages.error(request, "Paste a fuller test enquiry (at least 20 characters).")
+            messages.error(
+                request,
+                "Type a little more of the customer's message (at least 20 characters) so the receptionist has something to work with.",
+            )
             return redirect("responder:dashboard", workspace_id=workspace.id)
         try:
             result = _sidecar_post("/selftest/enquiry", enquiry.encode("utf-8"), workspace.industry)
-        except Exception as exc:
-            messages.error(request, f"Sidecar call failed: {exc}")
+        except Exception:
+            logger.exception("responder: test enquiry failed for workspace %s", workspace.id)
+            messages.error(request, "The responder could not answer that just now - please try again in a moment.")
             return redirect("responder:dashboard", workspace_id=workspace.id)
         return render(
             request,

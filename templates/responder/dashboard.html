@@ -3,18 +3,13 @@
 {% block content %}
 <div class="max-w-4xl mx-auto py-6 px-4">
     <h1 class="text-2xl font-bold text-stone-900 mb-1">WhatsApp Responder</h1>
-    <p class="text-sm text-stone-500 mb-6">Instant replies to property enquiries. Running in <span class="font-semibold">dry-run</span>: replies are generated and shown here, never sent to real numbers.</p>
+    <p class="text-sm text-stone-500 mb-6">See what your WhatsApp receptionist would say before it ever talks to a real customer. Nothing you test here is sent to anyone.</p>
 
     <div class="bg-white rounded-xl border border-stone-200 p-5 mb-6">
-        <h2 class="text-sm font-semibold text-stone-800 mb-2">Sidecar status</h2>
         {% if status %}
-        <dl class="grid grid-cols-2 gap-2 text-sm">
-            <dt class="text-stone-500">Transport</dt><dd class="font-medium">{{ status.transport }}</dd>
-            <dt class="text-stone-500">Store</dt><dd class="font-medium">{{ status.store }}</dd>
-            <dt class="text-stone-500">Webhook paths</dt><dd class="font-medium">{{ status.webhookPaths|join:", "|default:"none configured" }}</dd>
-        </dl>
+        <p class="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">Your receptionist is ready to test. Replies you generate below are shown here only - never sent to real numbers.</p>
         {% else %}
-        <p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">Sidecar not reachable{{ status_error|default:'' }} - it starts with the app; if this persists the deploy is still rolling out.</p>
+        <p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">Your receptionist is still warming up. Give it a minute and refresh this page.</p>
         {% endif %}
     </div>
 
@@ -30,11 +25,11 @@
     </div>
 
     <div class="bg-white rounded-xl border border-stone-200 p-5 mb-6">
-        <h2 class="text-sm font-semibold text-stone-800 mb-2">Dry-run test console</h2>
+        <h2 class="text-sm font-semibold text-stone-800 mb-2">Try it out</h2>
         <form method="post">
             {% csrf_token %}
-            <textarea name="enquiry" rows="8" class="w-full rounded-lg border-stone-300 text-sm font-mono" placeholder="Paste a test enquiry email (Property24 / Private Property format) or a plain enquiry with name, phone and listing...">{{ enquiry }}</textarea>
-            <button type="submit" class="mt-3 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2">Run through responder</button>
+            <textarea name="enquiry" rows="8" class="w-full rounded-lg border-stone-300 text-sm font-mono" placeholder="Type a message a customer might send your business on WhatsApp - for example a question about your prices, hours or a booking...">{{ enquiry }}</textarea>
+            <button type="submit" class="mt-3 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2">See the reply</button>
         </form>
     </div>
 
@@ -43,7 +38,7 @@
         <h2 class="text-sm font-semibold text-stone-800 mb-2">Result: {{ result.status }}{% if result.reason %} - {{ result.reason }}{% endif %}</h2>
         {% for r in result.replies %}
         <div class="mb-3 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3">
-            <div class="text-xs text-emerald-700 font-semibold mb-1">WOULD SEND (dry-run) to {{ r.to }}</div>
+            <div class="text-xs text-emerald-700 font-semibold mb-1">Your receptionist would reply:</div>
             <pre class="text-sm text-stone-800 whitespace-pre-wrap font-sans">{{ r.text }}</pre>
         </div>
         {% empty %}
