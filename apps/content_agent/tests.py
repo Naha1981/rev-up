@@ -184,15 +184,7 @@ class _FakeGroqHttp:
 
 def _groq_ok(caption="Braai platters from R199 this weekend - book your table!"):
     return FakeResponse(
-        {
-            "choices": [
-                {
-                    "message": {
-                        "content": f'{{"caption": "{caption}", "hashtags": ["#sowetoeats", "#braai"]}}'
-                    }
-                }
-            ]
-        }
+        {"choices": [{"message": {"content": f'{{"caption": "{caption}", "hashtags": ["#sowetoeats", "#braai"]}}'}}]}
     )
 
 

@@ -170,7 +170,6 @@ def _draft_posts_gemini(config, topics: list[str], *, client=None) -> list[Draft
     return drafts
 
 
-
 def _draft_posts_groq(config, topics: list[str], *, client=None) -> list[Draft]:
     """Draft one caption per topic via the Groq free tier, same reply contract
     as the Gemini path: JSON only, parsed by _extract_json_object."""

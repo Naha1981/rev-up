@@ -41,5 +41,7 @@ class RadarFeedItem(models.Model):
     fetched_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["workspace", "link"], name="radar_feed_item_unique_per_workspace")]
+        constraints = [
+            models.UniqueConstraint(fields=["workspace", "link"], name="radar_feed_item_unique_per_workspace")
+        ]
         ordering = ["-published_at", "-fetched_at"]
