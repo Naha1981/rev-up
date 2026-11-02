@@ -134,6 +134,40 @@ INDUSTRY_PRESETS = {
         ],
         "responder_faqs": ["Is this vehicle still in stock?", "Can I book a test drive?", "Do you take trade-ins?"],
     },
+    "funeral": {
+        "label": "Funeral Services",
+        "radar_keywords": [
+            "funeral",
+            "memorial",
+            "burial",
+            "cremation",
+            "tombstone",
+            "hearse",
+            "mourning",
+            "condolences",
+            "funeral cover",
+            "undertaker",
+        ],
+        "post_themes": [
+            "What to do first when a death occurs",
+            "Planning ahead: what families should know",
+            "Cover plans explained in plain language",
+            "Honouring a loved one: memorial ideas",
+            "Supporting grieving families in our community",
+        ],
+        "hashtags": ["#FuneralServicesSA", "#GriefSupport"],
+        "responder_tone": "compassionate and unhurried",
+        "responder_questions": [
+            "Is this about arrangements needed now, or planning ahead?",
+            "Do you have a policy or cover plan with us - and the policy number, if so?",
+            "What is the best number to call you back on?",
+        ],
+        "responder_faqs": [
+            "What cover plans do you offer, and what do they cost per month?",
+            "What do we do first when a death occurs?",
+            "How do we claim on a policy?",
+        ],
+    },
 }
 
 INDUSTRY_CHOICES = [(key, p["label"]) for key, p in INDUSTRY_PRESETS.items()]

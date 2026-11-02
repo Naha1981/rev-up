@@ -50,6 +50,7 @@ WORKSPACE_INDUSTRY_MAP = {
     "real_estate": Industry.REAL_ESTATE,
     "dental": Industry.DENTAL,
     "auto": Industry.AUTO_WORKSHOP,
+    "funeral": Industry.FUNERAL,
 }
 
 
