@@ -13,6 +13,7 @@ link" counts.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from django.utils import timezone
 
@@ -20,10 +21,10 @@ from .models import Contact, ReviewEvent, ReviewLink
 
 MONTHS_SHOWN = 6
 
-STEP_LABELS = {
-    ReviewEvent.Step.CHECK_IN: "check-ins",
-    ReviewEvent.Step.REVIEW_REQUEST: "asked for a review",
-    ReviewEvent.Step.REMINDER: "reminders",
+ACTIVITY_WHAT: dict[str, str] = {
+    ReviewEvent.Step.CHECK_IN: "was checked in with",
+    ReviewEvent.Step.REVIEW_REQUEST: "was asked for a review",
+    ReviewEvent.Step.REMINDER: "was sent a reminder",
 }
 
 
@@ -42,7 +43,7 @@ class MonthBucket:
 
     @property
     def label(self) -> str:
-        return timezone.datetime(self.year, self.month, 1).strftime("%b %Y")
+        return datetime(self.year, self.month, 1).strftime("%b %Y")
 
 
 def _month_starts(months: int) -> list[tuple[int, int]]:
@@ -63,7 +64,7 @@ def monthly_stats(workspace, months: int = MONTHS_SHOWN) -> list[MonthBucket]:
     """Month-by-month review activity for one business, oldest to newest."""
     pairs = _month_starts(months)
     first_year, first_month = pairs[0]
-    start = timezone.make_aware(timezone.datetime(first_year, first_month, 1))
+    start = timezone.make_aware(datetime(first_year, first_month, 1))
 
     buckets: dict[tuple[int, int], MonthBucket] = {(y, m): MonthBucket(year=y, month=m) for y, m in pairs}
     buckets[pairs[-1]].current = True
@@ -131,11 +132,7 @@ def recent_activity(workspace, limit: int = 10) -> list[dict]:
             {
                 "when": event.sent_at,
                 "who": event.contact.name or event.contact.wa_id,
-                "what": {
-                    ReviewEvent.Step.CHECK_IN: "was checked in with",
-                    ReviewEvent.Step.REVIEW_REQUEST: "was asked for a review",
-                    ReviewEvent.Step.REMINDER: "was sent a reminder",
-                }[event.step],
+                "what": ACTIVITY_WHAT[event.step],
             }
         )
 
