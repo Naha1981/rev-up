@@ -55,6 +55,8 @@
     {% endif %}
     {% if feed %}
     <div class="mb-2 text-xs text-stone-400">{{ feed.business_name }} · {{ feed.area }} · generated {{ feed.generated_at }}</div>
+    {% endif %}
+    {% if feed or generated %}
     <div class="bg-white rounded-xl border border-stone-200 divide-y divide-stone-100 mb-6">
         {% for item in items %}
         <div class="px-5 py-3 flex items-start gap-3{% if not item.relevant %} opacity-40{% endif %}">

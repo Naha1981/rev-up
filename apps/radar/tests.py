@@ -263,3 +263,28 @@ def test_generated_feed_skips_off_topic_items(workspace):
     created = generate_feed_for_workspace(workspace, fetcher=lambda url: off_topic)
     assert created == 1
     assert RadarFeedItem.objects.filter(workspace=workspace).count() == 1
+
+
+def test_dashboard_renders_stored_feed_items_without_custom_feed(client, user, workspace):
+    """Regression: stored RadarFeedItem rows must render on the dashboard when
+    no custom feed URL is set (the generated-radar path)."""
+    from django.urls import reverse
+
+    from apps.members.models import WorkspaceMembership
+    from apps.radar.models import RadarFeedItem
+
+    WorkspaceMembership.objects.create(user=user, workspace=workspace)
+    RadarFeedItem.objects.create(
+        workspace=workspace,
+        group="Dining",
+        title="Soweto chef modernizes street food",
+        link="https://news.example/soweto-chef",
+        source="Example News",
+        score=4,
+    )
+    client.force_login(user)
+    response = client.get(reverse("radar:dashboard", kwargs={"workspace_id": workspace.id}))
+    body = response.content.decode()
+    assert response.status_code == 200
+    assert "Soweto chef modernizes street food" in body
+    assert "gathering signals" not in body
