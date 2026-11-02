@@ -7,6 +7,13 @@ Used by the workspace dashboard to render the dynamic "Get Started" card.
 from django.urls import reverse
 
 
+def _has_receptionist_whatsapp(workspace_id) -> bool:
+    """A WhatsApp number bound to the workspace's receptionist (Zernio channel)."""
+    from apps.receptionist.models import ZernioChannel
+
+    return ZernioChannel.objects.filter(workspace_id=workspace_id).exists()
+
+
 def get_checklist_items(workspace):
     """Return a list of checklist item dicts with dynamic completion status.
 
@@ -28,10 +35,13 @@ def get_checklist_items(workspace):
             "key": "pair_whatsapp",
             "title": "Pair your WhatsApp",
             "description": "Connect your business WhatsApp so the receptionist can answer enquiries",
-            "completed": WhatsAppConnection.objects.filter(
-                workspace_id=workspace_id,
-                status=WhatsAppConnection.Status.CONNECTED,
-            ).exists(),
+            "completed": (
+                WhatsAppConnection.objects.filter(
+                    workspace_id=workspace_id,
+                    status=WhatsAppConnection.Status.CONNECTED,
+                ).exists()
+                or _has_receptionist_whatsapp(workspace_id)
+            ),
             "url": reverse(
                 "receptionist:setup",
                 kwargs={"workspace_id": workspace_id},

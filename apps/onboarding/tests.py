@@ -221,3 +221,14 @@ class TestConnectionLinkPageTokens:
             assert account.facebook_user_token_expires_at <= timezone.now() + timezone.timedelta(seconds=expiry_seconds)
             assert (account.token_expires_at is None) == promoted
             assert account.connection_status == "connected"
+
+
+def test_pair_whatsapp_tick_counts_bound_receptionist_channel(workspace, user):
+    """Checklist 'Pair your WhatsApp' completes from a Zernio-bound channel,
+    not only the legacy pairing-code connection."""
+    from apps.onboarding.checklist import _has_receptionist_whatsapp
+    from apps.receptionist.models import ZernioChannel
+
+    assert not _has_receptionist_whatsapp(workspace.id)
+    ZernioChannel.objects.create(workspace=workspace, zernio_account_id=f"acct-{workspace.id}", phone_number="27600000001")
+    assert _has_receptionist_whatsapp(workspace.id)
