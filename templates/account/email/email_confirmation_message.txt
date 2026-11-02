@@ -1,4 +1,4 @@
-{% load account %}{% autoescape off %}{% user_display user as user_display %}Hi {{ user_display }},
+{% autoescape off %}Hi there,
 
 Please confirm this email address for your RevUp account by clicking the link below:
 
