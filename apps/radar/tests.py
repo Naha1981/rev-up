@@ -164,7 +164,7 @@ def test_generated_query_includes_area_and_country(workspace):
 @pytest.mark.django_db
 def test_generated_feed_falls_back_to_sa_feeds(workspace):
     from apps.radar.models import RadarFeedItem
-    from apps.radar.services import SA_FALLBACK_FEEDS, generate_feed_for_workspace
+    from apps.radar.services import INDUSTRY_TRADE_FEEDS, SA_FALLBACK_FEEDS, generate_feed_for_workspace
 
     workspace.industry = "restaurant"
     workspace.save(update_fields=["industry"])
@@ -172,12 +172,48 @@ def test_generated_feed_falls_back_to_sa_feeds(workspace):
     def fetcher(url):
         if "news.google.com" in url:
             raise OSError("rss 429")
-        assert url in SA_FALLBACK_FEEDS
+        assert url in INDUSTRY_TRADE_FEEDS["restaurant"] + SA_FALLBACK_FEEDS
         return RSS
 
     created = generate_feed_for_workspace(workspace, fetcher=fetcher)
     assert created == 2
     assert RadarFeedItem.objects.filter(workspace=workspace).count() == 2
+
+
+@pytest.mark.django_db
+def test_generated_feed_tries_trade_feeds_before_general(workspace):
+    from apps.radar.services import INDUSTRY_TRADE_FEEDS, SA_FALLBACK_FEEDS, generate_feed_for_workspace
+
+    workspace.industry = "restaurant"
+    workspace.save(update_fields=["industry"])
+    seen = []
+
+    def fetcher(url):
+        if "news.google.com" in url:
+            raise OSError("rss 429")
+        seen.append(url)
+        raise OSError("empty")
+
+    assert generate_feed_for_workspace(workspace, fetcher=fetcher) == 0
+    assert seen == INDUSTRY_TRADE_FEEDS["restaurant"] + SA_FALLBACK_FEEDS
+
+
+@pytest.mark.django_db
+def test_generated_feed_unknown_industry_uses_general_feeds(workspace):
+    from apps.radar.services import SA_FALLBACK_FEEDS, generate_feed_for_workspace
+
+    workspace.industry = "general"
+    workspace.save(update_fields=["industry"])
+    seen = []
+
+    def fetcher(url):
+        if "news.google.com" in url:
+            raise OSError("rss 429")
+        seen.append(url)
+        raise OSError("empty")
+
+    assert generate_feed_for_workspace(workspace, fetcher=fetcher) == 0
+    assert seen == SA_FALLBACK_FEEDS
 
 
 @pytest.mark.django_db

@@ -177,6 +177,25 @@ SA_FALLBACK_FEEDS = [
     "https://www.thesouthafrican.com/feed/",
     "https://www.sapeople.com/feed/",
 ]
+# Trade-matched SA feeds, tried before the general fallbacks so a workspace's
+# own industry always has relevant sources. Verified to serve RSS over plain
+# urllib; sites that block datacenter IPs are avoided.
+INDUSTRY_TRADE_FEEDS = {
+    "restaurant": [
+        "https://www.winemag.co.za/feed/",
+        "https://www.capetownetc.com/feed/",
+    ],
+    "real_estate": [
+        "https://www.propertywheel.co.za/feed/",
+    ],
+    "dental": [
+        "https://www.medicalbrief.co.za/feed/",
+        "https://health-e.org.za/feed/",
+    ],
+    "auto": [
+        "https://www.carmag.co.za/feed/",
+    ],
+}
 _RSS_TIMEOUT = 20
 _TAG_RE = re.compile(r"<[^>]+>")
 
@@ -262,8 +281,10 @@ def generate_feed_for_workspace(workspace, *, fetcher=fetch_rss) -> int:
         logger.warning("radar generator: google news failed for workspace %s: %s", workspace.id, exc)
     parsed = _parse_rss(raw) if raw else []
     if not parsed:
-        # Fallback: direct SA news feeds, filtered by trade keywords below.
-        for feed in SA_FALLBACK_FEEDS:
+        # Fallback: trade-matched SA feeds first, then general SA news,
+        # all filtered by trade keywords below.
+        feeds = INDUSTRY_TRADE_FEEDS.get(workspace.industry, []) + SA_FALLBACK_FEEDS
+        for feed in feeds:
             host = feed.split("/")[2]
             try:
                 got = _parse_rss(fetcher(feed))
