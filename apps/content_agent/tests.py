@@ -165,3 +165,57 @@ class RunTests(TestCase):
         run = run_for_config(config, client=FakeHttp(post_exc=RuntimeError("quota")))
         self.assertEqual(run.status, GenerationRun.Status.FAILED)
         self.assertEqual(Post.objects.count(), 0)
+
+
+class _FakeGroqHttp:
+    """Stands in for httpx.Client on the Groq chat-completions path."""
+
+    def __init__(self, payloads):
+        self.payloads = list(payloads)
+        self.posted = []
+
+    def post(self, url, headers=None, json=None, **kw):
+        self.posted.append({"url": url, "json": json})
+        payload = self.payloads.pop(0)
+        if isinstance(payload, Exception):
+            raise payload
+        return payload
+
+
+def _groq_ok(caption="Braai platters from R199 this weekend - book your table!"):
+    return FakeResponse(
+        {
+            "choices": [
+                {
+                    "message": {
+                        "content": f'{{"caption": "{caption}", "hashtags": ["#sowetoeats", "#braai"]}}'
+                    }
+                }
+            ]
+        }
+    )
+
+
+@override_settings(CONTENT_AGENT_GEMINI_API_KEY="", GROQ_API_KEY="gsk-test")
+class GroqDraftTests(TestCase):
+    def test_groq_used_when_no_gemini_key(self):
+        config = make_config()
+        http = _FakeGroqHttp([_groq_ok(), _groq_ok("Sunday buffet: kids under 6 eat free.")])
+        drafts = draft_posts(config, ["winter specials", "family platters"], client=http)
+        self.assertEqual(len(drafts), 2)
+        self.assertIn("R199", drafts[0].caption)
+        self.assertEqual(drafts[0].hashtags, ["#sowetoeats", "#braai"])
+        self.assertIn("api.groq.com/openai/v1/chat/completions", http.posted[0]["url"])
+
+    def test_groq_skips_failed_topic_and_continues(self):
+        config = make_config()
+        bad = FakeResponse({"error": "boom"}, status=500)
+        http = _FakeGroqHttp([bad, _groq_ok()])
+        drafts = draft_posts(config, ["broken topic", "good topic"], client=http)
+        self.assertEqual(len(drafts), 1)
+        self.assertEqual(drafts[0].topic, "good topic")
+
+    def test_no_provider_key_raises(self):
+        config = make_config()
+        with override_settings(GROQ_API_KEY=""), self.assertRaises(RuntimeError):
+            draft_posts(config, ["anything"], client=_FakeGroqHttp([]))

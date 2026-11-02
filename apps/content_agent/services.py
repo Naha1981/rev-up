@@ -1,8 +1,9 @@
 """Content-agent pipeline: trend research -> LLM draft -> review queue.
 
 Every external dependency degrades to a safe fallback: no SearXNG -> use the
-configured topics; no Gemini key -> no drafts (run recorded as failed, never
-silently empty). The agent NEVER auto-approves or schedules: drafts land as
+configured topics; draft provider is Gemini when CONTENT_AGENT_GEMINI_API_KEY
+is set, otherwise Groq (GROQ_API_KEY); with neither key there are no drafts
+(the run is recorded as failed, never silently empty). The agent NEVER auto-approves or schedules: drafts land as
 ``pending_review`` and a human moves them forward.
 """
 
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SEARXNG_TIMEOUT = 20
 DEFAULT_GEMINI_TIMEOUT = 120
+DEFAULT_GROQ_TIMEOUT = 60
 MAX_TREND_TOPICS = 8
 CAPTION_PROMPT_LIMIT = 2200  # chars, fits every supported platform
 
@@ -87,8 +89,20 @@ def _extract_json_object(text: str) -> dict:
 
 
 def draft_posts(config, topics: list[str], *, client=None) -> list[Draft]:
-    """Draft one caption per topic via Gemini free tier. Topics that fail to
-    draft are skipped (the run records them as partial), never guessed."""
+    """Draft one caption per topic. Provider order: Gemini free tier when
+    CONTENT_AGENT_GEMINI_API_KEY is set, otherwise the Groq free tier via
+    GROQ_API_KEY. Topics that fail to draft are skipped (the run records them
+    as partial), never guessed."""
+
+    if getattr(settings, "CONTENT_AGENT_GEMINI_API_KEY", "") or "":
+        return _draft_posts_gemini(config, topics, client=client)
+    if getattr(settings, "GROQ_API_KEY", "") or "":
+        return _draft_posts_groq(config, topics, client=client)
+    raise RuntimeError("no draft provider key is set (CONTENT_AGENT_GEMINI_API_KEY or GROQ_API_KEY)")
+
+
+def _draft_posts_gemini(config, topics: list[str], *, client=None) -> list[Draft]:
+    """Draft one caption per topic via Gemini free tier."""
 
     api_key = getattr(settings, "CONTENT_AGENT_GEMINI_API_KEY", "") or ""
     if not api_key:
@@ -153,6 +167,83 @@ def draft_posts(config, topics: list[str], *, client=None) -> list[Draft]:
             drafts.append(Draft(topic=topic, caption=caption, hashtags=hashtags))
         except Exception as exc:
             logger.warning("content-agent: draft failed for topic %r: %s", topic, exc)
+    return drafts
+
+
+
+def _draft_posts_groq(config, topics: list[str], *, client=None) -> list[Draft]:
+    """Draft one caption per topic via the Groq free tier, same reply contract
+    as the Gemini path: JSON only, parsed by _extract_json_object."""
+
+    api_key = getattr(settings, "GROQ_API_KEY", "") or ""
+    if not api_key:
+        raise RuntimeError("GROQ_API_KEY is not set")
+    primary = getattr(settings, "CONTENT_AGENT_GROQ_MODEL", "") or getattr(
+        settings, "RECEPTIONIST_GROQ_MODEL", "openai/gpt-oss-120b"
+    )
+    fallbacks = [
+        m.strip()
+        for m in getattr(settings, "CONTENT_AGENT_GROQ_FALLBACK_MODELS", "openai/gpt-oss-20b").split(",")
+        if m.strip()
+    ]
+    models = [primary] + [m for m in fallbacks if m != primary]
+    niche = config.niche or "local restaurant"
+    drafts: list[Draft] = []
+    http = client or httpx.Client(timeout=DEFAULT_GROQ_TIMEOUT)
+    for topic in topics[: config.posts_per_run]:
+        prompt = (
+            f"Business: {niche}.\n"
+            f"Write one social media post for this business about: {topic}.\n"
+            f"{_DRAFT_RULES}\n"
+            'Reply with JSON only: {"caption": "...", "hashtags": ["#tag", ...]}'
+        )
+        try:
+            resp = None
+            for model in models:
+                for attempt in range(3):
+                    payload: dict = {
+                        "model": model,
+                        "temperature": 0.2,
+                        # gpt-oss spends part of the budget on hidden reasoning;
+                        # 1500 leaves room for a full-length caption.
+                        "max_tokens": 1500,
+                        "messages": [{"role": "user", "content": prompt}],
+                    }
+                    if model.startswith("openai/gpt-oss"):
+                        payload["reasoning_effort"] = "low"
+                    try:
+                        resp = http.post(
+                            "https://api.groq.com/openai/v1/chat/completions",
+                            headers={"Authorization": f"Bearer {api_key}"},
+                            json=payload,
+                        )
+                    except Exception:
+                        if attempt == 2 and model == models[-1]:
+                            raise
+                        time.sleep(3 * (attempt + 1))
+                        continue
+                    if resp.status_code == 429:
+                        retry_after = min(int(resp.headers.get("retry-after", "5") or 5), 15)
+                        time.sleep(retry_after)
+                        continue
+                    if resp.status_code == 503:
+                        time.sleep(3 * (attempt + 1))
+                        continue
+                    break
+                if resp is not None and resp.status_code not in (429, 503):
+                    break
+            if resp is None:
+                raise ValueError("Groq gave no response")
+            resp.raise_for_status()
+            text = resp.json()["choices"][0]["message"]["content"]
+            parsed = _extract_json_object(text)
+            caption = (parsed.get("caption") or "").strip()
+            if not caption:
+                raise ValueError("empty caption")
+            hashtags = [h for h in parsed.get("hashtags", []) if isinstance(h, str)][:10]
+            drafts.append(Draft(topic=topic, caption=caption, hashtags=hashtags))
+        except Exception as exc:
+            logger.warning("content-agent: groq draft failed for topic %r: %s", topic, exc)
     return drafts
 
 
