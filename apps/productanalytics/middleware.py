@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 
 from django.utils import timezone
 
@@ -72,12 +73,19 @@ class ProductAnalyticsMiddleware:
                     from urllib.parse import urlparse
 
                     domain = urlparse(referrer).netloc[:120]
+                # Tracked outreach links carry the business code in
+                # utm_content (Thabiso's UTM spec, 3 Nov 2026); ?b= is a
+                # short alias. Sanitize to a slug so junk stays unattributed.
+                code = (request.GET.get("utm_content") or request.GET.get("b", ""))[:32].lower()
+                if code and not re.fullmatch(r"[a-z0-9][a-z0-9-]*", code):
+                    code = ""
                 ProductEvent.objects.create(
                     kind=ProductEvent.Kind.PAGE_VIEW,
                     path=request.path[:300],
                     visitor_hash=visitor_hash(request),
                     user=request.user if request.user.is_authenticated else None,
                     referrer_domain=domain,
+                    business_code=code,
                 )
         except Exception:  # analytics must never break a page
             import logging

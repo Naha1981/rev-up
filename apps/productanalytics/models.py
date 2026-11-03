@@ -29,6 +29,10 @@ class ProductEvent(models.Model):
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
     )
     referrer_domain = models.CharField(max_length=120, blank=True, default="")
+    # Outreach attribution: the ?b=<code> on tracked links (one code per
+    # business). Blank for plain-URL visits - those are still counted, just
+    # unattributed.
+    business_code = models.CharField(max_length=32, blank=True, default="", db_index=True)
 
     class Meta:
         db_table = "productanalytics_productevent"

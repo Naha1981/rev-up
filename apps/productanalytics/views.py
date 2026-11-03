@@ -5,12 +5,13 @@ from __future__ import annotations
 from datetime import timedelta
 
 from django.contrib.admin.views.decorators import staff_member_required
-from django.db.models import Count
+from django.db.models import Count, Max, Min
 from django.db.models.functions import TruncDate
 from django.shortcuts import render
 from django.utils import timezone
 
 from .models import ProductEvent
+from .outreach import OUTREACH_BUSINESSES
 
 
 @staff_member_required
@@ -38,8 +39,45 @@ def dashboard(request):
         .annotate(n=Count("id"), uniques=Count("visitor_hash", distinct=True))
         .order_by("-day")[:14]
     )
+    # Outreach tracked links: every known business appears, even with zero
+    # clicks, so silence is visible. Plus one row for plain-URL visits.
+    click_rows = {
+        row["business_code"]: row
+        for row in events.filter(kind=ProductEvent.Kind.PAGE_VIEW)
+        .exclude(business_code="")
+        .values("business_code")
+        .annotate(
+            clicks=Count("id"),
+            uniques=Count("visitor_hash", distinct=True),
+            last=Max("created_at"),
+            first=Min("created_at"),
+        )
+    }
+    outreach = [
+        {
+            "code": code,
+            "name": info["name"],
+            "sent": info["sent"],
+            "clicks": click_rows.get(code, {}).get("clicks", 0),
+            "uniques": click_rows.get(code, {}).get("uniques", 0),
+            "first": click_rows.get(code, {}).get("first"),
+            "last": click_rows.get(code, {}).get("last"),
+        }
+        for code, info in OUTREACH_BUSINESSES.items()
+    ]
+    unattributed = events.filter(kind=ProductEvent.Kind.PAGE_VIEW, business_code="", path="/").aggregate(
+        clicks=Count("id"), uniques=Count("visitor_hash", distinct=True), last=Max("created_at")
+    )
     return render(
         request,
         "productanalytics/dashboard.html",
-        {"today": counts(1), "week": counts(7), "month": counts(30), "top_pages": top_pages, "daily": daily},
+        {
+            "today": counts(1),
+            "week": counts(7),
+            "month": counts(30),
+            "top_pages": top_pages,
+            "daily": daily,
+            "outreach": outreach,
+            "unattributed": unattributed,
+        },
     )

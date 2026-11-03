@@ -30,6 +30,32 @@
   <div class="card"><div class="num">{{ month.views }}</div><div class="label">views, 30 days</div></div>
   <div class="card"><div class="num">{{ month.signups }}</div><div class="label">signups, 30 days</div></div>
 </div>
+<h2>Outreach link clicks</h2>
+<table>
+  <tr><th>Business</th><th>Message sent</th><th>Link</th><th>Clicked?</th><th>Clicks</th><th>People</th><th>Click time</th><th>Latest click</th></tr>
+  {% for o in outreach %}
+  <tr>
+    <td>{{ o.name }}</td>
+    <td>{% if o.sent %}{{ o.sent }}{% else %}-{% endif %}</td>
+    <td>?utm_content={{ o.code }}</td>
+    <td>{% if o.clicks %}Yes{% else %}No{% endif %}</td>
+    <td>{{ o.clicks }}</td>
+    <td>{{ o.uniques }}</td>
+    <td>{% if o.first %}{{ o.first|date:"j M, H:i" }}{% else %}-{% endif %}</td>
+    <td>{% if o.last %}{{ o.last|date:"j M, H:i" }}{% else %}-{% endif %}</td>
+  </tr>
+  {% endfor %}
+  <tr>
+    <td><em>Plain link (no business code)</em></td>
+    <td>-</td>
+    <td>/</td>
+    <td>-</td>
+    <td>{{ unattributed.clicks }}</td>
+    <td>{{ unattributed.uniques }}</td>
+    <td>-</td>
+    <td>{% if unattributed.last %}{{ unattributed.last|date:"j M, H:i" }}{% else %}-{% endif %}</td>
+  </tr>
+</table>
 <h2>Top pages</h2>
 <table>{% for p in top_pages %}<tr><td>{{ p.path }}</td><td>{{ p.n }}</td></tr>{% empty %}<tr><td>No visits yet</td></tr>{% endfor %}</table>
 <h2>Per day</h2>
