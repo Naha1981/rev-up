@@ -104,7 +104,9 @@ def test_today_card_matches_calendar_day():
     from django.utils import timezone as tz
 
     ProductEvent.objects.create(kind=ProductEvent.Kind.PAGE_VIEW, path="/", visitor_hash="b" * 64)
-    staff = User.objects.create_user(email="cards@example.com", password="x" * 20, is_staff=True, tos_accepted_at=tz.now())
+    staff = User.objects.create_user(
+        email="cards@example.com", password="x" * 20, is_staff=True, tos_accepted_at=tz.now()
+    )
     c = Client()
     c.force_login(staff)
     body = c.get("/product-analytics/").content.decode()
