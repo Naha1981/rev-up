@@ -100,6 +100,7 @@ MIDDLEWARE = [
     "allauth.account.middleware.AccountMiddleware",
     "apps.accounts.middleware.AuthRateLimitMiddleware",
     "apps.accounts.middleware.TosAcceptanceMiddleware",
+    "apps.accounts.middleware.WebPresenceGateMiddleware",
     "django_htmx.middleware.HtmxMiddleware",
     "apps.members.middleware.RBACMiddleware",
     "apps.organizations.middleware.TrialLockMiddleware",
@@ -295,6 +296,10 @@ LOGIN_REDIRECT_URL = "/"
 ACCOUNT_LOGOUT_REDIRECT_URL = "/accounts/login/"
 # Where "Sign up" links send people instead of Studio's own /accounts/signup/
 # (see apps/accounts/signup_links.py). Empty keeps the built-in signup.
+# Web-presence gate: new accounts must add a website or Facebook page before
+# using the app (social sign-ins that skip the form land on business-details).
+WEB_PRESENCE_GATE_ENABLED = env.bool("WEB_PRESENCE_GATE_ENABLED", default=True)
+
 CUSTOM_SIGNUP_URL = env("CUSTOM_SIGNUP_URL", default="").strip()
 # Raised at boot rather than rendered: a value like "example.com/join" would
 # resolve relative to the login page and 404, and an unquoted "# comment" after

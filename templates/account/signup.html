@@ -43,6 +43,10 @@
         </div>
         {% endif %}
 
+        {% if form.non_field_errors %}
+        <div class="mb-5 alert-error">{{ form.non_field_errors.0 }}</div>
+        {% endif %}
+
         <!-- Social Signup -->
         {% if SOCIALACCOUNT_ENABLED %}
             {% get_providers as socialaccount_providers %}

@@ -1,6 +1,8 @@
 import hashlib
 
+from django.conf import settings
 from django.core.cache import cache
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -79,3 +81,48 @@ class AuthRateLimitMiddleware:
         if x_forwarded_for:
             return x_forwarded_for.split(",")[0].strip()
         return request.META.get("REMOTE_ADDR", "")
+
+
+class WebPresenceGateMiddleware:
+    """Keep accounts with no web presence on the business-details page.
+
+    Email signups supply a website or Facebook page on the form; Google
+    sign-ins skip the form and land here right after signup. Workspaces that
+    existed before the gate shipped are exempt (migration 0006), so no
+    existing account is ever locked out.
+    """
+
+    EXEMPT_PREFIXES = (
+        "/accounts/",
+        "/admin/",
+        "/platform-admin/",
+        "/health/",
+        "/robots.txt",
+        "/webhooks/",
+        "/api/",
+        "/static/",
+        "/media/",
+        "/legal/",
+    )
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if (
+            settings.WEB_PRESENCE_GATE_ENABLED
+            and not request.path.startswith(self.EXEMPT_PREFIXES)
+            and hasattr(request, "user")
+            and request.user.is_authenticated
+            and not request.user.is_staff
+        ):
+            from apps.workspaces.models import Workspace
+
+            qs = Workspace.objects.filter(memberships__user=request.user)
+            has_open_workspace = qs.filter(
+                Q(website_url__gt="") | Q(facebook_url__gt="") | Q(web_presence_gate_exempt=True)
+            ).exists()
+            if not has_open_workspace and qs.exists():
+                return redirect(reverse("accounts:business_details"))
+
+        return self.get_response(request)

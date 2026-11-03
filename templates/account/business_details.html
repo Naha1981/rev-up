@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% load static i18n %}
+
+{% block title %}Your business online · RevUp{% endblock %}
+
+{% block auth_content %}
+<style>
+  .auth-card .btn-brand {
+    background-color: #F97316;
+  }
+  .auth-card .btn-brand:hover {
+    background-color: #EA580C;
+  }
+</style>
+<div class="w-full max-w-md px-4">
+    <div class="text-center mb-8">
+        <div class="inline-flex items-center justify-center mb-4">
+            <img src="{% static 'brand/revup-light.png' %}" alt="RevUp logo" class="h-14 w-auto object-contain">
+        </div>
+        <h1 class="text-2xl font-bold tracking-tight" style="color: var(--text-primary);">
+            Where do customers find you online?
+        </h1>
+        <p class="text-sm mt-1" style="color: var(--text-secondary);">
+            RevUp is for real businesses. Add your website or your Facebook page to continue.
+        </p>
+    </div>
+
+    <div class="auth-card">
+        {% if messages %}
+        <div class="mb-5 space-y-2">
+            {% for message in messages %}
+            <div class="{% if message.tags == 'error' %}alert-error{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if form.non_field_errors %}
+        <div class="mb-5 alert-error">{{ form.non_field_errors.0 }}</div>
+        {% endif %}
+
+        <form method="post" action="{% url 'accounts:business_details' %}">
+            {% csrf_token %}
+            {% for field in form %}
+            <div class="mb-4">
+                <label for="{{ field.id_for_label }}" class="block text-sm font-semibold mb-1.5" style="color: var(--text-primary);">
+                    {{ field.label }}
+                </label>
+                <input type="{{ field.field.widget.input_type }}"
+                       name="{{ field.html_name }}"
+                       id="{{ field.id_for_label }}"
+                       value="{{ field.value|default:'' }}"
+                       {% if field.field.widget.attrs.placeholder %}placeholder="{{ field.field.widget.attrs.placeholder }}"{% endif %}
+                       {% if field.field.widget.attrs.inputmode %}inputmode="{{ field.field.widget.attrs.inputmode }}"{% endif %}
+                       class="form-input-styled {% if field.errors %}is-error{% endif %}">
+                {% if field.errors %}
+                <p class="mt-1 text-xs" style="color: var(--error-500);">{{ field.errors.0 }}</p>
+                {% endif %}
+                {% if field.help_text %}
+                <div class="mt-1 text-xs" style="color: var(--text-ghost);">{{ field.help_text }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            <div class="mt-6">
+                <button type="submit" class="btn-brand">
+                    Continue
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

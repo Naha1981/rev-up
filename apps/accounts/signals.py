@@ -176,3 +176,33 @@ def apply_industry_choice_on_signup(sender, request, user, **kwargs):
     if workspace and workspace.industry != industry:
         workspace.industry = industry
         workspace.save(update_fields=["industry"])
+
+
+@receiver(user_signed_up)
+def apply_web_presence_on_signup(sender, request, user, **kwargs):
+    """Persist the signup website / Facebook page onto the default workspace.
+
+    The signup form already validated and probed these; here we only
+    normalize (scheme, whitespace) and store. Social signups POST nothing,
+    so they no-op and hit the web-presence gate middleware instead.
+    """
+    from apps.common import web_presence
+    from apps.workspaces.models import Workspace
+
+    website = web_presence.normalize_url(request.POST.get("website_url"))
+    facebook = web_presence.normalize_url(request.POST.get("facebook_url"))
+    if not website and not facebook:
+        return
+    workspace = Workspace.objects.filter(memberships__user=user).order_by("created_at").first()
+    if workspace is None:
+        return
+    updates = []
+    if website and workspace.website_url != website:
+        workspace.website_url = website
+        updates.append("website_url")
+    if facebook and workspace.facebook_url != facebook:
+        workspace.facebook_url = facebook
+        updates.append("facebook_url")
+    if updates:
+        updates.append("updated_at")
+        workspace.save(update_fields=updates)

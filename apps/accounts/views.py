@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
@@ -270,3 +271,30 @@ def dismiss_review_banner(request):
     request.user.review_banner_dismissed_at = timezone.now()
     request.user.save(update_fields=["review_banner_dismissed_at"])
     return HttpResponse(status=204)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def business_details(request):
+    """Mandatory web-presence step for accounts that signed up without it
+    (Google sign-in skips the signup form). The gate middleware keeps them
+    here until they add a website or a Facebook page."""
+    from apps.workspaces.models import Workspace
+
+    workspace = Workspace.objects.filter(memberships__user=request.user).order_by("created_at").first()
+    if workspace is None or workspace.web_presence_gate_exempt or workspace.website_url or workspace.facebook_url:
+        return redirect(settings.LOGIN_REDIRECT_URL)
+
+    from .forms import WebPresenceForm
+
+    if request.method == "POST":
+        form = WebPresenceForm(request.POST)
+        if form.is_valid():
+            workspace.website_url = form.cleaned_data["website_url"]
+            workspace.facebook_url = form.cleaned_data["facebook_url"]
+            workspace.save(update_fields=["website_url", "facebook_url", "updated_at"])
+            messages.success(request, "Thanks - you're all set.")
+            return redirect(settings.LOGIN_REDIRECT_URL)
+    else:
+        form = WebPresenceForm()
+    return render(request, "account/business_details.html", {"form": form})

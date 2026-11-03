@@ -63,3 +63,6 @@ DATABASES = {
         "PORT": env.int("DB_PORT", default=5432),  # noqa: F405
     },
 }
+
+# Tests create bare users/workspaces everywhere; gate tests opt back in.
+WEB_PRESENCE_GATE_ENABLED = False

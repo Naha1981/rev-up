@@ -41,6 +41,14 @@ class Workspace(models.Model):
     # the workspace settings save.
     publish_test_mode = models.BooleanField(default=False)
 
+    # Web-presence gate: where customers find this business online. New
+    # accounts must supply at least one (website, or Facebook page when they
+    # have no website). Workspaces that existed when the gate shipped were
+    # grandfathered via web_presence_gate_exempt in migration 0006.
+    website_url = models.CharField(max_length=500, blank=True, default="")
+    facebook_url = models.CharField(max_length=500, blank=True, default="")
+    web_presence_gate_exempt = models.BooleanField(default=False)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
