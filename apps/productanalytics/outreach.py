@@ -25,4 +25,17 @@ OUTREACH_BUSINESSES = {
     "hjm": {"name": "HJM", "sent": "3 Nov, 02:27"},
     "revhouse": {"name": "RevHouse", "sent": "3 Nov, 02:28"},
     "eurospec": {"name": "Eurospec Auto", "sent": "3 Nov, 02:24"},
+    # Second outreach batch (4 Nov): display names are the codes title-cased
+    # until he confirms the trading names; send times land when the messages
+    # go out.
+    "shandus": {"name": "Shandus", "sent": ""},
+    "vusana": {"name": "Vusana", "sent": ""},
+    "kwavusana": {"name": "KwaVusana", "sent": ""},
+    "nobela": {"name": "Nobela", "sent": ""},
+    "bali": {"name": "Bali", "sent": ""},
+    "matlhaela": {"name": "Matlhaela", "sent": ""},
+    "chomane": {"name": "Chomane", "sent": ""},
+    "dichaba": {"name": "Dichaba", "sent": ""},
+    "ikhayalehae": {"name": "IKhaya Lehae", "sent": ""},
+    "msawawa": {"name": "Msawawa", "sent": ""},
 }
