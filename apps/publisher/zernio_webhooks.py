@@ -50,21 +50,54 @@ def _header(request, *names):
     return ""
 
 
+def _tenant_connection_for(payload: dict):
+    """Match a delivery to a workspace's own messaging connection by the
+    profile/account ids it carries. Used only to pick WHICH tenant secret to
+    verify against - a payload that matches nothing gets no second chance."""
+    from apps.receptionist.models import TenantMessagingConnection
+
+    account = payload.get("account") or {}
+    account_id = account.get("accountId") or account.get("id") or payload.get("accountId") or ""
+    profile_id = account.get("profileId") or payload.get("profileId") or ""
+    qs = TenantMessagingConnection.objects.exclude(webhook_secret="")
+    if account_id:
+        conn = qs.filter(account_id=account_id).first()
+        if conn is not None:
+            return conn
+    if profile_id:
+        return qs.filter(profile_id=profile_id).first()
+    return None
+
+
 @csrf_exempt
 @require_POST
 def zernio_webhook(request):
     secret = getattr(settings, "ZERNIO_WEBHOOK_SECRET", "")
     signature = _header(request, "HTTP_X_ZERNIO_SIGNATURE", "HTTP_X_LATE_SIGNATURE")
     if not secret or not ZernioClient.verify_webhook_signature(request.body, signature, secret):
-        logger.warning("Zernio webhook rejected: bad signature or unconfigured secret")
-        return JsonResponse({"error": "invalid signature"}, status=403)
+        # Not one of ours on the shared secret - maybe a workspace's own
+        # connection, signed with the per-tenant secret we registered. Parse
+        # ONLY to identify the tenant, then verify against its secret; a
+        # mismatch is still a hard 403.
+        try:
+            probe = json.loads(request.body)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            probe = None
+        conn = _tenant_connection_for(probe) if isinstance(probe, dict) else None
+        if conn is None or not ZernioClient.verify_webhook_signature(request.body, signature, conn.webhook_secret):
+            logger.warning("Zernio webhook rejected: bad signature or unconfigured secret")
+            return JsonResponse({"error": "invalid signature"}, status=403)
+        payload = probe
+    else:
+        payload = None
 
-    try:
-        payload = json.loads(request.body)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return JsonResponse({"error": "invalid json"}, status=400)
-    if not isinstance(payload, dict):
-        return JsonResponse({"error": "invalid payload"}, status=400)
+    if payload is None:
+        try:
+            payload = json.loads(request.body)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return JsonResponse({"error": "invalid json"}, status=400)
+        if not isinstance(payload, dict):
+            return JsonResponse({"error": "invalid payload"}, status=400)
 
     event_id = payload.get("id") or _header(request, "HTTP_X_ZERNIO_EVENT_ID", "HTTP_X_LATE_EVENT_ID")
     if not event_id:
@@ -247,6 +280,21 @@ def _process_account_event(event_type: str, payload: dict) -> None:
             last_error="Disconnected at the provider; reconnect from Settings.",
         )
         logger.warning("Zernio account.disconnected: %s account(s) marked disconnected", updated)
+        from apps.receptionist.models import TenantMessagingConnection
+
+        tenant_qs = TenantMessagingConnection.objects.exclude(status=TenantMessagingConnection.Status.NEEDS_ATTENTION)
+        if account_id:
+            tenant_qs = tenant_qs.filter(account_id=account_id)
+        elif profile_id:
+            tenant_qs = tenant_qs.filter(profile_id=profile_id)
+        tenant_updated = tenant_qs.update(
+            status=TenantMessagingConnection.Status.NEEDS_ATTENTION,
+            last_error="The connected number was disconnected. Reconnect it from Receptionist setup.",
+        )
+        if tenant_updated:
+            logger.warning(
+                "Zernio account.disconnected: %s tenant connection(s) marked needs_attention", tenant_updated
+            )
         return
 
     # account.connected: refresh the workspace's account list server-side, the

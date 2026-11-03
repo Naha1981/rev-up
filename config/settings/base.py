@@ -522,6 +522,10 @@ ZERNIO_BASE_URL = env("ZERNIO_BASE_URL", default="https://zernio.com/api/v1")
 # reminder). Real sends stay OFF until explicitly enabled here AND per
 # workspace on the receptionist setup page.
 REVIEW_AUTOMATION_ENABLED = env.bool("REVIEW_AUTOMATION_ENABLED", default=False)
+
+# Customer-owned WhatsApp: tenants connect their own messaging account
+# (their key, their plan). Ships dark; flip the env to serve the setup path.
+TENANT_OWNED_WHATSAPP_ENABLED = env.bool("TENANT_OWNED_WHATSAPP_ENABLED", default=False)
 ZERNIO_WEBHOOK_SECRET = env("ZERNIO_WEBHOOK_SECRET", default="")
 
 # Platform credentials env vars (cloud version)

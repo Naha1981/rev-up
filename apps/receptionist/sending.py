@@ -19,7 +19,7 @@ import httpx
 from django.conf import settings
 from django.utils import timezone
 
-from .models import Contact, Message, ZernioChannel
+from .models import Contact, Message, TenantMessagingConnection, ZernioChannel
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,20 @@ def over_budget(workspace) -> bool:
     return sent.filter(created_at__gte=now - timedelta(days=1)).count() >= per_day
 
 
+def tenant_connection(channel: ZernioChannel) -> TenantMessagingConnection | None:
+    """The workspace's own messaging connection, when it has one."""
+    return TenantMessagingConnection.objects.filter(workspace_id=channel.workspace_id).first()
+
+
+def _api_key_for(channel: ZernioChannel) -> str:
+    """A workspace with its own connected account runs on ITS key and ITS
+    plan; everyone else stays on the shared NahaLabs key."""
+    conn = tenant_connection(channel)
+    if conn is not None and conn.status == TenantMessagingConnection.Status.CONNECTED:
+        return conn.api_key
+    return settings.ZERNIO_API_KEY
+
+
 def may_send(channel: ZernioChannel, contact: Contact) -> bool:
     # Never message anyone who did not write to the business first.
     if not contact.messages.filter(direction=Message.Direction.INBOUND).exists():
@@ -68,6 +82,14 @@ def send_draft(channel: ZernioChannel, contact: Contact, message: Message) -> bo
     if not may_send(channel, contact):
         logger.info("receptionist: send refused by reply-only guard (contact %s)", contact.id)
         return False
+    conn = tenant_connection(channel)
+    if conn is not None and conn.status == TenantMessagingConnection.Status.NEEDS_ATTENTION:
+        # Their own account dropped the number - hold every draft until they
+        # reconnect, so nothing fails against a dead account mid-conversation.
+        logger.warning(
+            "receptionist: tenant connection needs attention, drafts held (workspace %s)", channel.workspace_id
+        )
+        return False
     if over_budget(channel.workspace):
         logger.warning("receptionist: workspace %s over send budget, draft held", channel.workspace_id)
         return False
@@ -77,7 +99,7 @@ def send_draft(channel: ZernioChannel, contact: Contact, message: Message) -> bo
     url = f"{settings.ZERNIO_BASE_URL}/inbox/conversations/{contact.zernio_conversation_id}/messages"
     resp = httpx.post(
         url,
-        headers={"Authorization": f"Bearer {settings.ZERNIO_API_KEY}"},
+        headers={"Authorization": f"Bearer {_api_key_for(channel)}"},
         json={"accountId": channel.zernio_account_id, "message": message.body},
         timeout=_TIMEOUT,
     )

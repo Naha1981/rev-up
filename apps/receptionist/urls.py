@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import tenant_connect, views
 
 app_name = "receptionist"
 
@@ -16,5 +16,8 @@ urlpatterns = [
     path("quotes/<uuid:quote_id>/<str:action>/", views.quote_action, name="quote_action"),
     path("bookings/<uuid:booking_id>/<str:action>/", views.booking_action, name="booking_action"),
     path("setup/bind-whatsapp/", views.bind_whatsapp, name="bind_whatsapp"),
+    path("setup/your-whatsapp/", tenant_connect.tenant_setup, name="tenant_wa_setup"),
+    path("setup/your-whatsapp/start/", tenant_connect.tenant_connect_start, name="tenant_wa_start"),
+    path("setup/your-whatsapp/callback/", tenant_connect.tenant_callback, name="tenant_wa_callback"),
     path("contacts/<uuid:contact_id>/", views.conversation, name="conversation"),
 ]
