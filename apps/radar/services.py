@@ -277,7 +277,7 @@ def generate_feed_for_workspace(workspace, *, fetcher=fetch_rss) -> int:
         raw = fetcher(url)
         detail.append(f"google news: {len(_parse_rss(raw))} stories")
     except Exception as exc:
-        detail.append(f"google news refused: {exc}")
+        detail.append("google news: didn't answer this time")
         logger.warning("radar generator: google news failed for workspace %s: %s", workspace.id, exc)
     parsed = _parse_rss(raw) if raw else []
     # Trade-matched SA feeds always run: Google News mostly returns general
@@ -290,7 +290,7 @@ def generate_feed_for_workspace(workspace, *, fetcher=fetch_rss) -> int:
             detail.append(f"{host}: {len(got)} stories")
             parsed.extend(got)
         except Exception as exc:
-            detail.append(f"{host} refused: {exc}")
+            detail.append(f"{host}: didn't answer this time")
             logger.warning("radar generator: trade feed %s failed for workspace %s: %s", feed, workspace.id, exc)
     if not parsed:
         # Last resort: general SA news feeds, filtered by trade keywords below.
@@ -301,7 +301,7 @@ def generate_feed_for_workspace(workspace, *, fetcher=fetch_rss) -> int:
                 detail.append(f"{host}: {len(got)} stories")
                 parsed.extend(got)
             except Exception as exc:
-                detail.append(f"{host} refused: {exc}")
+                detail.append(f"{host}: didn't answer this time")
                 logger.warning("radar generator: fallback %s failed for workspace %s: %s", feed, workspace.id, exc)
     keywords = [k.lower() for k in get_preset(workspace.industry).get("radar_keywords", []) if k]
     group = area or get_preset(workspace.industry).get("label", "Industry")
