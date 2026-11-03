@@ -91,9 +91,26 @@ def test_dashboard_shows_outreach_table_with_zero_states():
     c.force_login(staff)
     body = c.get("/product-analytics/").content.decode()
     assert "JD Funerals" in body
-    assert "?utm_content=jd" in body
+    assert "utm_content=jd" in body
     assert "Clicked?" in body
-    assert "Message sent" in body
+    assert "<th>Sent</th>" in body
+    assert "Click time" in body
     assert "Kupane Funerals" in body  # zero-click business still listed
     assert "<td>No</td>" in body  # zero-click businesses show as not clicked
     assert "Plain link (no business code)" in body
+
+
+def test_today_card_matches_calendar_day():
+    from django.utils import timezone as tz
+
+    ProductEvent.objects.create(kind=ProductEvent.Kind.PAGE_VIEW, path="/", visitor_hash="b" * 64)
+    staff = User.objects.create_user(email="cards@example.com", password="x" * 20, is_staff=True, tos_accepted_at=tz.now())
+    c = Client()
+    c.force_login(staff)
+    body = c.get("/product-analytics/").content.decode()
+    today = tz.localdate().strftime("%b. %-d, %Y").replace(" 0", " ")
+    import re
+
+    day_row = re.search(rf"{today}</td><td>(\d+)</td>", body)
+    assert day_row and day_row.group(1) == "1"
+    assert '<div class="num">1</div><div class="label">views today</div>' in body

@@ -17,11 +17,15 @@ from .outreach import OUTREACH_BUSINESSES
 @staff_member_required
 def dashboard(request):
     now = timezone.now()
+    today = timezone.localdate(now)
     since = now - timedelta(days=30)
     events = ProductEvent.objects.filter(created_at__gte=since)
 
     def counts(days):
-        qs = events.filter(created_at__gte=now - timedelta(days=days))
+        # Calendar days in the server's timezone, so "today" matches the
+        # per-day table below (a rolling 24h window does not).
+        start = today - timedelta(days=days - 1)
+        qs = events.filter(created_at__date__gte=start)
         return {
             "views": qs.filter(kind=ProductEvent.Kind.PAGE_VIEW).count(),
             "uniques": qs.filter(kind=ProductEvent.Kind.PAGE_VIEW).values("visitor_hash").distinct().count(),
