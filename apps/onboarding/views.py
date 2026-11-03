@@ -29,6 +29,7 @@ from apps.members.decorators import require_permission
 from apps.members.models import WorkspaceMembership
 from apps.notifications.engine import notify
 from apps.notifications.models import EventType
+from apps.social_accounts.models import PlatformVisibility
 from apps.social_accounts.oauth_aliases import from_url_slug, redirect_uri_from_request, to_url_slug
 from apps.social_accounts.oauth_pkce import issue_pkce_verifier, pkce_kwargs
 from apps.social_accounts.provider_factory import _get_provider_for_platform
@@ -283,7 +284,7 @@ def connection_page(request, token):
             "workspace": workspace,
             "error": session_error,
             "org": org,
-            "platform_choices": PlatformCredential.Platform.choices,
+            "platform_choices": PlatformVisibility.visible_choices(),
             "configured_platforms": configured_platforms,
             "connected_accounts": connected_accounts,
         },
@@ -306,7 +307,7 @@ def connection_oauth_start(request, token):
         return redirect("onboarding:connection_page", token=token)
 
     platform = request.POST.get("platform", "").strip()
-    if platform not in dict(PlatformCredential.Platform.choices):
+    if platform not in dict(PlatformVisibility.visible_choices()):
         return redirect("onboarding:connection_page", token=token)
 
     org = link.workspace.organization
