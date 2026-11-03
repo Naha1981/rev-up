@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 # Bound each drain so the HTTP call finishes well inside proxy timeouts; the
 # next cron tick picks up anything left over.
-DRAIN_SECONDS = 45
+DRAIN_SECONDS = 25
 
 
 def drain_due_tasks(seconds: int = DRAIN_SECONDS) -> int:
