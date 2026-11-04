@@ -96,9 +96,10 @@ def handle_inbox_message(payload: dict) -> None:
         _reviews.unsubscribe_contact(contact)
         return
 
-    # A negative reply right after the pipeline check-in flags an issue for
-    # the owner. It never suppresses the review request (Google policy).
-    if contact.review_status == "check_in_sent" and _reviews.looks_negative(body):
+    # A negative reply right after the pipeline check-in or the review
+    # request flags an issue for the owner. It never suppresses the review
+    # request (Google policy).
+    if contact.review_status in ("check_in_sent", "review_requested") and _reviews.looks_negative(body):
         _reviews.flag_issue(contact, body)
 
     # A customer who wrote again is the safest moment to clear any held

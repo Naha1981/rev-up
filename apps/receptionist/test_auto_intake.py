@@ -158,3 +158,67 @@ class ConversationMediaDisplayTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "https://cdn.example.com/1.jpg")
         self.assertContains(resp, "Photo 2")
+
+
+class ReviewTriageTests(TestCase):
+    """Negative replies route to the owner, after check-in AND after the ask."""
+
+    def setUp(self):
+        self.ws = _workspace("pb-reviews")
+        BusinessProfile.objects.create(workspace=self.ws, industry="panel-beater", business_name="PB Reviews")
+        ZernioChannel.objects.create(workspace=self.ws, zernio_account_id="acct-pbr")
+        self.user = get_user_model().objects.create_user(email="owner-pbr@example.com", password="x")
+        WorkspaceMembership.objects.create(user=self.user, workspace=self.ws, workspace_role="owner")
+
+    def _contact(self, status):
+        return Contact.objects.create(workspace=self.ws, wa_id="27821112233", review_status=status)
+
+    def _inbound(self, text, mid):
+        payload = {
+            "event": "message.received",
+            "message": {
+                "id": mid,
+                "direction": "incoming",
+                "sender": {"id": "27821112233", "phoneNumber": "+27821112233"},
+                "text": text,
+                "account": {"accountId": "acct-pbr"},
+            },
+        }
+        with patch("apps.receptionist.webhooks.draft_reply") as mock_draft:
+            mock_draft.return_value = ReplyDraft(body="Noted.", intake={})
+            handle_inbox_message(payload)
+
+    def test_negative_after_check_in_flags_and_alerts_owner(self):
+        contact = self._contact("check_in_sent")
+        self._inbound("I am not happy, the panel is still not fixed", "n1")
+        contact.refresh_from_db()
+        self.assertEqual(contact.review_status, "issue_flagged")
+        self.assertTrue(contact.needs_human)
+        note = Notification.objects.get(user=self.user, event_type=EventType.RECEPTIONIST_REVIEW_ISSUE)
+        self.assertIn("still not fixed", note.data["note"])
+
+    def test_negative_after_review_request_flags_and_alerts_owner(self):
+        contact = self._contact("review_requested")
+        self._inbound("Terrible work, worst service", "n2")
+        contact.refresh_from_db()
+        self.assertEqual(contact.review_status, "issue_flagged")
+        self.assertTrue(
+            Notification.objects.filter(user=self.user, event_type=EventType.RECEPTIONIST_REVIEW_ISSUE).exists()
+        )
+
+    def test_positive_reply_never_flags(self):
+        contact = self._contact("check_in_sent")
+        self._inbound("Great job, thank you so much!", "n3")
+        contact.refresh_from_db()
+        self.assertEqual(contact.review_status, "check_in_sent")
+        self.assertFalse(
+            Notification.objects.filter(user=self.user, event_type=EventType.RECEPTIONIST_REVIEW_ISSUE).exists()
+        )
+
+    def test_sa_phrasing_counts_as_negative(self):
+        from .reviews import looks_negative
+
+        self.assertTrue(looks_negative("Not impressed at all"))
+        self.assertTrue(looks_negative("The car came back with the same problem"))
+        self.assertTrue(looks_negative("What a rip off"))
+        self.assertFalse(looks_negative("Thanks, all sorted"))
