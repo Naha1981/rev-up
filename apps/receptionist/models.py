@@ -77,6 +77,10 @@ class BusinessProfile(models.Model):
     review_requests_enabled = models.BooleanField(
         default=False, help_text="Owner switch: send the check-in, review request and reminder pipeline"
     )
+    service_reminder_days = models.PositiveIntegerField(
+        default=0,
+        help_text="Days after a finished job to WhatsApp the customer a service reminder (0 = off)",
+    )
     emergency_contact_phone = models.CharField(max_length=32, blank=True)
     call_out_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     custom_rules = models.TextField(blank=True)
@@ -320,6 +324,45 @@ class TradeDispatch(models.Model):
     call_out_fee_quoted = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     status = models.CharField(max_length=20, choices=IntakeStatus.choices, default=IntakeStatus.NEW)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class ServiceReminder(models.Model):
+    """A 'time for your next service' WhatsApp, scheduled when a job finishes.
+
+    Retention engine for service businesses (vehicle services, follow-up
+    checks): the owner sets service_reminder_days once on the setup page and
+    every booking marked Done schedules one reminder. STOP opts the customer
+    out of it like every other automated message.
+    """
+
+    class Status(models.TextChoices):
+        SCHEDULED = "scheduled", "Scheduled"
+        SENDING = "sending", "Sending"
+        SENT = "sent", "Sent"
+        CANCELLED = "cancelled", "Cancelled"
+        FAILED = "failed", "Failed"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        "workspaces.Workspace", on_delete=models.CASCADE, related_name="receptionist_service_reminders"
+    )
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="service_reminders")
+    booking = models.ForeignKey(
+        Booking, on_delete=models.SET_NULL, null=True, blank=True, related_name="service_reminders"
+    )
+    service = models.CharField(max_length=200, blank=True)
+    due_on = models.DateField()
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.SCHEDULED)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["due_on"]
+        indexes = [models.Index(fields=["status", "due_on"], name="servicereminder_due")]
+
+    def __str__(self) -> str:
+        return f"Service reminder for {self.contact.wa_id} on {self.due_on} ({self.status})"
 
 
 class ReviewLink(models.Model):

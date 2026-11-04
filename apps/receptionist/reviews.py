@@ -300,6 +300,11 @@ def unsubscribe_contact(contact: Contact) -> int:
     contact.review_status = "unsubscribed"
     contact.save(update_fields=["opted_out", "opted_out_at", "review_status", "updated_at"])
     cancelled = cancel_pending(contact)
+    from .models import ServiceReminder
+
+    cancelled += ServiceReminder.objects.filter(contact=contact, status=ServiceReminder.Status.SCHEDULED).update(
+        status=ServiceReminder.Status.CANCELLED
+    )
     logger.info("reviews: contact %s opted out, %d pending steps cancelled", contact.id, cancelled)
     return cancelled
 

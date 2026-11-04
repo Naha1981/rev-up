@@ -1,5 +1,6 @@
 """RevUp Auto: panel beater / auto electrician profiles and photo quote intake."""
 
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -222,3 +223,79 @@ class ReviewTriageTests(TestCase):
         self.assertTrue(looks_negative("The car came back with the same problem"))
         self.assertTrue(looks_negative("What a rip off"))
         self.assertFalse(looks_negative("Thanks, all sorted"))
+
+
+class ServiceReminderTests(TestCase):
+    """Retention engine: done jobs schedule a dated service reminder, STOP kills it."""
+
+    def setUp(self):
+        self.ws = _workspace("pb-reminders")
+        self.profile = BusinessProfile.objects.create(
+            workspace=self.ws, industry="auto-workshop", business_name="PB Motors", service_reminder_days=180
+        )
+        ZernioChannel.objects.create(workspace=self.ws, zernio_account_id="acct-rem")
+        self.contact = Contact.objects.create(workspace=self.ws, wa_id="27823334455", name="Sipho Dlamini")
+        self.booking = Booking.objects.create(
+            workspace=self.ws, contact=self.contact, service="Full service - Polo 2019", status="done"
+        )
+
+    def test_done_booking_schedules_reminder(self):
+        from .reminders import schedule_for_booking
+
+        reminder = schedule_for_booking(self.booking)
+        self.assertIsNotNone(reminder)
+        self.assertEqual(reminder.service, "Full service - Polo 2019")
+        self.assertEqual(reminder.due_on, timezone.localdate() + timedelta(days=180))
+
+    def test_off_by_default(self):
+        self.profile.service_reminder_days = 0
+        self.profile.save()
+        from .reminders import schedule_for_booking
+
+        self.assertIsNone(schedule_for_booking(self.booking))
+
+    def test_opted_out_contact_gets_no_reminder(self):
+        self.contact.opted_out = True
+        self.contact.save()
+        from .reminders import schedule_for_booking
+
+        self.assertIsNone(schedule_for_booking(self.booking))
+
+    def test_message_is_plain_and_personal(self):
+        from .reminders import reminder_message
+
+        body = reminder_message(self.ws, self.contact, "Full service - Polo 2019")
+        self.assertIn("Hi Sipho", body)
+        self.assertIn("PB Motors", body)
+        self.assertIn("Full service - Polo 2019", body)
+
+    def test_stop_cancels_pending_reminders(self):
+        from .models import ServiceReminder
+        from .reminders import schedule_for_booking
+        from .reviews import unsubscribe_contact
+
+        schedule_for_booking(self.booking)
+        unsubscribe_contact(self.contact)
+        self.assertFalse(ServiceReminder.objects.filter(contact=self.contact, status="scheduled").exists())
+
+    @patch("apps.receptionist.reminders._deliver")
+    def test_send_due_delivers_with_stop_footer(self, mock_deliver):
+        from .reminders import schedule_for_booking, send_due
+
+        reminder = schedule_for_booking(self.booking)
+        reminder.due_on = timezone.localdate()
+        reminder.save()
+        self.assertEqual(send_due(reminder), "sent")
+        reminder.refresh_from_db()
+        self.assertEqual(reminder.status, "sent")
+        self.assertIn("Reply STOP to opt out.", mock_deliver.call_args[0][2])
+
+    @patch("apps.receptionist.reminders._deliver")
+    def test_send_due_skips_opted_out(self, mock_deliver):
+        from .reminders import schedule_for_booking, send_due
+
+        reminder = schedule_for_booking(self.booking)
+        self.contact.opted_out = True
+        self.contact.save()
+        self.assertEqual(send_due(reminder), "cancelled")
+        mock_deliver.assert_not_called()
