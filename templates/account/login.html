@@ -72,6 +72,10 @@
             {% csrf_token %}
             {{ redirect_field }}
 
+            {% if form.non_field_errors %}
+            <div class="mb-5 alert-error" role="alert">{{ form.non_field_errors.0 }}</div>
+            {% endif %}
+
             {% for field in form %}
             {% if field.field.widget.input_type == "checkbox" %}
             <div class="mb-4">
