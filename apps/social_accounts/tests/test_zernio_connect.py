@@ -674,7 +674,7 @@ class TestPlanCapacity:
             "/connect/facebook": {"authUrl": "https://zernio.com/connect/facebook?token=abc", "state": "s"},
         }
 
-    def test_full_plan_blocks_new_connect_with_waiting_message(
+    def test_full_plan_blocks_new_connect_with_closed_message(
         self, authenticated_client, workspace, zernio_on, monkeypatch, settings
     ):
         settings.ZERNIO_ACCOUNT_LIMIT = 2
@@ -690,7 +690,7 @@ class TestPlanCapacity:
         assert response.url == reverse("social_accounts:connect", kwargs={"workspace_id": workspace.id})
         assert ZERNIO_SESSION_KEY not in authenticated_client.session
         messages = [str(m) for m in response.wsgi_request._messages]
-        assert any("full right now" in m for m in messages)
+        assert any("reached our connection limit" in m for m in messages)
         assert not WorkspaceProviderProfile.objects.filter(workspace=workspace).exists()
 
     def test_open_slot_lets_connect_proceed(self, authenticated_client, workspace, zernio_on, monkeypatch, settings):
@@ -758,7 +758,7 @@ class TestPlanCapacity:
         )
         assert response.status_code == 302
         messages = [str(m) for m in response.wsgi_request._messages]
-        assert any("full right now" in m for m in messages)
+        assert any("reached our connection limit" in m for m in messages)
 
 
 class TestOurPlatformFor:

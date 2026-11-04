@@ -34,13 +34,13 @@ from .models import SocialAccount, WorkspaceProviderProfile
 
 logger = logging.getLogger(__name__)
 
-CAPACITY_MESSAGE = "New account connections are full right now. Your setup is saved - please try again a little later."
+CAPACITY_MESSAGE = "We've reached our connection limit for social accounts, so new connections are closed for now. Your setup is saved - everything else keeps working."
 
 
 class ZernioCapacityError(Exception):
     """A connection cap is reached; connect must wait.
 
-    user_message distinguishes the shared-provider cap (default, try later)
+    user_message distinguishes the shared-provider cap (default, closed for now)
     from the workspace's own tier channel allowance (upgrade path).
     """
 
