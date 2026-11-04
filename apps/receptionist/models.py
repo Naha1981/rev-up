@@ -20,6 +20,8 @@ class Industry(models.TextChoices):
     SECURITY = "security", "Security"
     SOLAR = "solar", "Solar / inverters"
     AUTO_WORKSHOP = "auto-workshop", "Auto workshop"
+    PANEL_BEATER = "panel-beater", "Panel beater / body shop"
+    AUTO_ELECTRICIAN = "auto-electrician", "Auto electrician"
     MOBILE_MECHANIC = "mobile-mechanic", "Mobile mechanic"
     TOWING = "towing", "Towing / roadside"
     HVAC = "hvac", "Aircon / refrigeration"
@@ -50,6 +52,8 @@ WORKSPACE_INDUSTRY_MAP = {
     "real_estate": Industry.REAL_ESTATE,
     "dental": Industry.DENTAL,
     "auto": Industry.AUTO_WORKSHOP,
+    "panel_beater": Industry.PANEL_BEATER,
+    "auto_electrician": Industry.AUTO_ELECTRICIAN,
     "funeral": Industry.FUNERAL,
 }
 
@@ -253,6 +257,11 @@ class Message(models.Model):
     direction = models.CharField(max_length=10, choices=Direction.choices)
     sender_type = models.CharField(max_length=12, choices=SenderType.choices)
     body = models.TextField()
+    media_urls = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Photo/file URLs the customer sent (quote intake: damage photos etc.)",
+    )
     zernio_message_id = models.CharField(max_length=64, blank=True, db_index=True)
     is_draft = models.BooleanField(
         default=False, help_text="Draft replies are stored, never sent, until live sending is enabled"

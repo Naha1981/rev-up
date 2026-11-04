@@ -51,8 +51,12 @@ def handle_inbox_message(payload: dict) -> None:
         sender = {"id": sender}
     wa_id = (sender.get("phoneNumber") or "").lstrip("+") or str(sender.get("id") or "").split("@")[0].lstrip("+")
     body = (message.get("text") or message.get("body") or "").strip()
-    if not wa_id or not body:
+    media_urls = _extract_media_urls(message)
+    if not wa_id or (not body and not media_urls):
         return
+    if not body and media_urls:
+        # Media-only message: the stored body keeps the inbox readable.
+        body = f"[{len(media_urls)} photo{'s' if len(media_urls) != 1 else ''} received]"
     conversation = payload.get("conversation") or {}
     sender_name = sender.get("name") or conversation.get("participantName") or ""
     zernio_message_id = str(message.get("_id") or message.get("id") or "")
@@ -78,8 +82,11 @@ def handle_inbox_message(payload: dict) -> None:
             direction=Message.Direction.INBOUND,
             sender_type=Message.SenderType.USER,
             body=body,
+            media_urls=media_urls,
             zernio_message_id=zernio_message_id,
         )
+        if media_urls:
+            _alert_owner_media_intake(workspace, contact, media_urls)
 
     # Opt-out keywords cancel the review pipeline immediately and block any
     # restart without fresh consent; the stored inbound message is the record.
@@ -142,8 +149,11 @@ def handle_inbox_message(payload: dict) -> None:
 
     history = [(m.sender_type, m.body) for m in contact.messages.order_by("-created_at")[:12]]
     history.reverse()
+    incoming = body
+    if media_urls:
+        incoming = f"[Customer sent {len(media_urls)} photo{'s' if len(media_urls) != 1 else ''}] {body}".strip()
     try:
-        draft = draft_reply(profile, history[:-1], body)
+        draft = draft_reply(profile, history[:-1], incoming)
     except Exception:
         logger.exception("receptionist: reply drafting failed for workspace %s", workspace.id)
         return
@@ -166,6 +176,42 @@ def handle_inbox_message(payload: dict) -> None:
         send_draft(channel, contact, outbound)
     except Exception:
         logger.exception("receptionist: send failed for contact %s", contact.id)
+
+
+def _extract_media_urls(message: dict) -> list[str]:
+    """Photo/file URLs from a Zernio message payload (any attachment shape)."""
+    urls: list[str] = []
+    for item in message.get("attachments") or []:
+        if isinstance(item, str):
+            urls.append(item)
+        elif isinstance(item, dict):
+            url = item.get("url") or item.get("mediaUrl") or item.get("link") or item.get("src") or ""
+            if url:
+                urls.append(str(url))
+    return urls[:10]
+
+
+def _alert_owner_media_intake(workspace, contact, media_urls: list[str]) -> None:
+    """Tell the owner/managers a customer sent photos, with the conversation link."""
+    try:
+        from apps.members.models import WorkspaceMembership
+        from apps.notifications.engine import notify
+        from apps.notifications.models import EventType
+
+        members = WorkspaceMembership.objects.filter(
+            workspace=workspace, workspace_role__in=["owner", "manager"]
+        ).select_related("user")
+        for membership in members:
+            notify(
+                membership.user,
+                EventType.RECEPTIONIST_MEDIA_INTAKE,
+                f"Photos received from {contact.name or contact.wa_id}",
+                f"{len(media_urls)} photo{'s' if len(media_urls) != 1 else ''} arrived on WhatsApp. "
+                "Open the receptionist inbox to view and assess them.",
+                data={"contact_id": str(contact.id), "media_urls": media_urls},
+            )
+    except Exception:
+        logger.exception("receptionist: owner media alert failed for workspace %s", workspace.id)
 
 
 def _apply_intake(workspace, contact, industry: str, intake: dict) -> None:
