@@ -23,6 +23,8 @@ class EventType(models.TextChoices):
     APPROVAL_STALLED = "approval_stalled", "Stalled approval escalation"
     APPROVAL_HOLD_REQUESTED = "approval_hold_requested", "Client requested a hold"
     CLIENT_CONNECTED_ACCOUNTS = "client_connected_accounts", "Client connected accounts"
+    RECEPTIONIST_MEDIA_INTAKE = "receptionist_media_intake", "Customer sent photos or files"
+    RECEPTIONIST_REVIEW_ISSUE = "receptionist_review_issue", "Customer flagged an issue"
 
 
 class Channel(models.TextChoices):

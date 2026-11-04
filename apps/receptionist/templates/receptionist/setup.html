@@ -78,6 +78,10 @@
     {% if not reviews_available %}
     <p class="-mt-2 text-xs text-stone-500">Review requests are available on Growth and Business Pro.</p>
     {% endif %}
+    <label class="block text-sm font-medium text-stone-700">Service reminder (days after a finished job, 0 = off)
+      <input name="service_reminder_days" type="number" min="0" max="730" value="{{ profile.service_reminder_days|default:0 }}" class="mt-1 w-full rounded-xl border border-stone-300 px-3 py-2.5" />
+    </label>
+    <p class="-mt-2 text-xs text-stone-500">Example: 180 sends a "time for your next service" WhatsApp about 6 months after each completed job. Customers can reply STOP to opt out.</p>
     <label class="block text-sm font-medium text-stone-700">Emergency contact number
       <input name="emergency_contact_phone" value="{{ profile.emergency_contact_phone|default:"" }}" class="mt-1 w-full rounded-xl border border-stone-300 px-3 py-2.5" />
     </label>

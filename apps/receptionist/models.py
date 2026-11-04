@@ -20,6 +20,8 @@ class Industry(models.TextChoices):
     SECURITY = "security", "Security"
     SOLAR = "solar", "Solar / inverters"
     AUTO_WORKSHOP = "auto-workshop", "Auto workshop"
+    PANEL_BEATER = "panel-beater", "Panel beater / body shop"
+    AUTO_ELECTRICIAN = "auto-electrician", "Auto electrician"
     MOBILE_MECHANIC = "mobile-mechanic", "Mobile mechanic"
     TOWING = "towing", "Towing / roadside"
     HVAC = "hvac", "Aircon / refrigeration"
@@ -50,6 +52,8 @@ WORKSPACE_INDUSTRY_MAP = {
     "real_estate": Industry.REAL_ESTATE,
     "dental": Industry.DENTAL,
     "auto": Industry.AUTO_WORKSHOP,
+    "panel_beater": Industry.PANEL_BEATER,
+    "auto_electrician": Industry.AUTO_ELECTRICIAN,
     "funeral": Industry.FUNERAL,
 }
 
@@ -72,6 +76,10 @@ class BusinessProfile(models.Model):
     )
     review_requests_enabled = models.BooleanField(
         default=False, help_text="Owner switch: send the check-in, review request and reminder pipeline"
+    )
+    service_reminder_days = models.PositiveIntegerField(
+        default=0,
+        help_text="Days after a finished job to WhatsApp the customer a service reminder (0 = off)",
     )
     emergency_contact_phone = models.CharField(max_length=32, blank=True)
     call_out_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
@@ -253,6 +261,11 @@ class Message(models.Model):
     direction = models.CharField(max_length=10, choices=Direction.choices)
     sender_type = models.CharField(max_length=12, choices=SenderType.choices)
     body = models.TextField()
+    media_urls = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Photo/file URLs the customer sent (quote intake: damage photos etc.)",
+    )
     zernio_message_id = models.CharField(max_length=64, blank=True, db_index=True)
     is_draft = models.BooleanField(
         default=False, help_text="Draft replies are stored, never sent, until live sending is enabled"
@@ -311,6 +324,45 @@ class TradeDispatch(models.Model):
     call_out_fee_quoted = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     status = models.CharField(max_length=20, choices=IntakeStatus.choices, default=IntakeStatus.NEW)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class ServiceReminder(models.Model):
+    """A 'time for your next service' WhatsApp, scheduled when a job finishes.
+
+    Retention engine for service businesses (vehicle services, follow-up
+    checks): the owner sets service_reminder_days once on the setup page and
+    every booking marked Done schedules one reminder. STOP opts the customer
+    out of it like every other automated message.
+    """
+
+    class Status(models.TextChoices):
+        SCHEDULED = "scheduled", "Scheduled"
+        SENDING = "sending", "Sending"
+        SENT = "sent", "Sent"
+        CANCELLED = "cancelled", "Cancelled"
+        FAILED = "failed", "Failed"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        "workspaces.Workspace", on_delete=models.CASCADE, related_name="receptionist_service_reminders"
+    )
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="service_reminders")
+    booking = models.ForeignKey(
+        Booking, on_delete=models.SET_NULL, null=True, blank=True, related_name="service_reminders"
+    )
+    service = models.CharField(max_length=200, blank=True)
+    due_on = models.DateField()
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.SCHEDULED)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["due_on"]
+        indexes = [models.Index(fields=["status", "due_on"], name="servicereminder_due")]
+
+    def __str__(self) -> str:
+        return f"Service reminder for {self.contact.wa_id} on {self.due_on} ({self.status})"
 
 
 class ReviewLink(models.Model):

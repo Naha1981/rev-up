@@ -28,3 +28,19 @@ def run_review_event(event_id: str) -> None:
     outcome = send_event(event)
     if outcome == "held":
         run_review_event(event_id, schedule=timezone.now() + HELD_RETRY_DELAY)
+
+
+@background(schedule=0)
+def run_service_reminder(reminder_id: str) -> None:
+    """Send one due service reminder; re-queue while the send gates hold it."""
+    from .models import ServiceReminder
+    from .reminders import send_due
+
+    reminder = ServiceReminder.objects.filter(id=reminder_id).first()
+    if reminder is None or reminder.status != ServiceReminder.Status.SCHEDULED:
+        return
+    outcome = send_due(reminder)
+    if outcome == "held":
+        from .reviews import HELD_RETRY_DELAY
+
+        run_service_reminder(reminder_id, schedule=timezone.now() + HELD_RETRY_DELAY)

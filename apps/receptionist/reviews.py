@@ -63,6 +63,14 @@ NEGATIVE_KEYWORDS = frozenset(
         "refund",
         "useless",
         "angry",
+        "not impressed",
+        "still not working",
+        "still not fixed",
+        "came back",
+        "waste of money",
+        "rip off",
+        "ripped off",
+        "disgusted",
     }
 )
 
@@ -292,17 +300,46 @@ def unsubscribe_contact(contact: Contact) -> int:
     contact.review_status = "unsubscribed"
     contact.save(update_fields=["opted_out", "opted_out_at", "review_status", "updated_at"])
     cancelled = cancel_pending(contact)
+    from .models import ServiceReminder
+
+    cancelled += ServiceReminder.objects.filter(contact=contact, status=ServiceReminder.Status.SCHEDULED).update(
+        status=ServiceReminder.Status.CANCELLED
+    )
     logger.info("reviews: contact %s opted out, %d pending steps cancelled", contact.id, cancelled)
     return cancelled
 
 
 def flag_issue(contact: Contact, note: str) -> None:
-    """Negative check-in reply: alert the business, never suppress the ask."""
+    """Negative reply: alert the business, never suppress the ask."""
     contact.review_status = "issue_flagged"
     contact.issue_note = note[:500]
     contact.needs_human = True
     contact.save(update_fields=["review_status", "issue_note", "needs_human", "updated_at"])
     logger.info("reviews: contact %s flagged an issue", contact.id)
+    _alert_owner_issue(contact, note)
+
+
+def _alert_owner_issue(contact: Contact, note: str) -> None:
+    """Route a negative customer reply straight to the owner/managers."""
+    try:
+        from apps.members.models import WorkspaceMembership
+        from apps.notifications.engine import notify
+        from apps.notifications.models import EventType
+
+        members = WorkspaceMembership.objects.filter(
+            workspace=contact.workspace, workspace_role__in=["owner", "manager"]
+        ).select_related("user")
+        for membership in members:
+            notify(
+                membership.user,
+                EventType.RECEPTIONIST_REVIEW_ISSUE,
+                f"{contact.name or contact.wa_id} flagged an issue",
+                "A customer replied negatively after the check-in or review request. "
+                "They are waiting for a person in the receptionist inbox.",
+                data={"contact_id": str(contact.id), "note": note[:500]},
+            )
+    except Exception:
+        logger.exception("reviews: owner issue alert failed for contact %s", contact.id)
 
 
 def resolve_issue(contact: Contact) -> bool:

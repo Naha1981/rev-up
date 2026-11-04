@@ -104,6 +104,8 @@ def setup(request, workspace_id):
         }
         call_out = (request.POST.get("call_out_fee") or "").strip()
         defaults["call_out_fee"] = call_out or None
+        raw_days = (request.POST.get("service_reminder_days") or "0").strip()
+        defaults["service_reminder_days"] = int(raw_days) if raw_days.isdigit() else 0
         BusinessProfile.objects.update_or_create(workspace=workspace, defaults=defaults)
         messages.success(request, "Receptionist settings saved.")
         return redirect("receptionist:inbox", workspace_id=workspace.id)
@@ -296,6 +298,14 @@ def booking_action(request, workspace_id, booking_id, action):
             _reviews.start_pipeline(booking)
         except Exception:
             logger.exception("reviews: pipeline start failed for booking %s", booking.id)
+        # A finished job also schedules its service reminder (retention),
+        # when the owner has set the interval on the setup page.
+        try:
+            from . import reminders as _reminders
+
+            _reminders.schedule_for_booking(booking)
+        except Exception:
+            logger.exception("reminders: scheduling failed for booking %s", booking.id)
         messages.success(request, "Booking marked done.")
     elif action == "cancel" and booking.status in (Booking.Status.REQUESTED, Booking.Status.CONFIRMED):
         booking.status = Booking.Status.CANCELLED
