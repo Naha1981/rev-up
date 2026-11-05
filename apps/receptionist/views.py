@@ -26,6 +26,7 @@ from .models import (
     Booking,
     BusinessProfile,
     CalendarConnection,
+    Campaign,
     Contact,
     DentalAppointment,
     FuneralClaim,
@@ -335,7 +336,14 @@ def booking_action(request, workspace_id, booking_id, action):
             )
     elif action == "done" and booking.status == Booking.Status.CONFIRMED:
         booking.status = Booking.Status.DONE
-        booking.save(update_fields=["status"])
+        raw_value = request.POST.get("value", "").strip()
+        booking.value = None
+        if raw_value:
+            try:
+                booking.value = Decimal(raw_value)
+            except InvalidOperation:
+                booking.value = None
+        booking.save(update_fields=["status", "value"])
         # Customer history: a finished booking is a visit. Five visits make
         # a VIP (the owner can untick it on the customer card).
         contact = booking.contact
@@ -362,6 +370,14 @@ def booking_action(request, workspace_id, booking_id, action):
             _reminders.schedule_for_booking(booking)
         except Exception:
             logger.exception("reminders: scheduling failed for booking %s", booking.id)
+        # Campaigns: a finished booking within 30 days of a campaign send is
+        # attributed to that campaign (booking + revenue).
+        try:
+            from . import campaigns as _campaigns
+
+            _campaigns.attribute_booking(booking)
+        except Exception:
+            logger.exception("campaigns: attribution failed for booking %s", booking.id)
         # Loyalty: points for the completed visit.
         try:
             from . import loyalty as _loyalty
@@ -985,3 +1001,73 @@ def complaint_action(request, workspace_id, complaint_id, action):
     else:
         messages.error(request, "That change does not apply to this complaint.")
     return redirect("receptionist:complaints", workspace_id=workspace.id)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def campaigns(request, workspace_id):
+    """Campaigns screen: draft a send to a segment, approve, track delivery."""
+    from . import campaigns as _campaigns
+
+    workspace = _get_workspace(request, workspace_id)
+    if request.method == "POST":
+        try:
+            campaign = _campaigns.create_campaign(
+                workspace,
+                request.POST.get("name", "").strip(),
+                request.POST.get("segment", "all"),
+                request.POST.get("body_a", ""),
+                request.POST.get("body_b", ""),
+            )
+            messages.success(
+                request, f"'{campaign.name}' saved as a draft. Approve it when you're happy with the wording."
+            )
+        except ValueError as exc:
+            messages.error(request, str(exc))
+        return redirect("receptionist:campaigns", workspace.id)
+    rows = [
+        (c, _campaigns.stats(c)) for c in Campaign.objects.filter(workspace=workspace).prefetch_related("recipients")
+    ]
+    return render(
+        request,
+        "receptionist/campaigns.html",
+        {
+            "workspace": workspace,
+            "campaigns": rows,
+            "segments": Campaign.Segment.choices,
+            "channel": ZernioChannel.objects.filter(workspace=workspace).first(),
+        },
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def campaign_action(request, workspace_id, campaign_id, action):
+    workspace = _get_workspace(request, workspace_id)
+    campaign = get_object_or_404(Campaign, id=campaign_id, workspace=workspace)
+    from . import campaigns as _campaigns
+
+    if action == "approve":
+        raw = request.POST.get("scheduled_at", "").strip()
+        when = timezone.now()
+        if raw:
+            try:
+                parsed = _dt.datetime.fromisoformat(raw)
+                when = timezone.make_aware(parsed) if timezone.is_naive(parsed) else parsed
+            except ValueError:
+                messages.error(request, "That date and time did not parse.")
+                return redirect("receptionist:campaigns", workspace.id)
+        try:
+            _campaigns.approve(campaign, when)
+            if when > timezone.now():
+                messages.success(request, f"Approved. '{campaign.name}' goes out {when:%a %d %b at %H:%M}.")
+            else:
+                messages.success(request, f"Approved. '{campaign.name}' is sending now.")
+        except ValueError as exc:
+            messages.error(request, str(exc))
+    elif action == "cancel":
+        if _campaigns.cancel(campaign):
+            messages.success(request, f"'{campaign.name}' cancelled. Nothing was sent.")
+        else:
+            messages.error(request, "This campaign already went out and cannot be cancelled.")
+    return redirect("receptionist:campaigns", workspace.id)

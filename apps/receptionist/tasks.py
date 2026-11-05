@@ -44,3 +44,15 @@ def run_service_reminder(reminder_id: str) -> None:
         from .reviews import HELD_RETRY_DELAY
 
         run_service_reminder(reminder_id, schedule=timezone.now() + HELD_RETRY_DELAY)
+
+
+@background(schedule=0)
+def run_campaign(campaign_id: str) -> None:
+    """Send one approved campaign; the service re-queues while gates hold it."""
+    from .campaigns import send_campaign
+    from .models import Campaign
+
+    campaign = Campaign.objects.filter(id=campaign_id).first()
+    if campaign is None or campaign.status not in (Campaign.Status.SCHEDULED, Campaign.Status.SENDING):
+        return
+    send_campaign(campaign)

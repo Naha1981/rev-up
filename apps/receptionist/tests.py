@@ -15,6 +15,7 @@ from .models import (
     Booking,
     BusinessProfile,
     CalendarConnection,
+    Campaign,
     Contact,
     FuneralClaim,
     Message,
@@ -1692,12 +1693,13 @@ class ComplaintTests(TestCase):
         self.assertTrue(self.contact.needs_human)
 
     def test_nav_links_loyalty_and_complaints_from_every_screen(self):
-        screens = ["inbox", "bookings", "waitlist", "quotes", "reviews", "loyalty", "complaints", "setup"]
+        screens = ["inbox", "bookings", "waitlist", "quotes", "reviews", "loyalty", "complaints", "campaigns", "setup"]
         for name in screens:
             resp = self.client.get(reverse(f"receptionist:{name}", args=[self.ws.id]))
             self.assertEqual(resp.status_code, 200, name)
             self.assertContains(resp, reverse("receptionist:loyalty", args=[self.ws.id]))
             self.assertContains(resp, reverse("receptionist:complaints", args=[self.ws.id]))
+            self.assertContains(resp, reverse("receptionist:campaigns", args=[self.ws.id]))
 
     def test_complaints_screen_isolated(self):
         self._add()
@@ -1716,3 +1718,134 @@ class ComplaintTests(TestCase):
         WorkspaceMembership.objects.create(user=other, workspace=_workspace("Other Cafe"))
         self.client.force_login(other)
         self.assertEqual(self.client.get(reverse("receptionist:complaints", args=[self.ws.id])).status_code, 403)
+
+
+class CampaignTests(TestCase):
+    """Campaigns: segmentation, approval, A/B, guarded send, attribution."""
+
+    def setUp(self):
+        from apps.accounts.models import User
+        from apps.members.models import WorkspaceMembership
+
+        self.user = User.objects.create_user(
+            email="campaign-owner@example.com",
+            password="testpass123",
+            name="Owner",
+            tos_accepted_at=timezone.now(),
+        )
+        self.ws = _workspace("Campaign Cafe")
+        WorkspaceMembership.objects.create(user=self.user, workspace=self.ws)
+        self.client.force_login(self.user)
+        now = timezone.now()
+
+        def contact(wa, name, **kw):
+            return Contact.objects.create(workspace=self.ws, wa_id=wa, name=name, **kw)
+
+        self.recent = contact("27821110001", "Recent Rita", last_visit_at=now - timedelta(days=5))
+        self.dormant = contact("27821110002", "Dormant Dan", last_visit_at=now - timedelta(days=60))
+        self.never = contact("27821110003", "Never Nala")
+        self.vip = contact("27821110004", "VIP Vusi", is_vip=True, last_visit_at=now - timedelta(days=2))
+        self.optedout = contact("27821110005", "Opted Otto", last_visit_at=now - timedelta(days=90), opted_out=True)
+
+    def _draft(self, body_b=""):
+        from .campaigns import create_campaign
+
+        return create_campaign(self.ws, "Winter warmer", "all", "Hi {first name}, we miss you!", body_b)
+
+    def test_segments(self):
+        from .campaigns import segment_contacts
+
+        self.assertEqual(set(segment_contacts(self.ws, "all")), {self.recent, self.dormant, self.never, self.vip})
+        self.assertEqual(set(segment_contacts(self.ws, "dormant")), {self.dormant, self.never})
+        self.assertEqual(set(segment_contacts(self.ws, "vip")), {self.vip})
+
+    def test_approve_freezes_ab_recipients(self):
+        from .campaigns import approve
+
+        campaign = self._draft(body_b="B version here")
+        approve(campaign, timezone.now() + timedelta(hours=2))
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.status, Campaign.Status.SCHEDULED)
+        rows = list(campaign.recipients.order_by("contact__created_at"))
+        self.assertEqual(len(rows), 4)
+        self.assertEqual([r.variant for r in rows], ["a", "b", "a", "b"])
+
+    def test_send_holds_without_whatsapp_channel(self):
+        from .campaigns import approve, send_campaign
+
+        campaign = self._draft()
+        approve(campaign, timezone.now())
+        self.assertEqual(send_campaign(campaign), "held")
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.status, Campaign.Status.SCHEDULED)
+        self.assertEqual(campaign.recipients.filter(status="pending").count(), 4)
+
+    def test_send_delivers_and_skips_late_optout(self):
+        from .campaigns import approve, send_campaign
+        from .models import CampaignRecipient, ZernioChannel
+
+        ZernioChannel.objects.create(workspace=self.ws, zernio_account_id="acct-camp")
+        campaign = self._draft(body_b="B version")
+        approve(campaign, timezone.now())
+        self.dormant.opted_out = True
+        self.dormant.save(update_fields=["opted_out"])
+        with patch("apps.receptionist.campaigns.send_draft", return_value=True):
+            self.assertEqual(send_campaign(campaign), "sent")
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.status, Campaign.Status.SENT)
+        self.assertEqual(campaign.recipients.get(contact=self.dormant).status, CampaignRecipient.Status.SKIPPED)
+        sent = campaign.recipients.get(contact=self.recent)
+        self.assertEqual(sent.status, CampaignRecipient.Status.SENT)
+        self.assertIn("Recent", sent.message.body)
+        self.assertIn("Reply STOP", sent.message.body)
+
+    def test_attribution_links_booking_and_value(self):
+        from .campaigns import approve, send_campaign
+        from .models import ZernioChannel
+
+        ZernioChannel.objects.create(workspace=self.ws, zernio_account_id="acct-camp")
+        campaign = self._draft()
+        approve(campaign, timezone.now())
+        with patch("apps.receptionist.campaigns.send_draft", return_value=True):
+            send_campaign(campaign)
+        booking = Booking.objects.create(
+            workspace=self.ws, contact=self.dormant, service="Dinner", status=Booking.Status.CONFIRMED
+        )
+        self.client.post(
+            reverse("receptionist:booking_action", args=[self.ws.id, booking.id, "done"]),
+            {"value": "450"},
+        )
+        recipient = campaign.recipients.get(contact=self.dormant)
+        recipient.refresh_from_db()
+        self.assertEqual(recipient.attributed_booking, booking)
+        self.assertEqual(str(recipient.attributed_amount), "450.00")
+        resp = self.client.get(reverse("receptionist:campaigns", args=[self.ws.id]))
+        self.assertContains(resp, "R450.00")
+
+    def test_create_requires_a_message(self):
+        resp = self.client.post(
+            reverse("receptionist:campaigns", args=[self.ws.id]),
+            {"name": "Empty", "segment": "all", "body_a": "  "},
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(Campaign.objects.count(), 0)
+
+    def test_campaigns_screen_isolated(self):
+        from apps.accounts.models import User
+        from apps.members.models import WorkspaceMembership
+
+        self._draft()
+        other = User.objects.create_user(
+            email="campaign-stranger@example.com",
+            password="testpass123",
+            name="Stranger",
+            tos_accepted_at=timezone.now(),
+        )
+        ws2 = _workspace("Other Cafe")
+        WorkspaceMembership.objects.create(user=other, workspace=ws2)
+        self.client.force_login(other)
+        resp = self.client.get(reverse("receptionist:campaigns", args=[ws2.id]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "Winter warmer")
+        resp = self.client.get(reverse("receptionist:campaigns", args=[self.ws.id]))
+        self.assertEqual(resp.status_code, 403)

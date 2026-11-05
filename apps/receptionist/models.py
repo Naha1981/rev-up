@@ -190,6 +190,13 @@ class Booking(models.Model):
     )
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.REQUESTED)
     notes = models.TextField(blank=True)
+    value = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Rand value of the job, captured when marked done. Feeds campaign revenue attribution.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -642,3 +649,80 @@ class Complaint(models.Model):
 
     def __str__(self) -> str:
         return f"complaint by {self.contact} ({self.status})"
+
+
+class Campaign(models.Model):
+    """An owner-approved WhatsApp campaign to a customer segment.
+
+    Draft until the owner approves; on approval the recipient list is frozen
+    and the send runs at the scheduled time. Customers who never wrote to
+    the business are never messaged (reply guard), and opted-out customers
+    are skipped at send time.
+    """
+
+    class Segment(models.TextChoices):
+        ALL = "all", "Every customer"
+        DORMANT = "dormant", "Dormant - no visit in 30+ days"
+        VIP = "vip", "VIP customers"
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        SCHEDULED = "scheduled", "Scheduled"
+        SENDING = "sending", "Sending"
+        SENT = "sent", "Sent"
+        CANCELLED = "cancelled", "Cancelled"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        "workspaces.Workspace", on_delete=models.CASCADE, related_name="receptionist_campaigns"
+    )
+    name = models.CharField(max_length=120)
+    segment = models.CharField(max_length=12, choices=Segment.choices, default=Segment.ALL)
+    body_a = models.TextField(help_text="The message. When a B version is set, half the customers get each.")
+    body_b = models.TextField(blank=True, help_text="Optional B version for an A/B test")
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.DRAFT)
+    scheduled_at = models.DateTimeField(null=True, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.status})"
+
+
+class CampaignRecipient(models.Model):
+    """One customer in one campaign: variant, delivery and attribution."""
+
+    class Variant(models.TextChoices):
+        A = "a", "A"
+        B = "b", "B"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SENT = "sent", "Sent"
+        FAILED = "failed", "Failed"
+        SKIPPED = "skipped", "Skipped"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name="recipients")
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="campaign_recipients")
+    variant = models.CharField(max_length=1, choices=Variant.choices, default=Variant.A)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    message = models.ForeignKey(Message, on_delete=models.SET_NULL, null=True, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    error = models.CharField(max_length=300, blank=True)
+    attributed_booking = models.ForeignKey(Booking, on_delete=models.SET_NULL, null=True, blank=True)
+    attributed_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["campaign", "contact"], name="uniq_campaign_recipient"),
+        ]
+        indexes = [
+            models.Index(fields=["contact", "status", "-sent_at"], name="campaignrec_contact_ts"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.campaign.name} -> {self.contact} ({self.status})"

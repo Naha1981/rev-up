@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mx-auto w-full max-w-2xl px-4 py-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-xl font-semibold text-stone-900">Campaigns</h1>
+    {% include "receptionist/_nav.html" %}
+  </div>
+  {% include "receptionist/_connect_status.html" %}
+
+  <form method="post" class="mt-5 rounded-2xl border border-stone-200 bg-white p-4">
+    {% csrf_token %}
+    <p class="text-sm font-medium text-stone-900">New campaign</p>
+    <p class="mt-1 text-xs text-stone-500">Messages only go to customers who have messaged you before, never to anyone who replied STOP. Nothing sends until you approve it.</p>
+    <div class="mt-3 space-y-2">
+      <input type="text" name="name" placeholder="Name, e.g. August special" required class="w-full rounded-xl border border-stone-200 px-3 py-2 text-sm text-stone-700" />
+      <select name="segment" class="w-full rounded-xl border border-stone-200 px-3 py-2 text-sm text-stone-700">
+        {% for value, label in segments %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+      </select>
+      <textarea name="body_a" rows="3" placeholder="The message, e.g. Hi {first name}... we miss you! Book this week and get a free dessert." required class="w-full rounded-xl border border-stone-200 px-3 py-2 text-sm text-stone-700"></textarea>
+      <textarea name="body_b" rows="3" placeholder="Optional B version - half the customers get A, half get B, and you see which one brings bookings." class="w-full rounded-xl border border-stone-200 px-3 py-2 text-sm text-stone-700"></textarea>
+    </div>
+    <button type="submit" class="mt-3 rounded-xl bg-orange-500 px-4 py-2 text-sm font-medium text-white">Save draft</button>
+  </form>
+
+  {% if not channel %}
+  <p class="mt-4 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">No WhatsApp number is connected yet. Approved campaigns hold automatically and go out once you connect.</p>
+  {% endif %}
+
+  <div class="mt-6 space-y-3">
+    {% for campaign, stats in campaigns %}
+    <div class="rounded-2xl border border-stone-200 bg-white px-4 py-3">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <p class="text-sm font-semibold text-stone-900">{{ campaign.name }}</p>
+          <p class="text-xs text-stone-500">{{ campaign.get_segment_display }} · {{ campaign.get_status_display }}{% if campaign.scheduled_at and campaign.status == "scheduled" %} · goes out {{ campaign.scheduled_at|date:"D d M, H:i" }}{% endif %}</p>
+        </div>
+        {% if campaign.status == "draft" %}
+        <form method="post" action="{% url 'receptionist:campaign_action' workspace.id campaign.id 'approve' %}" class="flex items-center gap-2">
+          {% csrf_token %}
+          <input type="datetime-local" name="scheduled_at" class="rounded-lg border border-stone-200 px-2 py-1 text-xs text-stone-700" />
+          <button type="submit" class="rounded-xl bg-orange-500 px-3 py-1.5 text-xs font-medium text-white">Approve &amp; send</button>
+        </form>
+        {% elif campaign.status == "scheduled" %}
+        <form method="post" action="{% url 'receptionist:campaign_action' workspace.id campaign.id 'cancel' %}">
+          {% csrf_token %}
+          <button type="submit" class="rounded-xl border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-500">Cancel</button>
+        </form>
+        {% endif %}
+      </div>
+      {% if campaign.status != "draft" and campaign.status != "cancelled" %}
+      <div class="mt-2 grid grid-cols-2 gap-2 text-xs text-stone-600">
+        <div class="rounded-xl bg-stone-50 px-3 py-2">
+          <p class="font-medium text-stone-800">Version A</p>
+          <p>{{ stats.a.sent }}/{{ stats.a.total }} sent{% if stats.a.failed %} · {{ stats.a.failed }} failed{% endif %}{% if stats.a.skipped %} · {{ stats.a.skipped }} skipped{% endif %}</p>
+          <p>{{ stats.a.bookings }} booking{{ stats.a.bookings|pluralize }} · R{{ stats.a.revenue }}</p>
+        </div>
+        {% if stats.b %}
+        <div class="rounded-xl bg-stone-50 px-3 py-2">
+          <p class="font-medium text-stone-800">Version B</p>
+          <p>{{ stats.b.sent }}/{{ stats.b.total }} sent{% if stats.b.failed %} · {{ stats.b.failed }} failed{% endif %}{% if stats.b.skipped %} · {{ stats.b.skipped }} skipped{% endif %}</p>
+          <p>{{ stats.b.bookings }} booking{{ stats.b.bookings|pluralize }} · R{{ stats.b.revenue }}</p>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% empty %}
+    <p class="text-sm text-stone-500">No campaigns yet. A campaign brings back customers who have gone quiet - pick "Dormant" and offer them a reason to book.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

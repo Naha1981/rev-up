@@ -26,7 +26,8 @@
           </form>
           {% elif b.status == "confirmed" %}
           <span class="rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800">Confirmed</span>
-          <form method="post" action="{% url 'receptionist:booking_action' workspace.id b.id 'done' %}">{% csrf_token %}
+          <form method="post" action="{% url 'receptionist:booking_action' workspace.id b.id 'done' %}" class="flex items-center gap-1">{% csrf_token %}
+            <input type="number" name="value" min="0" step="0.01" placeholder="R value" class="w-20 rounded-lg border border-stone-200 px-2 py-1 text-xs text-stone-700" />
             <button type="submit" class="rounded-xl bg-stone-900 px-3 py-1.5 text-xs font-medium text-white">Mark done</button>
           </form>
           <form method="post" action="{% url 'receptionist:booking_action' workspace.id b.id 'cancel' %}">{% csrf_token %}
