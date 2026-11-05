@@ -27,10 +27,14 @@ from .models import (
     BusinessProfile,
     CalendarConnection,
     Campaign,
+    Competitor,
+    CompetitorDish,
+    CompetitorPromo,
     Contact,
     DentalAppointment,
     FuneralClaim,
     Industry,
+    MarketOpportunity,
     Message,
     Quote,
     TradeDispatch,
@@ -1073,3 +1077,131 @@ def campaign_action(request, workspace_id, campaign_id, action):
         else:
             messages.error(request, "This campaign already went out and cannot be cancelled.")
     return redirect("receptionist:campaigns", workspace.id)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def competitors(request, workspace_id):
+    """Competitor intelligence: who they are, their prices, promos, ratings -
+    and the market and demand opportunities that fall out of the tracking."""
+    from apps.menus.models import MenuItem
+
+    from . import opportunities as _opportunities
+
+    workspace = _get_workspace(request, workspace_id)
+    if request.method == "POST":
+        form = request.POST.get("form")
+        if form == "add_competitor":
+            name = request.POST.get("name", "").strip()[:120]
+            rating_raw = request.POST.get("rating", "").strip()
+            rating = None
+            if rating_raw:
+                try:
+                    rating = Decimal(rating_raw.replace(",", "."))
+                    if rating < 0 or rating > 5:
+                        raise InvalidOperation
+                except InvalidOperation:
+                    messages.error(request, "Ratings run from 0 to 5, e.g. 4.3.")
+                    return redirect("receptionist:competitors", workspace.id)
+            if not name:
+                messages.error(request, "Give the competitor a name.")
+            else:
+                Competitor.objects.get_or_create(
+                    workspace=workspace,
+                    name=name,
+                    defaults={
+                        "area": request.POST.get("area", "").strip()[:120],
+                        "website": request.POST.get("website", "").strip()[:200],
+                        "rating": rating,
+                        "notes": request.POST.get("notes", "").strip(),
+                    },
+                )
+                messages.success(request, f"{name} added to your watch list.")
+        elif form == "set_rating":
+            rating_raw = request.POST.get("own_rating", "").strip()
+            try:
+                rating = Decimal(rating_raw.replace(",", ".")) if rating_raw else None
+                if rating is not None and (rating < 0 or rating > 5):
+                    raise InvalidOperation
+            except InvalidOperation:
+                messages.error(request, "Ratings run from 0 to 5, e.g. 4.3.")
+                return redirect("receptionist:competitors", workspace.id)
+            profile, _ = BusinessProfile.objects.get_or_create(
+                workspace=workspace, defaults={"business_name": workspace.name}
+            )
+            profile.google_rating = rating
+            profile.save(update_fields=["google_rating", "updated_at"])
+            messages.success(request, "Your Google rating saved.")
+        elif form == "add_dish":
+            competitor = get_object_or_404(Competitor, id=request.POST.get("competitor_id"), workspace=workspace)
+            name = request.POST.get("name", "").strip()[:120]
+            try:
+                price = Decimal(request.POST.get("price", "").strip().replace(",", "."))
+                if price < 0 or price > 1_000_000:
+                    raise InvalidOperation
+            except InvalidOperation:
+                messages.error(request, "Give the dish a valid price in rand.")
+                return redirect("receptionist:competitors", workspace.id)
+            own_item = None
+            own_id = request.POST.get("own_item_id", "").strip()
+            if own_id:
+                own_item = MenuItem.objects.filter(id=own_id, workspace=workspace).first()
+            if not name:
+                messages.error(request, "Give the dish a name.")
+            else:
+                CompetitorDish.objects.create(competitor=competitor, name=name, price=price, own_item=own_item)
+                messages.success(request, f"{name} logged for {competitor.name}.")
+        elif form == "add_promo":
+            competitor = get_object_or_404(Competitor, id=request.POST.get("competitor_id"), workspace=workspace)
+            text = request.POST.get("text", "").strip()[:200]
+            valid_until = None
+            raw_date = request.POST.get("valid_until", "").strip()
+            if raw_date:
+                try:
+                    valid_until = _dt.date.fromisoformat(raw_date)
+                except ValueError:
+                    messages.error(request, "That date did not parse.")
+                    return redirect("receptionist:competitors", workspace.id)
+            if not text:
+                messages.error(request, "Say what the promotion is.")
+            else:
+                CompetitorPromo.objects.create(competitor=competitor, text=text, valid_until=valid_until)
+                messages.success(request, "Promotion logged.")
+        return redirect("receptionist:competitors", workspace.id)
+
+    opportunity_rows = _opportunities.refresh(workspace)
+    rows = Competitor.objects.filter(workspace=workspace).prefetch_related("dishes__own_item", "promos")
+    for competitor in rows:
+        for dish in competitor.dishes.all():
+            if dish.own_item is None:
+                continue
+            gap = dish.own_item.price - dish.price
+            if gap > 0:
+                dish.gap_text = f"yours R{gap} more"
+            elif gap < 0:
+                dish.gap_text = f"yours R{-gap} less"
+            else:
+                dish.gap_text = "same price"
+    profile = getattr(workspace, "receptionist_profile", None)
+    return render(
+        request,
+        "receptionist/competitors.html",
+        {
+            "workspace": workspace,
+            "competitors": rows,
+            "opportunities": opportunity_rows,
+            "own_items": MenuItem.objects.filter(workspace=workspace),
+            "profile": profile,
+        },
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def opportunity_action(request, workspace_id, opportunity_id, action):
+    workspace = _get_workspace(request, workspace_id)
+    opportunity = get_object_or_404(MarketOpportunity, id=opportunity_id, workspace=workspace)
+    if action in (MarketOpportunity.Status.ACTED, MarketOpportunity.Status.DISMISSED):
+        opportunity.status = action
+        opportunity.save(update_fields=["status", "updated_at"])
+    return redirect("receptionist:competitors", workspace.id)

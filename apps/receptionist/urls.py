@@ -16,6 +16,12 @@ urlpatterns = [
     path("loyalty/vouchers/<uuid:voucher_id>/<str:action>/", views.voucher_action, name="voucher_action"),
     path("campaigns/", views.campaigns, name="campaigns"),
     path("campaigns/<uuid:campaign_id>/<str:action>/", views.campaign_action, name="campaign_action"),
+    path("competitors/", views.competitors, name="competitors"),
+    path(
+        "competitors/opportunities/<uuid:opportunity_id>/<str:action>/",
+        views.opportunity_action,
+        name="opportunity_action",
+    ),
     path("waitlist/<uuid:entry_id>/<str:action>/", views.waitlist_action, name="waitlist_action"),
     path("quotes/", views.quotes, name="quotes"),
     path("reviews/", views.review_dashboard, name="reviews"),

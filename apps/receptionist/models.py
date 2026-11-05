@@ -84,6 +84,13 @@ class BusinessProfile(models.Model):
     )
     emergency_contact_phone = models.CharField(max_length=32, blank=True)
     call_out_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    google_rating = models.DecimalField(
+        max_digits=2,
+        decimal_places=1,
+        null=True,
+        blank=True,
+        help_text="The business's own current Google rating, owner-kept; powers rating-gap opportunities",
+    )
     custom_rules = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -726,3 +733,102 @@ class CampaignRecipient(models.Model):
 
     def __str__(self) -> str:
         return f"{self.campaign.name} -> {self.contact} ({self.status})"
+
+
+class Competitor(models.Model):
+    """A competing restaurant the owner watches."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey("workspaces.Workspace", on_delete=models.CASCADE, related_name="competitors")
+    name = models.CharField(max_length=120)
+    area = models.CharField(max_length=120, blank=True, help_text="Suburb or strip they trade in")
+    website = models.URLField(blank=True)
+    rating = models.DecimalField(
+        max_digits=2, decimal_places=1, null=True, blank=True, help_text="Their current Google rating"
+    )
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(fields=["workspace", "name"], name="uniq_competitor_ws_name"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.area or 'area unknown'})"
+
+
+class CompetitorDish(models.Model):
+    """One dish a competitor sells, mapped to the owner's own menu item."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    competitor = models.ForeignKey(Competitor, on_delete=models.CASCADE, related_name="dishes")
+    name = models.CharField(max_length=120)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    own_item = models.ForeignKey(
+        "menus.MenuItem", on_delete=models.SET_NULL, null=True, blank=True, related_name="competitor_dishes"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} R{self.price} ({self.competitor.name})"
+
+
+class CompetitorPromo(models.Model):
+    """A promotion a competitor is running, as spotted by the owner."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    competitor = models.ForeignKey(Competitor, on_delete=models.CASCADE, related_name="promos")
+    text = models.CharField(max_length=200)
+    valid_until = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.competitor.name}: {self.text[:40]}"
+
+
+class MarketOpportunity(models.Model):
+    """A market or demand opportunity computed from what the owner tracks.
+
+    Rows are deduped on a stable key: re-running the analysis updates detail
+    but never creates duplicates; the owner marks each new / acted / dismissed.
+    """
+
+    class Kind(models.TextChoices):
+        PRICE_GAP = "price_gap", "Price gap"
+        PRICE_ADVANTAGE = "price_advantage", "Price advantage"
+        RATING_GAP = "rating_gap", "Rating gap"
+        PROMO = "promo", "Competitor promotion"
+        DEMAND = "demand", "Demand opportunity"
+
+    class Status(models.TextChoices):
+        NEW = "new", "New"
+        ACTED = "acted", "Acted on"
+        DISMISSED = "dismissed", "Dismissed"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey("workspaces.Workspace", on_delete=models.CASCADE, related_name="market_opportunities")
+    competitor = models.ForeignKey(Competitor, on_delete=models.CASCADE, null=True, blank=True)
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    title = models.CharField(max_length=160)
+    detail = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.NEW)
+    dedupe_key = models.CharField(max_length=120)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["status", "-updated_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["workspace", "dedupe_key"], name="uniq_opportunity_key"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.status})"

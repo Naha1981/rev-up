@@ -85,6 +85,15 @@ class MenuIntelligenceTests(TestCase):
         sale = DishSale.objects.get(item=self.quiet, sold_on=timezone.localdate())
         self.assertEqual(sale.quantity, 9)
 
+    def test_zero_sales_overwrites_today(self):
+        from .models import DishSale
+
+        url = reverse("menus:intelligence", args=[self.ws.id])
+        self.client.post(url, {"form": "log_sales", f"qty_{self.quiet.id}": "7"})
+        self.client.post(url, {"form": "log_sales", f"qty_{self.quiet.id}": "0"})
+        sale = DishSale.objects.get(item=self.quiet, sold_on=timezone.localdate())
+        self.assertEqual(sale.quantity, 0)
+
     def test_cost_capture(self):
         self.client.post(
             reverse("menus:intelligence", args=[self.ws.id]),

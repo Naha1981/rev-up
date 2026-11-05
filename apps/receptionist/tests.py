@@ -2,6 +2,7 @@
 
 import json
 from datetime import date, timedelta
+from decimal import Decimal
 from unittest.mock import Mock, patch
 
 from django.test import TestCase, override_settings
@@ -16,11 +17,16 @@ from .models import (
     BusinessProfile,
     CalendarConnection,
     Campaign,
+    Competitor,
+    CompetitorDish,
+    CompetitorPromo,
     Contact,
     FuneralClaim,
+    MarketOpportunity,
     Message,
     Quote,
     TradeDispatch,
+    WaitlistEntry,
     ZernioChannel,
 )
 from .services import needs_human
@@ -1897,3 +1903,124 @@ class CampaignHonestyTests(TestCase):
         self.assertFalse(mock_send.called)
         self.assertEqual(campaign.recipients.filter(status=CampaignRecipient.Status.PENDING).count(), 1)
         self.assertEqual(Message.objects.filter(workspace=self.ws).count(), 0)
+
+
+class CompetitorIntelTests(TestCase):
+    """Competitor tracking and the opportunities that fall out of it."""
+
+    def setUp(self):
+        from apps.accounts.models import User
+        from apps.members.models import WorkspaceMembership
+        from apps.menus.models import MenuItem
+
+        self.user = User.objects.create_user(
+            email="comp-owner@example.com",
+            password="testpass123",
+            name="Owner",
+            tos_accepted_at=timezone.now(),
+        )
+        self.ws = _workspace("Rivalry Grill")
+        WorkspaceMembership.objects.create(user=self.user, workspace=self.ws)
+        self.client.force_login(self.user)
+        BusinessProfile.objects.create(workspace=self.ws, business_name="Rivalry Grill", google_rating=Decimal("4.6"))
+        self.own_dish = MenuItem.objects.create(workspace=self.ws, name="Peri-peri chicken", price=Decimal("129.00"))
+        self.rival = Competitor.objects.create(
+            workspace=self.ws, name="The Grill Next Door", area="Maponya Mall", rating=Decimal("4.1")
+        )
+
+    def test_price_gap_opportunity(self):
+        from .opportunities import refresh
+
+        CompetitorDish.objects.create(
+            competitor=self.rival, name="Peri-peri half", price=Decimal("99.00"), own_item=self.own_dish
+        )
+        opps = refresh(self.ws)
+        price_opps = [o for o in opps if o.kind == MarketOpportunity.Kind.PRICE_GAP]
+        self.assertEqual(len(price_opps), 1)
+        self.assertIn("undercuts", price_opps[0].title)
+        self.assertIn("R30.00", price_opps[0].detail)
+
+    def test_price_advantage_and_rating_opportunities(self):
+        from .opportunities import refresh
+
+        CompetitorDish.objects.create(
+            competitor=self.rival, name="Peri-peri half", price=Decimal("149.00"), own_item=self.own_dish
+        )
+        opps = refresh(self.ws)
+        kinds = {o.kind for o in opps}
+        self.assertIn(MarketOpportunity.Kind.PRICE_ADVANTAGE, kinds)
+        self.assertIn(MarketOpportunity.Kind.RATING_GAP, kinds)
+
+    def test_promo_and_demand_opportunities(self):
+        from .opportunities import refresh
+
+        CompetitorPromo.objects.create(competitor=self.rival, text="2-for-1 burgers on Tuesdays")
+        for i in range(5):
+            guest = Contact.objects.create(workspace=self.ws, wa_id=f"2782111001{i}", name=f"Party {i}")
+            WaitlistEntry.objects.create(workspace=self.ws, contact=guest, party_size=2)
+        opps = refresh(self.ws)
+        kinds = {o.kind for o in opps}
+        self.assertIn(MarketOpportunity.Kind.PROMO, kinds)
+        self.assertIn(MarketOpportunity.Kind.DEMAND, kinds)
+
+    def test_refresh_dedupes_and_drops_stale_new(self):
+        from .opportunities import refresh
+
+        dish = CompetitorDish.objects.create(
+            competitor=self.rival, name="Peri-peri half", price=Decimal("99.00"), own_item=self.own_dish
+        )
+        refresh(self.ws)
+        acted = MarketOpportunity.objects.get(dedupe_key=f"price_gap:{dish.id}")
+        acted.status = MarketOpportunity.Status.ACTED
+        acted.save(update_fields=["status"])
+        refresh(self.ws)
+        self.assertEqual(MarketOpportunity.objects.filter(dedupe_key=f"price_gap:{dish.id}").count(), 1)
+        # Trigger disappears: acted record stays, a still-new one would be removed
+        dish.price = Decimal("129.00")
+        dish.save(update_fields=["price"])
+        refresh(self.ws)
+        self.assertEqual(
+            MarketOpportunity.objects.get(dedupe_key=f"price_gap:{dish.id}").status,
+            MarketOpportunity.Status.ACTED,
+        )
+
+    def test_opportunity_action_marks_dismissed(self):
+        from .opportunities import refresh
+
+        CompetitorDish.objects.create(
+            competitor=self.rival, name="Peri-peri half", price=Decimal("99.00"), own_item=self.own_dish
+        )
+        refresh(self.ws)
+        opp = MarketOpportunity.objects.get(workspace=self.ws, kind=MarketOpportunity.Kind.PRICE_GAP)
+        self.client.post(reverse("receptionist:opportunity_action", args=[self.ws.id, opp.id, "dismissed"]))
+        opp.refresh_from_db()
+        self.assertEqual(opp.status, MarketOpportunity.Status.DISMISSED)
+
+    def test_screen_flow_and_isolation(self):
+        url = reverse("receptionist:competitors", args=[self.ws.id])
+        self.client.post(url, {"form": "add_competitor", "name": "Braai Bros", "rating": "4.4"})
+        self.assertTrue(Competitor.objects.filter(workspace=self.ws, name="Braai Bros").exists())
+        resp = self.client.get(url)
+        self.assertContains(resp, "The Grill Next Door")
+        self.assertContains(resp, "Braai Bros")
+
+        from apps.accounts.models import User
+        from apps.members.models import WorkspaceMembership
+
+        other = User.objects.create_user(
+            email="comp-stranger@example.com",
+            password="testpass123",
+            name="Stranger",
+            tos_accepted_at=timezone.now(),
+        )
+        ws2 = _workspace("Other Grill")
+        WorkspaceMembership.objects.create(user=other, workspace=ws2)
+        self.client.force_login(other)
+        resp = self.client.get(reverse("receptionist:competitors", args=[ws2.id]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "The Grill Next Door")
+        self.assertEqual(self.client.get(reverse("receptionist:competitors", args=[self.ws.id])).status_code, 403)
+
+    def test_nav_reaches_competitors(self):
+        resp = self.client.get(reverse("receptionist:inbox", args=[self.ws.id]))
+        self.assertContains(resp, reverse("receptionist:competitors", args=[self.ws.id]))

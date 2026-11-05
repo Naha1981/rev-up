@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mx-auto w-full max-w-2xl px-4 py-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-xl font-semibold text-stone-900">Competitors</h1>
+    {% include "receptionist/_nav.html" %}
+  </div>
+  <p class="mt-1 text-sm text-stone-500">Watch the restaurants around you: their prices, ratings and promotions - and the opportunities that fall out.</p>
+
+  <div class="mt-5 rounded-2xl border border-stone-200 bg-white p-4">
+    <p class="text-sm font-medium text-stone-900">Opportunities</p>
+    <div class="mt-3 space-y-2">
+      {% for o in opportunities %}
+      {% if o.status == "new" %}
+      <div class="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3">
+        <p class="text-sm font-semibold text-stone-900">{{ o.title }}</p>
+        <p class="mt-1 text-sm text-stone-600">{{ o.detail }}</p>
+        <div class="mt-2 flex flex-wrap gap-2">
+          <form method="post" action="{% url 'receptionist:opportunity_action' workspace.id o.id 'acted' %}">{% csrf_token %}
+            <button type="submit" class="rounded-xl bg-stone-900 px-3 py-1.5 text-xs font-medium text-white">Done</button>
+          </form>
+          <form method="post" action="{% url 'receptionist:opportunity_action' workspace.id o.id 'dismissed' %}">{% csrf_token %}
+            <button type="submit" class="rounded-xl border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-500">Dismiss</button>
+          </form>
+        </div>
+      </div>
+      {% endif %}
+      {% endfor %}
+      {% if not opportunities %}
+      <p class="text-sm text-stone-500">Nothing yet. Add a competitor below, log their dishes and prices, and opportunities show up here on their own.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <form method="post" class="mt-4 rounded-2xl border border-stone-200 bg-white p-4">
+    {% csrf_token %}
+    <input type="hidden" name="form" value="set_rating" />
+    <label class="flex flex-wrap items-center justify-between gap-2 text-sm text-stone-700">
+      <span>Your Google rating (for rating gaps)</span>
+      <span class="flex items-center gap-2">
+        <input type="text" inputmode="decimal" name="own_rating" value="{{ profile.google_rating|default:'' }}" placeholder="e.g. 4.6" class="w-20 rounded-lg border border-stone-200 px-2 py-1 text-xs text-stone-700" />
+        <button type="submit" class="rounded-xl bg-stone-900 px-3 py-1.5 text-xs font-medium text-white">Save</button>
+      </span>
+    </label>
+  </form>
+
+  <form method="post" class="mt-4 rounded-2xl border border-stone-200 bg-white p-4">
+    {% csrf_token %}
+    <input type="hidden" name="form" value="add_competitor" />
+    <p class="text-sm font-medium text-stone-900">Watch a competitor</p>
+    <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <input type="text" name="name" placeholder="Name of the restaurant" required class="rounded-xl border border-stone-200 px-3 py-2 text-sm text-stone-700" />
+      <input type="text" name="area" placeholder="Area, e.g. Maponya Mall" class="rounded-xl border border-stone-200 px-3 py-2 text-sm text-stone-700" />
+      <input type="url" name="website" placeholder="Website or menu link (optional)" class="rounded-xl border border-stone-200 px-3 py-2 text-sm text-stone-700" />
+      <input type="text" inputmode="decimal" name="rating" placeholder="Their Google rating, e.g. 4.1" class="rounded-xl border border-stone-200 px-3 py-2 text-sm text-stone-700" />
+    </div>
+    <button type="submit" class="mt-3 rounded-xl bg-orange-500 px-4 py-2 text-sm font-medium text-white">Add competitor</button>
+  </form>
+
+  <div class="mt-6 space-y-3">
+    {% for c in competitors %}
+    <div class="rounded-2xl border border-stone-200 bg-white px-4 py-3">
+      <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+        <div>
+          <p class="text-sm font-semibold text-stone-900">{{ c.name }}{% if c.area %} <span class="font-normal text-stone-500">· {{ c.area }}</span>{% endif %}</p>
+          <p class="text-xs text-stone-400">{% if c.rating %}Google {{ c.rating }}{% else %}No rating logged{% endif %}{% if c.website %} · <a href="{{ c.website }}" target="_blank" rel="noopener" class="text-orange-600">their site</a>{% endif %}</p>
+        </div>
+      </div>
+
+      {% if c.dishes.all %}
+      <div class="mt-3 space-y-1">
+        {% for d in c.dishes.all %}
+        <div class="flex flex-col gap-0.5 rounded-xl bg-stone-50 px-3 py-2 text-xs text-stone-600 sm:flex-row sm:items-center sm:justify-between">
+          <span>{{ d.name }} - theirs R{{ d.price }}</span>
+          {% if d.own_item %}<span>your {{ d.own_item.name }} R{{ d.own_item.price }} ({{ d.gap_text }})</span>
+          {% else %}<span class="text-stone-400">not mapped to your menu</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <form method="post" class="mt-3">
+        {% csrf_token %}
+        <input type="hidden" name="form" value="add_dish" />
+        <input type="hidden" name="competitor_id" value="{{ c.id }}" />
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input type="text" name="name" placeholder="Their dish, e.g. Peri-peri chicken" required class="w-full rounded-xl border border-stone-200 px-3 py-1.5 text-xs text-stone-700" />
+          <input type="text" inputmode="decimal" name="price" placeholder="Their price R" required class="w-full rounded-xl border border-stone-200 px-3 py-1.5 text-xs text-stone-700 sm:w-28" />
+          <select name="own_item_id" class="w-full rounded-xl border border-stone-200 px-3 py-1.5 text-xs text-stone-700 sm:w-40">
+            <option value="">Matches your dish...</option>
+            {% for item in own_items %}<option value="{{ item.id }}">{{ item.name }} (R{{ item.price }})</option>{% endfor %}
+          </select>
+          <button type="submit" class="w-full rounded-xl bg-stone-900 px-3 py-1.5 text-xs font-medium text-white sm:w-auto">Log dish</button>
+        </div>
+      </form>
+
+      {% if c.promos.all %}
+      <div class="mt-3 space-y-1">
+        {% for p in c.promos.all %}
+        <p class="rounded-xl bg-amber-50 px-3 py-1.5 text-xs text-amber-800">Promo: {{ p.text }}{% if p.valid_until %} · until {{ p.valid_until|date:"j M" }}{% endif %}</p>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <form method="post" class="mt-2">
+        {% csrf_token %}
+        <input type="hidden" name="form" value="add_promo" />
+        <input type="hidden" name="competitor_id" value="{{ c.id }}" />
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input type="text" name="text" placeholder="Spotted a promotion? e.g. 2-for-1 burgers on Tuesdays" required class="w-full rounded-xl border border-stone-200 px-3 py-1.5 text-xs text-stone-700" />
+          <input type="date" name="valid_until" class="w-full rounded-xl border border-stone-200 px-3 py-1.5 text-xs text-stone-700 sm:w-36" />
+          <button type="submit" class="w-full rounded-xl bg-stone-900 px-3 py-1.5 text-xs font-medium text-white sm:w-auto">Log promo</button>
+        </div>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

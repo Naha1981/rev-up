@@ -154,7 +154,7 @@ def intelligence(request, workspace_id):
                     qty = int(raw)
                 except ValueError:
                     continue
-                if qty <= 0:
+                if qty < 0:
                     continue
                 DishSale.objects.update_or_create(
                     item=item, sold_on=today, defaults={"workspace": workspace, "quantity": qty}
