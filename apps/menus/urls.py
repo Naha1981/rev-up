@@ -6,5 +6,6 @@ app_name = "menus"
 
 urlpatterns = [
     path("", views.manage, name="manage"),
+    path("intelligence/", views.intelligence, name="intelligence"),
     path("items/<uuid:item_id>/<str:action>/", views.item_action, name="item_action"),
 ]

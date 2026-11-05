@@ -3,7 +3,10 @@
 <div class="mx-auto w-full max-w-2xl px-4 py-6">
   <div class="flex flex-wrap items-center justify-between gap-3">
     <h1 class="text-xl font-semibold text-stone-900">Menu</h1>
-    <a href="{% url 'receptionist:inbox' workspace.id %}" class="text-sm font-medium text-orange-600">Inbox</a>
+    <div class="flex items-center gap-4">
+      <a href="{% url 'menus:intelligence' workspace.id %}" class="text-sm font-medium text-orange-600">Menu intelligence</a>
+      <a href="{% url 'receptionist:inbox' workspace.id %}" class="text-sm font-medium text-orange-600">Inbox</a>
+    </div>
   </div>
 
   <div class="mt-4 rounded-2xl border border-stone-200 bg-white px-4 py-3">
@@ -21,6 +24,7 @@
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <input name="name" required maxlength="120" placeholder="Item name, e.g. Kota Deluxe" class="rounded-xl border border-stone-300 px-3 py-2.5 text-sm" />
         <input name="price" required inputmode="decimal" placeholder="Price in rand, e.g. 65" class="rounded-xl border border-stone-300 px-3 py-2.5 text-sm" />
+        <input name="food_cost" inputmode="decimal" placeholder="Cost per portion (optional), e.g. 22" class="rounded-xl border border-stone-300 px-3 py-2.5 text-sm" />
       </div>
       <input name="category" list="menu-categories" maxlength="80" placeholder="Category, e.g. Mains" class="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm" />
       <datalist id="menu-categories">{% for c in categories %}<option value="{{ c }}">{% endfor %}</datalist>
