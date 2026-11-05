@@ -2162,6 +2162,21 @@ class SupportAssistantTests(TestCase):
         self.assertIn("1 already done", reply.text)
         self.assertEqual(len(reply.sources), 2)
 
+    def test_bookings_without_confirmed_time_still_count(self):
+        """Regression: QA bookings confirmed without a scheduled time (board
+        falls back to request time) must not read as 'no bookings logged'."""
+        contact = Contact.objects.create(workspace=self.ws, wa_id="27000000050", name="Guest")
+        Booking.objects.create(workspace=self.ws, contact=contact, status=Booking.Status.CONFIRMED)
+        Booking.objects.create(workspace=self.ws, contact=contact, status=Booking.Status.DONE)
+        from .support import handle
+
+        reply = handle(self.ws, "How many bookings do we have in the last 7 days?")
+        self.assertEqual(reply.confidence, 95)
+        self.assertIn("1 confirmed booking", reply.text)
+        self.assertIn("1 already done", reply.text)
+        self.assertIn("This week so far: 2 bookings", reply.text)
+        self.assertIn("2 bookings in the last 7 days", reply.sources)
+
     def test_unknown_question_low_confidence_and_offers_human(self):
         from .support import handle
 

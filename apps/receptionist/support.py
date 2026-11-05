@@ -20,12 +20,17 @@ from .models import (
 )
 
 
-def _today_bookings(workspace):
-    today = timezone.localdate()
-    return Booking.objects.filter(
-        workspace=workspace,
-        scheduled_start__date=today,
-    ).exclude(status=Booking.Status.CANCELLED)
+def _on_date(workspace, day):
+    """Bookings the board shows for a day: by confirmed time when set, else by
+    when the request came in (the board falls back the same way)."""
+    from django.db.models.functions import Coalesce
+
+    return (
+        Booking.objects.filter(workspace=workspace)
+        .exclude(status=Booking.Status.CANCELLED)
+        .annotate(day=Coalesce("scheduled_start", "created_at"))
+        .filter(day__date=day)
+    )
 
 
 def answer(workspace, question: str):
@@ -34,12 +39,17 @@ def answer(workspace, question: str):
     today = timezone.localdate()
 
     if any(w in q for w in ("booking", "table", "reservation", "tonight", "today")):
-        rows = list(_today_bookings(workspace))
+        rows = list(_on_date(workspace, today))
         confirmed = [b for b in rows if b.status == Booking.Status.CONFIRMED]
         done = [b for b in rows if b.status == Booking.Status.DONE]
-        week = Booking.objects.filter(
-            workspace=workspace, scheduled_start__date__gte=today - timedelta(days=7)
-        ).exclude(status=Booking.Status.CANCELLED)
+        from django.db.models.functions import Coalesce
+
+        week = (
+            Booking.objects.filter(workspace=workspace)
+            .exclude(status=Booking.Status.CANCELLED)
+            .annotate(day=Coalesce("scheduled_start", "created_at"))
+            .filter(day__date__gte=today - timedelta(days=7))
+        )
         if not rows and not week:
             return (
                 "You have no bookings logged yet. Once bookings come in I can answer questions about them.",
