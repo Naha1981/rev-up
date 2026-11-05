@@ -2,6 +2,7 @@
 // Django app; passwords verify in Postgres (pgcrypto) to stay inside Workers
 // Free CPU limits. No vendor names surface in any HTML.
 import { Pool } from "pg";
+import { LOGO_B64, landingPage } from "./landing";
 
 interface Env {
   DATABASE_URL: string;
@@ -31,23 +32,41 @@ function esc(s: any): string {
 }
 function layout(title: string, body: string, user?: any): string {
   const nav = user
-    ? `<nav><a href="/">Dashboard</a><a href="/onboarding">Onboarding</a><a href="/reviews">Reviews</a><a href="/approvals">Approvals</a><a href="/billing">Billing</a><form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></nav>`
-    : `<nav><a href="/login">Log in</a><a href="/signup">Sign up</a></nav>`;
+    ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a href="/">Dashboard</a><a href="/onboarding">Onboarding</a><a href="/reviews">Reviews</a><a href="/approvals">Approvals</a><a href="/billing">Billing</a><form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>`
+    : `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a class="btn btn-ghost" href="/login">Log in</a><a class="btn btn-primary" href="/signup">Get started</a></div></nav>`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} · RevUp</title><style>
-body{font-family:system-ui,-apple-system,sans-serif;background:#0b1120;color:#e2e8f0;margin:0;padding:0 16px 60px}
-a{color:#38bdf8;text-decoration:none}a:hover{text-decoration:underline}
-nav{display:flex;gap:18px;align-items:center;padding:16px 0;border-bottom:1px solid #1e293b;margin-bottom:28px;flex-wrap:wrap}
-h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 10px}
-.card{background:#111a2e;border:1px solid #1e293b;border-radius:10px;padding:18px;margin:12px 0;max-width:760px}
-input,select,textarea{width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid #334155;background:#0b1120;color:#e2e8f0;margin:4px 0 12px;font-size:14px}
-button,.btn{background:#0ea5e9;color:#04121f;border:0;border-radius:8px;padding:10px 18px;font-weight:600;cursor:pointer;font-size:14px;display:inline-block}
-button.link{background:none;color:#38bdf8;padding:0;font-weight:400}
-.mut{color:#94a3b8;font-size:13px}.ok{color:#4ade80}.bad{color:#f87171}.warn{color:#fbbf24}
-table{border-collapse:collapse;width:100%;font-size:14px}td,th{padding:8px 10px;border-bottom:1px solid #1e293b;text-align:left;vertical-align:top}
-.pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;background:#1e293b}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+:root{--brand:#F97316;--brand-dark:#EA580C;--brand-soft:#FFF7ED;--ink:#1C1917;--ink2:#57534E;--ink3:#A8A29E;--line:#E7E5E4;--bg:#FAFAF9}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6}
+a{color:var(--brand-dark);text-decoration:none}a:hover{text-decoration:underline}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+nav{display:flex;align-items:center;justify-content:space-between;padding:18px 0;border-bottom:1px solid var(--line);margin-bottom:32px;flex-wrap:wrap;gap:10px}
+.logo img{height:30px;width:auto}
+.nav-links{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.nav-links a{color:var(--ink2);font-size:14.5px;font-weight:500}
+.nav-links a:hover{color:var(--ink);text-decoration:none}
+.btn{display:inline-block;padding:11px 22px;border-radius:999px;font-weight:600;font-size:15px;text-decoration:none;transition:background .15s;border:0;cursor:pointer}
+.btn-primary{background:var(--brand);color:#fff}
+.btn-primary:hover{background:var(--brand-dark);text-decoration:none}
+.btn-ghost{color:var(--ink);border:1px solid var(--line);background:#fff}
+h1{font-size:24px;margin:0 0 6px;letter-spacing:-0.3px}h2{font-size:16px;margin:26px 0 10px}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:22px;margin:12px 0}
+input,select,textarea{width:100%;box-sizing:border-box;padding:11px 14px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--ink);margin:4px 0 14px;font-size:14.5px;font-family:inherit}
+input:focus{outline:2px solid var(--brand-soft);border-color:var(--brand)}
+button,.btn-form{background:var(--brand);color:#fff;border:0;border-radius:999px;padding:11px 22px;font-weight:600;cursor:pointer;font-size:14.5px}
+button:hover{background:var(--brand-dark)}
+button.link{background:none;color:var(--ink2);padding:0;font-weight:500;font-size:14.5px}
+button.link:hover{color:var(--ink)}
+.mut{color:var(--ink3);font-size:13.5px}.ok{color:#16A34A}.bad{color:#DC2626}.warn{color:#B45309}
+table{border-collapse:collapse;width:100%;font-size:14px}td,th{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink3)}
+.pill{display:inline-block;padding:3px 12px;border-radius:999px;font-size:12.5px;background:var(--brand-soft);color:var(--brand-dark);font-weight:600}
+.pill.warn{background:#FEF3C7;color:#B45309}.pill.ok{background:#DCFCE7;color:#15803D}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
 form.inline{display:inline}
-</style></head><body>${nav}<h1>${esc(title)}</h1>${body}</body></html>`;
+.stat{font-size:30px;font-weight:700;letter-spacing:-0.5px;margin:2px 0}
+label{font-size:13.5px;font-weight:600;color:var(--ink2)}
+</style></head><body><div class="wrap">${nav}<h1>${esc(title)}</h1>${body}</div></body></html>`;
 }
 function html(body: string, status = 200): Response {
   return new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8" } });
@@ -162,10 +181,10 @@ async function dashboardPage(db: Pool, user: any, mem: any): Promise<string> {
   return layout("Dashboard", `
 <p class="mut">${esc(mem.org_name)} · ${esc(mem.workspace_name)} · <span class="pill">${esc(mem.plan)}</span> <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc(mem.subscription_status)}</span></p>
 <div class="grid">
-<div class="card"><h2>Posts</h2><p style="font-size:28px;margin:0">${posts.rows[0].c}</p><p class="mut">total in this workspace</p></div>
-<div class="card"><h2>Awaiting approval</h2><p style="font-size:28px;margin:0">${pending.rows[0].c}</p><p class="mut"><a href="/approvals">review now →</a></p></div>
-<div class="card"><h2>Review links</h2><p style="font-size:28px;margin:0">${links.rows[0].c}</p><p class="mut">${clicks.rows[0].c} clicked · <a href="/reviews">manage →</a></p></div>
-<div class="card"><h2>Subscription</h2><p style="font-size:28px;margin:0">${esc(mem.plan)}</p><p class="mut"><a href="/billing">billing →</a></p></div>
+<div class="card"><h2>Posts</h2><p class="stat">${posts.rows[0].c}</p><p class="mut">total in this workspace</p></div>
+<div class="card"><h2>Awaiting approval</h2><p class="stat">${pending.rows[0].c}</p><p class="mut"><a href="/approvals">review now →</a></p></div>
+<div class="card"><h2>Review links</h2><p class="stat">${links.rows[0].c}</p><p class="mut">${clicks.rows[0].c} clicked · <a href="/reviews">manage →</a></p></div>
+<div class="card"><h2>Subscription</h2><p class="stat">${esc(mem.plan)}</p><p class="mut"><a href="/billing">billing →</a></p></div>
 </div>`, user);
 }
 
@@ -360,12 +379,15 @@ export default {
     // everything below needs auth
     const db = pool(env);
     try {
+      if (path === "/static/brand/revup-light.png") return new Response(Uint8Array.from(atob(LOGO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       const user = await getUser(req, db);
+      if (!user && path === "/") return html(landingPage());
       if (!user) return redirect("/login");
       const mem = await membership(db, user.id);
       if (!mem) return html(layout("No workspace", `<p>Your account has no workspace yet. <a href="/signup">Create one</a>.</p>`, user), 403);
 
       if (path === "/") return html(await dashboardPage(db, user, mem));
+      if (path === "/static/brand/revup-light.png") return new Response(Uint8Array.from(atob(LOGO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
 
       if (path === "/onboarding") {
         if (req.method === "POST") {
