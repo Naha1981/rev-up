@@ -195,7 +195,7 @@ def _avg_booking_value(workspace):
 
 DRAFT_CONFIDENCE = 75
 
-DRAFT_BODIES = {
+DRAFT_BODIES: dict[str, str] = {
     MarketOpportunity.Kind.PRICE_GAP: (
         "Hi {first name}, this week only: come in for your favourite and mention this message - "
         "we will make it worth your while. Book on WhatsApp."
@@ -220,9 +220,11 @@ DRAFT_BODIES = {
 
 
 def draft_campaign(opp: MarketOpportunity):
-    # returns Campaign; imported inside to avoid a circular import
     """Prepare a campaign draft for an opportunity. Never sends: the owner
-    approves on the Campaigns screen like any other draft."""
+    approves on the Campaigns screen like any other draft.
+
+    Returns Campaign; imported inside to avoid a circular import.
+    """
     from .campaigns import create_campaign
 
     if opp.campaign_id:

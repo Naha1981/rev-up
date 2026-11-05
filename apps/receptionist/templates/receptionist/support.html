@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mx-auto w-full max-w-2xl px-4 py-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-xl font-semibold text-stone-900">Support</h1>
+    {% include "receptionist/_nav.html" %}
+  </div>
+  <p class="mt-1 text-sm text-stone-500">Ask about your bookings, waitlist, complaints, campaigns, competitors or menu. Every answer shows how confident it is and what data it used. Say "human" anytime and a person follows up.</p>
+
+  <div id="thread" class="mt-4 space-y-3">
+    {% for msg in thread %}
+    <div class="flex {% if msg.role == 'owner' %}justify-end{% else %}justify-start{% endif %}">
+      <div class="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm {% if msg.role == 'owner' %}bg-orange-600 text-white{% else %}border border-stone-200 bg-white text-stone-800{% endif %}">
+        <p>{{ msg.text }}</p>
+        {% if msg.role == 'assistant' %}
+        <div class="mt-1.5 border-t border-stone-100 pt-1.5 text-xs text-stone-500">
+          <p>Confidence {{ msg.confidence }}%{% if msg.escalated %} · flagged for a human{% endif %}</p>
+          {% for s in msg.sources %}<p>· {{ s }}</p>{% endfor %}
+          {% if msg.confidence != None %}
+          <button type="button" class="speak-btn mt-1 text-orange-600 underline" data-text="{{ msg.text }}">Read aloud</button>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% empty %}
+    <p class="text-sm text-stone-400">No messages yet. Ask something like "how are bookings today?" or "any complaints?"</p>
+    {% endfor %}
+  </div>
+
+  <form id="ask-form" method="post" class="mt-4 flex items-center gap-2">
+    {% csrf_token %}
+    <input type="text" name="question" id="question" autocomplete="off" placeholder="Ask about your business..." class="min-w-0 flex-1 rounded-xl border border-stone-300 px-3 py-2 text-sm">
+    <button type="button" id="mic-btn" title="Speak" class="rounded-xl border border-stone-300 px-3 py-2 text-sm text-stone-600">&#127908;</button>
+    <button type="submit" class="rounded-xl bg-stone-900 px-4 py-2 text-sm font-medium text-white">Ask</button>
+  </form>
+  <p id="voice-note" class="mt-1 hidden text-xs text-stone-400">Voice uses your browser's built-in speech tools. Nothing is recorded or sent anywhere else.</p>
+</div>
+
+<script>
+(function () {
+  const form = document.getElementById("ask-form");
+  const input = document.getElementById("question");
+  const thread = document.getElementById("thread");
+
+  function bubble(role, text, meta) {
+    const wrap = document.createElement("div");
+    wrap.className = "flex " + (role === "owner" ? "justify-end" : "justify-start");
+    const b = document.createElement("div");
+    b.className = "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm " +
+      (role === "owner" ? "bg-orange-600 text-white" : "border border-stone-200 bg-white text-stone-800");
+    const p = document.createElement("p");
+    p.textContent = text;
+    b.appendChild(p);
+    if (meta) {
+      const m = document.createElement("div");
+      m.className = "mt-1.5 border-t border-stone-100 pt-1.5 text-xs text-stone-500";
+      m.textContent = meta;
+      b.appendChild(m);
+    }
+    wrap.appendChild(b);
+    thread.appendChild(wrap);
+    wrap.scrollIntoView({ behavior: "smooth", block: "end" });
+  }
+
+  function speak(text) {
+    if (!("speechSynthesis" in window)) return;
+    const u = new SpeechSynthesisUtterance(text);
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+  }
+
+  form.addEventListener("submit", function (e) {
+    const q = input.value.trim();
+    if (!q) { e.preventDefault(); return; }
+    e.preventDefault();
+    bubble("owner", q);
+    input.value = "";
+    const body = new FormData(form);
+    body.set("question", q);
+    fetch(form.action, {
+      method: "POST",
+      headers: { "X-Requested-With": "fetch" },
+      body: body,
+    }).then(r => r.json()).then(d => {
+      let meta = "Confidence " + d.confidence + "%";
+      if (d.escalated) meta += " · flagged for a human";
+      if (d.sources && d.sources.length) meta += " · " + d.sources.join(" · ");
+      bubble("assistant", d.text, meta);
+      speak(d.text);
+    }).catch(() => bubble("assistant", "Something went wrong - please try again.", null));
+  });
+
+  document.querySelectorAll(".speak-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () { speak(btn.dataset.text); });
+  });
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const micBtn = document.getElementById("mic-btn");
+  if (SR) {
+    document.getElementById("voice-note").classList.remove("hidden");
+    micBtn.addEventListener("click", function () {
+      const rec = new SR();
+      rec.lang = "en-ZA";
+      rec.interimResults = false;
+      micBtn.textContent = "...";
+      rec.onresult = function (ev) {
+        input.value = ev.results[0][0].transcript;
+        micBtn.innerHTML = "&#127908;";
+        input.focus();
+      };
+      rec.onerror = rec.onend = function () { micBtn.innerHTML = "&#127908;"; };
+      rec.start();
+    });
+  } else {
+    micBtn.style.display = "none";
+  }
+})();
+</script>
+{% endblock %}

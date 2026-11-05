@@ -857,3 +857,33 @@ class MarketOpportunity(models.Model):
 
     def __str__(self) -> str:
         return f"{self.title} ({self.status})"
+
+
+class SupportMessage(models.Model):
+    """Owner support assistant thread. One thread per workspace, persisted so
+    the owner can leave and resume. Answers carry confidence and sources;
+    anything the assistant cannot ground in workspace data can be escalated
+    to a human."""
+
+    class Role(models.TextChoices):
+        OWNER = "owner", "Owner"
+        ASSISTANT = "assistant", "Assistant"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey("workspaces.Workspace", on_delete=models.CASCADE, related_name="support_messages")
+    role = models.CharField(max_length=10, choices=Role.choices)
+    text = models.TextField()
+    confidence = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text="0-100; how grounded the answer is in workspace data"
+    )
+    sources = models.JSONField(
+        default=list, blank=True, help_text="Data the answer is grounded in, e.g. '12 bookings this week'"
+    )
+    escalated = models.BooleanField(default=False, help_text="Owner asked for a human to follow up on this point")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.workspace} support {self.role}: {self.text[:40]}"

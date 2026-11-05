@@ -25,6 +25,7 @@ from .models import (
     MarketOpportunity,
     Message,
     Quote,
+    SupportMessage,
     TradeDispatch,
     WaitlistEntry,
     ZernioChannel,
@@ -2121,3 +2122,98 @@ class RevenueEmployeeTests(TestCase):
         self.assertEqual(self.client.get(reverse("receptionist:revenue", args=[self.ws.id])).status_code, 403)
         resp = self.client.get(reverse("receptionist:inbox", args=[ws2.id]))
         self.assertContains(resp, reverse("receptionist:revenue", args=[ws2.id]))
+
+
+class SupportAssistantTests(TestCase):
+    """Owner support assistant: grounded answers, confidence, escalation, resume."""
+
+    def setUp(self):
+        from apps.accounts.models import User
+        from apps.members.models import WorkspaceMembership
+
+        self.user = User.objects.create_user(
+            email="support-owner@example.com",
+            password="testpass123",
+            name="Owner",
+            tos_accepted_at=timezone.now(),
+        )
+        self.ws = _workspace("Support Grill")
+        WorkspaceMembership.objects.create(user=self.user, workspace=self.ws)
+        self.client.force_login(self.user)
+
+    _wa_seq = 0
+
+    def _booking(self, status, days_ago=0):
+        type(self)._wa_seq += 1
+        contact = Contact.objects.create(workspace=self.ws, wa_id=f"27000000{type(self)._wa_seq:03d}", name="Guest")
+        return Booking.objects.create(
+            workspace=self.ws,
+            contact=contact,
+            scheduled_start=timezone.now() - timedelta(days=days_ago),
+            status=status,
+        )
+
+    def test_bookings_answer_is_grounded(self):
+        self._booking(Booking.Status.CONFIRMED)
+        self._booking(Booking.Status.DONE)
+        reply = __import__("apps.receptionist.support", fromlist=["handle"]).handle(self.ws, "How are bookings today?")
+        self.assertEqual(reply.confidence, 95)
+        self.assertIn("1 confirmed booking", reply.text)
+        self.assertIn("1 already done", reply.text)
+        self.assertEqual(len(reply.sources), 2)
+
+    def test_unknown_question_low_confidence_and_offers_human(self):
+        from .support import handle
+
+        reply = handle(self.ws, "What is the meaning of life?")
+        self.assertEqual(reply.confidence, 20)
+        self.assertTrue(reply.escalated)
+        self.assertIn("human", reply.text.lower())
+
+    def test_escalation_keyword_flags_human(self):
+        from .support import handle
+
+        reply = handle(self.ws, "I want to speak to a human please")
+        self.assertTrue(reply.escalated)
+        self.assertEqual(reply.confidence, 100)
+
+    def test_thread_persists_for_resume(self):
+        from .support import handle
+
+        handle(self.ws, "Any complaints?")
+        handle(self.ws, "How about the waitlist?")
+        msgs = SupportMessage.objects.filter(workspace=self.ws)
+        self.assertEqual(msgs.count(), 4)
+        self.assertEqual([m.role for m in msgs], ["owner", "assistant", "owner", "assistant"])
+
+    def test_support_page_renders_and_posts_json(self):
+        self._booking(Booking.Status.CONFIRMED)
+        resp = self.client.get(reverse("receptionist:support", args=[self.ws.id]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Ask about your bookings")
+        resp = self.client.post(
+            reverse("receptionist:support", args=[self.ws.id]),
+            {"question": "how are bookings today?"},
+            HTTP_X_REQUESTED_WITH="fetch",
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["confidence"], 95)
+        self.assertIn("confirmed booking", data["text"])
+
+    def test_support_isolated_and_nav(self):
+        from apps.accounts.models import User
+        from apps.members.models import WorkspaceMembership
+
+        other = User.objects.create_user(
+            email="support-stranger@example.com",
+            password="testpass123",
+            name="Stranger",
+            tos_accepted_at=timezone.now(),
+        )
+        ws2 = _workspace("Other Support")
+        WorkspaceMembership.objects.create(user=other, workspace=ws2)
+        self.client.force_login(other)
+        self.assertEqual(self.client.get(reverse("receptionist:support", args=[self.ws.id])).status_code, 403)
+        resp = self.client.get(reverse("receptionist:inbox", args=[ws2.id]))
+        self.assertContains(resp, reverse("receptionist:support", args=[ws2.id]))

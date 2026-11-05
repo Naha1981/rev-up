@@ -128,6 +128,11 @@ def send_campaign(campaign: Campaign) -> str:
             is_draft=True,
         )
         recipient.message = message
+        if channel is None:
+            recipient.status = CampaignRecipient.Status.SKIPPED
+            recipient.error = "no WhatsApp channel connected"
+            recipient.save(update_fields=["status", "error"])
+            continue
         try:
             if send_draft(channel, contact, message):
                 recipient.status = CampaignRecipient.Status.SENT

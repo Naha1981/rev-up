@@ -24,6 +24,7 @@ urlpatterns = [
     ),
     path("revenue/", views.revenue_employee, name="revenue"),
     path("revenue/<uuid:opportunity_id>/execute/", views.revenue_execute, name="revenue_execute"),
+    path("support/", views.support, name="support"),
     path("waitlist/<uuid:entry_id>/<str:action>/", views.waitlist_action, name="waitlist_action"),
     path("quotes/", views.quotes, name="quotes"),
     path("reviews/", views.review_dashboard, name="reviews"),

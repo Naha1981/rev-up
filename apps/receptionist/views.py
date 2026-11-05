@@ -15,6 +15,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core import signing
 from django.core.exceptions import PermissionDenied
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods
@@ -37,6 +38,7 @@ from .models import (
     MarketOpportunity,
     Message,
     Quote,
+    SupportMessage,
     TradeDispatch,
     ZernioChannel,
 )
@@ -1288,3 +1290,30 @@ def revenue_execute(request, workspace_id, opportunity_id):
     except ValueError as exc:
         messages.error(request, str(exc))
     return redirect("receptionist:revenue", workspace.id)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def support(request, workspace_id):
+    """Owner support assistant. Answers from workspace data with confidence
+    and sources; escalates to a human when asked. Thread persists so the
+    owner can resume later. Voice input/output runs in the browser."""
+    from . import support as _support
+
+    workspace = _get_workspace(request, workspace_id)
+    if request.method == "POST":
+        question = (request.POST.get("question") or "").strip()
+        if question:
+            reply = _support.handle(workspace, question)
+            if request.headers.get("X-Requested-With") == "fetch":
+                return JsonResponse(
+                    {
+                        "text": reply.text,
+                        "confidence": reply.confidence,
+                        "sources": reply.sources,
+                        "escalated": reply.escalated,
+                    }
+                )
+        return redirect("receptionist:support", workspace.id)
+    thread = SupportMessage.objects.filter(workspace=workspace)
+    return render(request, "receptionist/support.html", {"workspace": workspace, "thread": thread})
