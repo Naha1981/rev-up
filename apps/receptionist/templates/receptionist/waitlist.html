@@ -23,13 +23,13 @@
   <div class="mt-5 space-y-2">
     {% for e in active %}
     <div class="rounded-2xl border border-stone-200 bg-white px-4 py-3">
-      <div class="flex items-center justify-between gap-3">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <div class="min-w-0">
           <p class="font-medium text-stone-900">{{ e.contact.name|default:e.contact.wa_id }} <span class="text-sm font-normal text-stone-500">&middot; party of {{ e.party_size }}</span></p>
           <p class="text-sm text-stone-500">{% if e.wanted_time %}{{ e.wanted_time }} &middot; {% endif %}added {{ e.created_at|date:"j M, H:i" }}</p>
           {% if e.status == "offered" %}<p class="mt-1 text-xs text-orange-600">Table offered {{ e.offered_at|date:"H:i" }} &middot; stands for {{ e.offer_minutes }} min</p>{% endif %}
         </div>
-        <div class="flex shrink-0 items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           {% if e.status == "waiting" %}
           <form method="post" action="{% url 'receptionist:waitlist_action' workspace.id e.id 'offer' %}">{% csrf_token %}
             <button type="submit" class="rounded-xl bg-orange-500 px-3 py-1.5 text-xs font-medium text-white">Offer table</button>

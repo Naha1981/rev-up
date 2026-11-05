@@ -43,7 +43,7 @@
   <p class="mt-6 text-sm font-medium text-stone-500">Members</p>
   <div class="mt-2 space-y-2">
     {% for a in accounts %}
-    <div class="flex items-center justify-between rounded-2xl border border-stone-200 bg-white px-4 py-2.5">
+    <div class="flex flex-col gap-1 rounded-2xl border border-stone-200 bg-white px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
       <p class="text-sm text-stone-900">{{ a.contact.name|default:a.contact.wa_id }}</p>
       <p class="text-sm text-stone-600"><span class="font-medium">{{ a.balance }}</span> pts{% if a.balance >= settings.points_for_voucher %} <span class="text-green-700">- voucher ready</span>{% endif %}</p>
     </div>
@@ -55,12 +55,12 @@
   <p class="mt-6 text-sm font-medium text-stone-500">Vouchers</p>
   <div class="mt-2 space-y-2">
     {% for v in vouchers %}
-    <div class="flex items-center justify-between rounded-2xl border border-stone-200 bg-white px-4 py-2.5">
+    <div class="flex flex-col gap-1 rounded-2xl border border-stone-200 bg-white px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
       <div>
         <p class="text-sm font-medium text-stone-900">{{ v.code }} <span class="font-normal text-stone-500">R{{ v.amount_rand }} &middot; {{ v.contact.name|default:v.contact.wa_id }}</span></p>
         <p class="text-xs text-stone-400">{{ v.get_kind_display }}{% if v.status == "active" %} &middot; valid until {{ v.expires_at|date:"j M Y" }}{% endif %}</p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         {% if v.status == "active" %}
         <form method="post" action="{% url 'receptionist:voucher_action' workspace.id v.id 'redeem' %}">{% csrf_token %}
           <button type="submit" class="rounded-xl bg-orange-500 px-3 py-1.5 text-xs font-medium text-white">Redeem</button>

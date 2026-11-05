@@ -10,13 +10,13 @@
   <div class="mt-5 space-y-2">
     {% for b in bookings %}
     <div class="rounded-2xl border border-stone-200 bg-white px-4 py-3">
-      <div class="flex items-center justify-between gap-3">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <div class="min-w-0">
           <p class="font-medium text-stone-900">{{ b.contact.name|default:b.contact.wa_id }}</p>
           <p class="text-sm text-stone-500">{{ b.service|default:"Booking request" }}{% if b.scheduled_start %} &middot; <span class="font-medium text-stone-700">{{ b.scheduled_start|date:"D j M, H:i" }}</span>{% elif b.preferred_time %} &middot; {{ b.preferred_time }}{% endif %}</p>
           <p class="mt-1 text-xs text-stone-400">{{ b.created_at|date:"j M Y, H:i" }}</p>
         </div>
-        <div class="flex shrink-0 items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           {% if b.status == "requested" %}
           <form method="post" action="{% url 'receptionist:booking_action' workspace.id b.id 'confirm' %}">{% csrf_token %}
             <button type="submit" class="rounded-xl bg-orange-500 px-3 py-1.5 text-xs font-medium text-white">Confirm</button>

@@ -40,13 +40,13 @@
 
   <div class="mt-5 space-y-2">
     {% for item in items %}
-    <div class="flex items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3{% if not item.is_available %} opacity-60{% endif %}">
+    <div class="flex flex-col gap-2 rounded-2xl border border-stone-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3{% if not item.is_available %} opacity-60{% endif %}">
       <div class="min-w-0">
         <p class="font-medium text-stone-900">{{ item.name }} <span class="text-stone-500">· R{{ item.price }}</span></p>
         <p class="text-xs text-stone-400">{% if item.category %}{{ item.category.name }} · {% endif %}{% if item.is_available %}Available{% else %}Sold out{% endif %}{% for d in item.dietary %} · {{ d }}{% endfor %}</p>
         {% if item.description %}<p class="mt-0.5 text-xs text-stone-500">{{ item.description }}</p>{% endif %}
       </div>
-      <div class="flex shrink-0 items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <form method="post" action="{% url 'menus:item_action' workspace.id item.id 'toggle' %}">{% csrf_token %}
           <button type="submit" class="rounded-xl border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-600">{% if item.is_available %}Mark sold out{% else %}Mark available{% endif %}</button>
         </form>

@@ -21,7 +21,7 @@
   <div class="mt-5 space-y-2">
     {% for q in quotes %}
     <div class="rounded-2xl border {% if q.status == 'sent' and q.follow_up_on and q.follow_up_on <= today %}border-amber-300{% else %}border-stone-200{% endif %} bg-white px-4 py-3">
-      <div class="flex items-center justify-between gap-3">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <div class="min-w-0">
           <p class="font-medium text-stone-900">{{ q.customer_name }} <span class="text-stone-500">&middot; R{{ q.amount_rand }}</span></p>
           <p class="text-sm text-stone-500">{{ q.title|default:"Quote" }}</p>
@@ -32,7 +32,7 @@
             {% else %}Lost{% endif %}
           </p>
         </div>
-        <div class="flex shrink-0 items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           {% if q.status == "draft" %}
           <form method="post" action="{% url 'receptionist:quote_action' workspace.id q.id 'send' %}">{% csrf_token %}
             <button type="submit" class="rounded-xl bg-orange-500 px-3 py-1.5 text-xs font-medium text-white">Send</button>
