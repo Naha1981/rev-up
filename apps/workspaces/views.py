@@ -23,14 +23,14 @@ PLAN_CARDS = [
         "name": "Starter",
         "price": 499,
         "price_fmt": "499",
-        "blurb": "WhatsApp receptionist, inbox, intake, bookings, customers and the Google review booster.",
+        "blurb": "WhatsApp receptionist, inbox, intake, bookings, customers, the Google review booster and social posting.",
     },
     {
         "id": "growth",
         "name": "Growth",
         "price": 999,
         "price_fmt": "999",
-        "blurb": "Everything in Starter, plus quotes and chasing, revenue-leaks board, lead scoring, weekly content plan drafts and reporting.",
+        "blurb": "Everything in Starter, plus quotes and chasing, revenue-leaks board, lead scoring, social posting with weekly content plan drafts, and reporting.",
     },
     {
         "id": "business-pro",
