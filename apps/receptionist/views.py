@@ -1059,7 +1059,9 @@ def campaign_action(request, workspace_id, campaign_id, action):
                 return redirect("receptionist:campaigns", workspace.id)
         try:
             _campaigns.approve(campaign, when)
-            if when > timezone.now():
+            if not ZernioChannel.objects.filter(workspace=workspace).exists():
+                messages.success(request, f"Approved. '{campaign.name}' will go out once you connect WhatsApp.")
+            elif when > timezone.now():
                 messages.success(request, f"Approved. '{campaign.name}' goes out {when:%a %d %b at %H:%M}.")
             else:
                 messages.success(request, f"Approved. '{campaign.name}' is sending now.")

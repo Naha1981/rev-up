@@ -29,21 +29,21 @@
   <div class="mt-6 space-y-3">
     {% for campaign, stats in campaigns %}
     <div class="rounded-2xl border border-stone-200 bg-white px-4 py-3">
-      <div class="flex items-center justify-between gap-3">
-        <div>
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+        <div class="min-w-0">
           <p class="text-sm font-semibold text-stone-900">{{ campaign.name }}</p>
           <p class="text-xs text-stone-500">{{ campaign.get_segment_display }} · {{ campaign.get_status_display }}{% if campaign.scheduled_at and campaign.status == "scheduled" %} · goes out {{ campaign.scheduled_at|date:"D d M, H:i" }}{% endif %}</p>
         </div>
         {% if campaign.status == "draft" %}
-        <form method="post" action="{% url 'receptionist:campaign_action' workspace.id campaign.id 'approve' %}" class="flex items-center gap-2">
+        <form method="post" action="{% url 'receptionist:campaign_action' workspace.id campaign.id 'approve' %}" class="flex flex-col gap-2 sm:flex-row sm:items-center">
           {% csrf_token %}
-          <input type="datetime-local" name="scheduled_at" class="rounded-lg border border-stone-200 px-2 py-1 text-xs text-stone-700" />
-          <button type="submit" class="rounded-xl bg-orange-500 px-3 py-1.5 text-xs font-medium text-white">Approve &amp; send</button>
+          <input type="datetime-local" name="scheduled_at" class="w-full rounded-lg border border-stone-200 px-2 py-1 text-xs text-stone-700 sm:w-auto" />
+          <button type="submit" class="w-full rounded-xl bg-orange-500 px-3 py-1.5 text-xs font-medium text-white sm:w-auto">Approve &amp; send</button>
         </form>
         {% elif campaign.status == "scheduled" %}
         <form method="post" action="{% url 'receptionist:campaign_action' workspace.id campaign.id 'cancel' %}">
           {% csrf_token %}
-          <button type="submit" class="rounded-xl border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-500">Cancel</button>
+          <button type="submit" class="w-full rounded-xl border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-500 sm:w-auto">Cancel</button>
         </form>
         {% endif %}
       </div>

@@ -1849,3 +1849,51 @@ class CampaignTests(TestCase):
         self.assertNotContains(resp, "Winter warmer")
         resp = self.client.get(reverse("receptionist:campaigns", args=[self.ws.id]))
         self.assertEqual(resp.status_code, 403)
+
+
+class CampaignHonestyTests(TestCase):
+    """Approve banner tells the truth when WhatsApp is not connected, and a
+    cancelled campaign can never go out on a later connection."""
+
+    def setUp(self):
+        from apps.accounts.models import User
+        from apps.members.models import WorkspaceMembership
+
+        self.user = User.objects.create_user(
+            email="honesty-owner@example.com",
+            password="testpass123",
+            name="Owner",
+            tos_accepted_at=timezone.now(),
+        )
+        self.ws = _workspace("Honesty Diner")
+        WorkspaceMembership.objects.create(user=self.user, workspace=self.ws)
+        self.client.force_login(self.user)
+        Contact.objects.create(workspace=self.ws, wa_id="27821110009", name="Regular Reg")
+
+    def _draft(self):
+        from .campaigns import create_campaign
+
+        return create_campaign(self.ws, "Honesty check", "all", "Hi {first name}, special this week!")
+
+    def test_approve_banner_when_held_says_connect_whatsapp(self):
+        resp = self.client.post(
+            reverse("receptionist:campaign_action", args=[self.ws.id, self._draft().id, "approve"]),
+            follow=True,
+        )
+        self.assertContains(resp, "will go out once you connect WhatsApp")
+        self.assertNotContains(resp, "is sending now")
+
+    def test_cancelled_campaign_never_sends_on_later_connection(self):
+        from .campaigns import approve, cancel, send_campaign
+        from .models import CampaignRecipient, ZernioChannel
+
+        campaign = self._draft()
+        approve(campaign, timezone.now() + timedelta(hours=1))  # no channel yet: held as scheduled
+        self.assertTrue(cancel(campaign))
+        # A channel appears later (the future-connection case).
+        ZernioChannel.objects.create(workspace=self.ws, zernio_account_id="acct-late")
+        with patch("apps.receptionist.campaigns.send_draft", return_value=True) as mock_send:
+            self.assertEqual(send_campaign(campaign), "cancelled")
+        self.assertFalse(mock_send.called)
+        self.assertEqual(campaign.recipients.filter(status=CampaignRecipient.Status.PENDING).count(), 1)
+        self.assertEqual(Message.objects.filter(workspace=self.ws).count(), 0)
