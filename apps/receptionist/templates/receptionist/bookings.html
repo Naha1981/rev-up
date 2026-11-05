@@ -5,6 +5,7 @@
     <h1 class="text-xl font-semibold text-stone-900">Bookings</h1>
     <a href="{% url 'receptionist:inbox' workspace.id %}" class="text-sm font-medium text-orange-600">Inbox</a>
   </div>
+  {% include "receptionist/_connect_status.html" %}
   {% if bookings %}
   <div class="mt-5 space-y-2">
     {% for b in bookings %}

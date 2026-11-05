@@ -188,6 +188,8 @@ def inbox(request, workspace_id):
             "workspace": workspace,
             "profile": profile,
             "contacts": contacts,
+            "channel": ZernioChannel.objects.filter(workspace=workspace).first(),
+            "calendar": CalendarConnection.objects.filter(workspace=workspace).first(),
             "funeral_claims": FuneralClaim.objects.filter(workspace=workspace).order_by("-created_at")[:20],
             "dental_appointments": DentalAppointment.objects.filter(workspace=workspace).order_by("-created_at")[:20],
             "trade_dispatches": TradeDispatch.objects.filter(workspace=workspace).order_by("-created_at")[:20],
@@ -248,7 +250,16 @@ def contact_update(request, workspace_id, contact_id):
 def bookings(request, workspace_id):
     workspace = _get_workspace(request, workspace_id)
     rows = Booking.objects.filter(workspace=workspace).select_related("contact")
-    return render(request, "receptionist/bookings.html", {"workspace": workspace, "bookings": rows})
+    return render(
+        request,
+        "receptionist/bookings.html",
+        {
+            "workspace": workspace,
+            "bookings": rows,
+            "channel": ZernioChannel.objects.filter(workspace=workspace).first(),
+            "calendar": CalendarConnection.objects.filter(workspace=workspace).first(),
+        },
+    )
 
 
 @login_required
