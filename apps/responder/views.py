@@ -64,7 +64,12 @@ def _menu_context(workspace) -> str:
     items = MenuItem.objects.filter(workspace=workspace, is_available=True).order_by(
         "category__name", "position", "name"
     )[:12]
-    parts = [f"{item.name} R{item.price}" for item in items]
+    parts = []
+    for item in items:
+        entry = f"{item.name} R{item.price}"
+        if item.dietary:
+            entry += f" ({', '.join(item.dietary)})"
+        parts.append(entry)
     return "; ".join(parts)
 
 

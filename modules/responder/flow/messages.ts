@@ -1,4 +1,5 @@
-import { presetFor, type IndustryPreset } from "../presets.js";
+import { presetFor, type IndustryPreset, type QuestionKey } from "../presets.js";
+import { extractGivenDetails, type GivenDetails } from "./details.js";
 import type { ParsedEnquiry } from "../parser/types.js";
 import type { ViewingSlot } from "./slots.js";
 
@@ -16,21 +17,70 @@ export function instantReply(
   const p = preset ?? presetFor("real_estate"); // historical default copy
   const named = enquiry.listingTitle ?? (enquiry.listingRef ? `listing ${enquiry.listingRef}` : null);
   const subject = named ?? (p.about || null);
-  const [q1, q2, q3] = p.questions;
+  const given = extractGivenDetails(enquiry.message ?? "");
   const lines = [
     subject
       ? `Hi ${firstName(enquiry.leadName)}, thanks for your enquiry about ${subject}${enquiry.price ? ` (${enquiry.price})` : ""}.`
       : `Hi ${firstName(enquiry.leadName)}, thanks for getting in touch.`,
     `I'm ${agentName}'s assistant - ${p.cta}`,
   ];
-  if (menuContext) lines.push(`From our current menu: ${menuContext}`);
-  lines.push(
-    "Three quick questions so I can help you right away:",
-    `1) ${q1}`,
-    `2) ${q2}`,
-    `3) ${q3}`,
-  );
+
+  // Acknowledge what the customer already told us instead of asking again.
+  const noted: string[] = [];
+  if (given.partySize) noted.push(`${given.partySize} people`);
+  if (given.when) noted.push(given.when);
+  if (given.dietary.length) noted.push(`${given.dietary.join(" and ")} noted`);
+  if (noted.length) lines.push(`Noted: ${noted.join(", ")}.`);
+
+  if (menuContext) {
+    lines.push(`From our current menu: ${menuContext}`);
+    lines.push(...dietaryAnswers(given, menuContext));
+  }
+
+  const remaining = p.questions.filter((_, i) => !answered(p.questionKeys[i] ?? "what", given));
+  if (remaining.length === 1) {
+    lines.push("One quick question:", `1) ${remaining[0]}`);
+  } else if (remaining.length === 2) {
+    lines.push("Two quick questions:", `1) ${remaining[0]}`, `2) ${remaining[1]}`);
+  } else if (remaining.length >= 3) {
+    lines.push(
+      "Three quick questions so I can help you right away:",
+      `1) ${remaining[0]}`,
+      `2) ${remaining[1]}`,
+      `3) ${remaining[2]}`,
+    );
+  }
+  lines.push(p.nextStep);
   return lines.join("\n");
+}
+
+function answered(key: QuestionKey, given: GivenDetails): boolean {
+  switch (key) {
+    case "party": return given.partySize !== undefined;
+    case "when": return given.when !== undefined;
+    case "dietary": return given.dietary.length > 0;
+    default: return false;
+  }
+}
+
+/** Answer "what vegetarian options do you have?" straight from the menu when
+ * items carry dietary tags ("Name R129 (vegetarian)"); honest fallback otherwise. */
+function dietaryAnswers(given: GivenDetails, menuContext: string): string[] {
+  const lines: string[] = [];
+  const entries = menuContext.split(";").map((e) => e.trim()).filter(Boolean);
+  for (const need of given.dietary) {
+    if (need === "allergy") {
+      lines.push("Please tell us the allergy and we will make sure the kitchen knows.");
+      continue;
+    }
+    const matches = entries.filter((e) => e.toLowerCase().includes(`(${need}`) || e.toLowerCase().includes(`, ${need}`));
+    if (matches.length) {
+      lines.push(`${need[0]!.toUpperCase()}${need.slice(1)} options: ${matches.join("; ")}`);
+    } else {
+      lines.push(`I'll check with the kitchen on ${need} options and let you know.`);
+    }
+  }
+  return lines;
 }
 
 export function slotOffer(slots: ViewingSlot[]): string {

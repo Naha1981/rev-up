@@ -31,9 +31,13 @@ class MenuContextTests(TestCase):
     def test_restaurant_workspace_gets_menu_summary(self):
         cat = MenuCategory.objects.create(workspace=self.ws, name="Mains")
         MenuItem.objects.create(workspace=self.ws, category=cat, name="Peri-Peri Chicken", price="129.00")
+        MenuItem.objects.create(
+            workspace=self.ws, category=cat, name="Veggie Bowl", price="89.00", dietary=["vegetarian"]
+        )
         MenuItem.objects.create(workspace=self.ws, category=cat, name="Old Special", price="99.00", is_available=False)
         ctx = _menu_context(self.ws)
         self.assertIn("Peri-Peri Chicken R129.00", ctx)
+        self.assertIn("Veggie Bowl R89.00 (vegetarian)", ctx)
         self.assertNotIn("Old Special", ctx)
 
     def test_non_restaurant_workspace_gets_no_menu(self):

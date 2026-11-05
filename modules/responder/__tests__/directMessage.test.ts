@@ -34,7 +34,11 @@ test("try-it: restaurant enquiry without a phone gets a business reply with the 
     const text = r.replies[0]!.text;
     assert.match(text, /QA Grill House's assistant/);
     assert.match(text, /From our current menu: QA Peri-Peri Chicken R129/);
-    assert.match(text, /How many people/);
+    // party size, day/time and the dietary ask were all in the message: acknowledge, don't re-ask
+    assert.match(text, /Noted: 4 people, this Saturday at 7pm, vegetarian noted\./);
+    assert.doesNotMatch(text, /How many people|What day and time|dietary needs or allergies/);
+    assert.match(text, /I'll check with the kitchen on vegetarian options/);
+    assert.match(text, /I'll confirm your table here on WhatsApp shortly\./);
     assert.doesNotMatch(text, /property|viewing|bond/i);
     assert.equal(r.replies[0]!.to, "+27820000001");
   } finally {
@@ -72,6 +76,49 @@ test("try-it: a typed phone number is used as the sender", async () => {
     assert.equal(r.status, "replied");
     assert.equal(r.replies[0]!.to, "27825550134");
     assert.match(r.replies[0]!.text, /Hi Lerato/);
+  } finally {
+    await svc.stop();
+  }
+});
+
+test("try-it: details already given are acknowledged, not re-asked", async () => {
+  const port = 38000 + Math.floor(Math.random() * 1000);
+  const svc = await startService({ PORT: String(port), RESPONDER_SELFTEST: "1" } as NodeJS.ProcessEnv);
+  try {
+    const r = await selftest(
+      port,
+      "Hi, do you have a table for 4 this Saturday at 7pm? Also what vegetarian options do you have?",
+      {
+        "x-industry": "restaurant",
+        "x-menu-context": "QA Peri-Peri Chicken R129.00; QA Veggie Bowl R89.00 (vegetarian)",
+        "x-business-name": "QA Grill House",
+      },
+    );
+    assert.equal(r.status, "replied");
+    const text = r.replies[0]!.text;
+    assert.match(text, /Noted: 4 people, this Saturday at 7pm, vegetarian noted\./);
+    assert.doesNotMatch(text, /How many people|What day and time|dietary needs or allergies/);
+    assert.match(text, /Vegetarian options: QA Veggie Bowl R89\.00 \(vegetarian\)/);
+    assert.match(text, /I'll confirm your table here on WhatsApp shortly\./);
+    assert.doesNotMatch(text, /quick question/);
+  } finally {
+    await svc.stop();
+  }
+});
+
+test("try-it: dietary ask without a matching menu item gets an honest fallback", async () => {
+  const port = 39000 + Math.floor(Math.random() * 1000);
+  const svc = await startService({ PORT: String(port), RESPONDER_SELFTEST: "1" } as NodeJS.ProcessEnv);
+  try {
+    const r = await selftest(
+      port,
+      "Table for 2 on Friday evening, anything vegan?",
+      { "x-industry": "restaurant", "x-menu-context": "QA Peri-Peri Chicken R129.00" },
+    );
+    const text = r.replies[0]!.text;
+    assert.match(text, /Noted: 2 people, Friday evening, vegan noted\./);
+    assert.match(text, /I'll check with the kitchen on vegan options and let you know\./);
+    assert.doesNotMatch(text, /How many people|What day and time/);
   } finally {
     await svc.stop();
   }
