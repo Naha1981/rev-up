@@ -24,7 +24,15 @@ def register_recurring_task(task_func, *, repeat, verbose_name):
     from background_task.models import Task
 
     try:
-        if not Task.objects.filter(verbose_name=verbose_name).exists():
+        existing = Task.objects.filter(verbose_name=verbose_name)
+        if existing.exists():
+            # Collapse duplicates: TransactionTestCase classes truncate and
+            # re-emit post_migrate, and a registration racing that re-emit can
+            # slip past the exists() check. Recurring sweeps are identical, so
+            # keeping any one row is correct.
+            keep = existing.first()
+            existing.exclude(id=keep.id).delete()
+        else:
             task_func(repeat=repeat, verbose_name=verbose_name)
             logger.info("Registered recurring task %s (every %ds)", verbose_name, repeat)
     except (OperationalError, ProgrammingError):
