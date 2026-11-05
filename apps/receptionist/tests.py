@@ -1612,3 +1612,107 @@ class LoyaltyTests(TestCase):
         WorkspaceMembership.objects.create(user=other, workspace=_workspace("Other Bistro"))
         self.client.force_login(other)
         self.assertEqual(self.client.get(reverse("receptionist:loyalty", args=[self.ws.id])).status_code, 403)
+
+
+class ComplaintTests(TestCase):
+    """Complaints: auto-creation on flagged issues, recovery flow, isolation."""
+
+    def setUp(self):
+        from apps.accounts.models import User
+        from apps.members.models import WorkspaceMembership
+
+        self.user = User.objects.create_user(
+            email="complaint-owner@example.com",
+            password="testpass123",
+            name="Owner",
+            tos_accepted_at=timezone.now(),
+        )
+        self.ws = _workspace("Complaint Bistro")
+        WorkspaceMembership.objects.create(user=self.user, workspace=self.ws)
+        self.client.force_login(self.user)
+        self.contact = Contact.objects.create(workspace=self.ws, wa_id="27821118888", name="Unhappy Uma")
+
+    def _add(self):
+        self.client.post(
+            reverse("receptionist:complaints", args=[self.ws.id]),
+            {"wa_id": self.contact.wa_id, "text": "Our food arrived cold."},
+        )
+        from .models import Complaint
+
+        return Complaint.objects.get(workspace=self.ws)
+
+    def test_flag_issue_creates_complaint(self):
+        from .models import Complaint
+        from .reviews import flag_issue
+
+        flag_issue(self.contact, "Waited 40 minutes for the bill.")
+        complaint = Complaint.objects.get(workspace=self.ws)
+        self.assertEqual(complaint.source, "check_in")
+        self.assertEqual(complaint.status, Complaint.Status.OPEN)
+        self.contact.refresh_from_db()
+        self.assertTrue(self.contact.needs_human)
+
+    def test_manual_add_and_full_recovery_flow(self):
+        from .models import Complaint, Voucher
+
+        complaint = self._add()
+        url = lambda a: reverse("receptionist:complaint_action", args=[self.ws.id, complaint.id, a])  # noqa: E731
+
+        self.client.post(url("acknowledge"))
+        complaint.refresh_from_db()
+        self.assertEqual(complaint.status, Complaint.Status.ACKNOWLEDGED)
+
+        self.client.post(url("apology"), {"apology_text": "We are so sorry - that is not our standard."})
+        complaint.refresh_from_db()
+        self.assertIn("so sorry", complaint.apology_text)
+
+        self.client.post(url("voucher"))
+        complaint.refresh_from_db()
+        self.assertIsNotNone(complaint.voucher)
+        self.assertEqual(complaint.voucher.kind, Voucher.Kind.RECOVERY)
+        self.assertEqual(complaint.voucher.status, Voucher.Status.ACTIVE)
+        # no second voucher
+        self.client.post(url("voucher"))
+        complaint.refresh_from_db()
+        self.assertEqual(Voucher.objects.filter(workspace=self.ws).count(), 1)
+
+        self.client.post(url("resolve"), {"resolution_note": "Apologised, sent voucher, invited back."})
+        complaint.refresh_from_db()
+        self.assertEqual(complaint.status, Complaint.Status.RESOLVED)
+        self.assertIsNotNone(complaint.resolved_at)
+
+    def test_escalate_flags_contact_for_human(self):
+        from .models import Complaint
+
+        complaint = self._add()
+        self.client.post(reverse("receptionist:complaint_action", args=[self.ws.id, complaint.id, "escalate"]))
+        complaint.refresh_from_db()
+        self.contact.refresh_from_db()
+        self.assertEqual(complaint.status, Complaint.Status.ESCALATED)
+        self.assertTrue(self.contact.needs_human)
+
+    def test_nav_links_loyalty_and_complaints_from_every_screen(self):
+        screens = ["inbox", "bookings", "waitlist", "quotes", "reviews", "loyalty", "complaints", "setup"]
+        for name in screens:
+            resp = self.client.get(reverse(f"receptionist:{name}", args=[self.ws.id]))
+            self.assertEqual(resp.status_code, 200, name)
+            self.assertContains(resp, reverse("receptionist:loyalty", args=[self.ws.id]))
+            self.assertContains(resp, reverse("receptionist:complaints", args=[self.ws.id]))
+
+    def test_complaints_screen_isolated(self):
+        self._add()
+        resp = self.client.get(reverse("receptionist:complaints", args=[self.ws.id]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Our food arrived cold.")
+        from apps.accounts.models import User
+        from apps.members.models import WorkspaceMembership
+
+        other = User.objects.create_user(
+            email="complaint-outsider@example.com",
+            password="testpass123",
+            name="Out",
+            tos_accepted_at=timezone.now(),
+        )
+        WorkspaceMembership.objects.create(user=other, workspace=_workspace("Other Cafe"))
+        self.client.force_login(other)
+        self.assertEqual(self.client.get(reverse("receptionist:complaints", args=[self.ws.id])).status_code, 403)

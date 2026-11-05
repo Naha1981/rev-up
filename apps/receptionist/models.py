@@ -604,3 +604,41 @@ class Voucher(models.Model):
 
     def __str__(self) -> str:
         return f"{self.code} R{self.amount_rand} ({self.status})"
+
+
+class Complaint(models.Model):
+    """A customer complaint the owner must work to a resolution.
+
+    Created automatically when a check-in reply flags an issue, or manually
+    from the Complaints screen. Recovery: acknowledge, apologise, make it
+    right (recovery voucher), resolve - or escalate.
+    """
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Open"
+        ACKNOWLEDGED = "acknowledged", "Acknowledged"
+        RESOLVED = "resolved", "Resolved"
+        ESCALATED = "escalated", "Escalated"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey("workspaces.Workspace", on_delete=models.CASCADE, related_name="complaints")
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="complaints")
+    text = models.TextField()
+    source = models.CharField(
+        max_length=12,
+        choices=[("check_in", "Check-in reply"), ("manual", "Added by the owner")],
+        default="manual",
+    )
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.OPEN)
+    apology_text = models.TextField(blank=True, help_text="The apology the owner sent or plans to send")
+    voucher = models.ForeignKey(Voucher, on_delete=models.SET_NULL, null=True, blank=True, related_name="complaints")
+    resolution_note = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["workspace", "status", "-created_at"], name="complaint_ws_status_ts")]
+
+    def __str__(self) -> str:
+        return f"complaint by {self.contact} ({self.status})"

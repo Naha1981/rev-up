@@ -3,11 +3,7 @@
 <div class="mx-auto w-full max-w-2xl px-4 py-6">
   <div class="flex flex-wrap items-center justify-between gap-3">
     <h1 class="text-xl font-semibold text-stone-900">Loyalty</h1>
-    <div class="flex items-center gap-4">
-      <a href="{% url 'receptionist:inbox' workspace.id %}" class="text-sm font-medium text-orange-600">Inbox</a>
-      <a href="{% url 'receptionist:bookings' workspace.id %}" class="text-sm font-medium text-orange-600">Bookings</a>
-      <a href="{% url 'receptionist:waitlist' workspace.id %}" class="text-sm font-medium text-orange-600">Waitlist</a>
-    </div>
+    {% include "receptionist/_nav.html" %}
   </div>
   {% include "receptionist/_connect_status.html" %}
 

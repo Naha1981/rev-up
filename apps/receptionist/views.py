@@ -886,3 +886,102 @@ def voucher_action(request, workspace_id, voucher_id, action):
     else:
         messages.error(request, "That change does not apply to this voucher.")
     return redirect("receptionist:loyalty", workspace_id=workspace.id)
+
+
+@login_required
+def complaints(request, workspace_id):
+    """Complaints screen: open issues first, with recovery actions."""
+    workspace = _get_workspace(request, workspace_id)
+    from .models import Complaint
+
+    if request.method == "POST":
+        wa_id = "".join(ch for ch in request.POST.get("wa_id", "") if ch.isdigit())
+        text = (request.POST.get("text") or "").strip()
+        if wa_id and text:
+            contact, _ = Contact.objects.get_or_create(workspace=workspace, wa_id=wa_id)
+            Complaint.objects.create(
+                workspace=workspace,
+                contact=contact,
+                text=text[:2000],
+                source="manual",
+            )
+            messages.success(request, "Complaint recorded.")
+        else:
+            messages.error(request, "A WhatsApp number and what went wrong are both needed.")
+        return redirect("receptionist:complaints", workspace_id=workspace.id)
+
+    open_items = list(
+        Complaint.objects.filter(workspace=workspace)
+        .exclude(status=Complaint.Status.RESOLVED)
+        .select_related("contact", "voucher")
+    )
+    resolved = list(
+        Complaint.objects.filter(workspace=workspace, status=Complaint.Status.RESOLVED).select_related("contact")[:20]
+    )
+    return render(
+        request,
+        "receptionist/complaints.html",
+        {"workspace": workspace, "open_items": open_items, "resolved": resolved},
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def complaint_action(request, workspace_id, complaint_id, action):
+    workspace = _get_workspace(request, workspace_id)
+    from . import loyalty as _loyalty
+    from .models import Complaint, Voucher
+
+    complaint = get_object_or_404(Complaint, id=complaint_id, workspace=workspace)
+    if action == "acknowledge" and complaint.status == Complaint.Status.OPEN:
+        complaint.status = Complaint.Status.ACKNOWLEDGED
+        complaint.save(update_fields=["status"])
+        messages.success(request, "Marked as acknowledged.")
+    elif action == "apology" and complaint.status in (
+        Complaint.Status.OPEN,
+        Complaint.Status.ACKNOWLEDGED,
+    ):
+        text = (request.POST.get("apology_text") or "").strip()
+        if not text:
+            messages.error(request, "Write the apology first.")
+        else:
+            complaint.apology_text = text
+            if complaint.status == Complaint.Status.OPEN:
+                complaint.status = Complaint.Status.ACKNOWLEDGED
+            complaint.save(update_fields=["apology_text", "status"])
+            messages.success(request, "Apology saved.")
+    elif action == "voucher" and complaint.status in (
+        Complaint.Status.OPEN,
+        Complaint.Status.ACKNOWLEDGED,
+    ):
+        if complaint.voucher_id:
+            messages.error(request, "This complaint already has a recovery voucher.")
+        else:
+            voucher = _loyalty.issue_voucher(
+                workspace, complaint.contact, kind=Voucher.Kind.RECOVERY, note="Service recovery"
+            )
+            complaint.voucher = voucher
+            complaint.save(update_fields=["voucher"])
+            messages.success(request, f"Recovery voucher {voucher.code} (R{voucher.amount_rand}) issued.")
+    elif action == "resolve" and complaint.status != Complaint.Status.RESOLVED:
+        complaint.status = Complaint.Status.RESOLVED
+        complaint.resolution_note = (request.POST.get("resolution_note") or "").strip()
+        complaint.resolved_at = timezone.now()
+        complaint.save(update_fields=["status", "resolution_note", "resolved_at"])
+        # customer returns to the review pipeline
+        try:
+            from . import reviews as _reviews
+
+            _reviews.resolve_issue(complaint.contact)
+        except Exception:
+            logger.exception("reviews: resolve after complaint failed for %s", complaint.contact.id)
+        messages.success(request, "Complaint resolved.")
+    elif action == "escalate" and complaint.status != Complaint.Status.RESOLVED:
+        complaint.status = Complaint.Status.ESCALATED
+        complaint.contact.needs_human = True
+        complaint.contact.save(update_fields=["needs_human", "updated_at"])
+        complaint.save(update_fields=["status"])
+        messages.success(request, "Escalated - the customer is flagged for personal attention in the inbox.")
+    else:
+        messages.error(request, "That change does not apply to this complaint.")
+    return redirect("receptionist:complaints", workspace_id=workspace.id)

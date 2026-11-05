@@ -3,7 +3,7 @@
 <div class="mx-auto w-full max-w-2xl px-4 py-6">
   <div class="flex flex-wrap items-center justify-between gap-3">
     <h1 class="text-xl font-semibold text-stone-900">Quotes</h1>
-    <a href="{% url 'receptionist:inbox' workspace.id %}" class="text-sm font-medium text-orange-600">Inbox</a>
+    {% include "receptionist/_nav.html" %}
   </div>
 
   <div class="mt-5 rounded-2xl border border-stone-200 bg-white px-4 py-4">

@@ -316,6 +316,12 @@ def flag_issue(contact: Contact, note: str) -> None:
     contact.needs_human = True
     contact.save(update_fields=["review_status", "issue_note", "needs_human", "updated_at"])
     logger.info("reviews: contact %s flagged an issue", contact.id)
+    try:
+        from .models import Complaint
+
+        Complaint.objects.create(workspace=contact.workspace, contact=contact, text=note[:2000], source="check_in")
+    except Exception:
+        logger.exception("reviews: complaint record failed for contact %s", contact.id)
     _alert_owner_issue(contact, note)
 
 
