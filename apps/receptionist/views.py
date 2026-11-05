@@ -1205,3 +1205,86 @@ def opportunity_action(request, workspace_id, opportunity_id, action):
         opportunity.status = action
         opportunity.save(update_fields=["status", "updated_at"])
     return redirect("receptionist:competitors", workspace.id)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def revenue_employee(request, workspace_id):
+    """AI Revenue Employee: opportunities with evidence, confidence and rand
+    impact; one click prepares a campaign draft (owner still approves sends);
+    outcomes are tracked back to attributed bookings and revenue."""
+    from . import campaigns as _campaigns
+    from . import opportunities as _opportunities
+
+    workspace = _get_workspace(request, workspace_id)
+    profile, _ = BusinessProfile.objects.get_or_create(workspace=workspace, defaults={"business_name": workspace.name})
+    if request.method == "POST":
+        mode = request.POST.get("mode", "suggest")
+        if mode in ("suggest", "draft"):
+            profile.revenue_mode = mode
+            profile.save(update_fields=["revenue_mode", "updated_at"])
+            messages.success(
+                request,
+                "Revenue Employee now prepares campaign drafts for strong opportunities."
+                if mode == "draft"
+                else "Revenue Employee now only suggests.",
+            )
+        return redirect("receptionist:revenue", workspace.id)
+
+    _opportunities.refresh(workspace)
+    drafted = _opportunities.auto_draft(workspace)
+    if drafted:
+        messages.success(
+            request, f"Prepared {drafted} campaign draft{'s' if drafted != 1 else ''} - review on the Campaigns screen."
+        )
+
+    rows = list(MarketOpportunity.objects.filter(workspace=workspace).select_related("campaign"))
+    cards = []
+    for opp in rows:
+        stats = _campaigns.stats(opp.campaign) if opp.campaign_id else None
+        cards.append((opp, stats))
+
+    from .models import CampaignRecipient
+
+    month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    attributed = CampaignRecipient.objects.filter(
+        campaign__workspace=workspace,
+        attributed_booking__isnull=False,
+        attributed_booking__created_at__gte=month_start,
+    )
+    kpis = {
+        "attributed_revenue": sum((r.attributed_amount for r in attributed), Decimal("0")),
+        "attributed_bookings": attributed.count(),
+        "open_opportunities": sum(1 for o in rows if o.status == MarketOpportunity.Status.NEW),
+        "campaigns_running": Campaign.objects.filter(
+            workspace=workspace, status__in=[Campaign.Status.SCHEDULED, Campaign.Status.SENDING]
+        ).count(),
+    }
+    return render(
+        request,
+        "receptionist/revenue.html",
+        {
+            "workspace": workspace,
+            "profile": profile,
+            "cards": cards,
+            "kpis": kpis,
+        },
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def revenue_execute(request, workspace_id, opportunity_id):
+    workspace = _get_workspace(request, workspace_id)
+    opp = get_object_or_404(MarketOpportunity, id=opportunity_id, workspace=workspace)
+    from . import opportunities as _opportunities
+
+    try:
+        campaign = _opportunities.draft_campaign(opp)
+        messages.success(
+            request,
+            f"Draft ready: '{campaign.name}'. Review and approve it on the Campaigns screen - nothing sends until you do.",
+        )
+    except ValueError as exc:
+        messages.error(request, str(exc))
+    return redirect("receptionist:revenue", workspace.id)

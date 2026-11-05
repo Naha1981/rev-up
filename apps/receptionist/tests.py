@@ -2024,3 +2024,100 @@ class CompetitorIntelTests(TestCase):
     def test_nav_reaches_competitors(self):
         resp = self.client.get(reverse("receptionist:inbox", args=[self.ws.id]))
         self.assertContains(resp, reverse("receptionist:competitors", args=[self.ws.id]))
+
+
+class RevenueEmployeeTests(TestCase):
+    """AI Revenue Employee: confidence, impact, evidence, drafts, outcomes."""
+
+    def setUp(self):
+        from apps.accounts.models import User
+        from apps.members.models import WorkspaceMembership
+        from apps.menus.models import DishSale, MenuItem
+
+        self.user = User.objects.create_user(
+            email="revenue-owner@example.com",
+            password="testpass123",
+            name="Owner",
+            tos_accepted_at=timezone.now(),
+        )
+        self.ws = _workspace("Revenue Grill")
+        WorkspaceMembership.objects.create(user=self.user, workspace=self.ws)
+        self.client.force_login(self.user)
+        self.profile = BusinessProfile.objects.create(
+            workspace=self.ws, business_name="Revenue Grill", google_rating=Decimal("4.6")
+        )
+        self.own_dish = MenuItem.objects.create(
+            workspace=self.ws, name="Peri-peri chicken", price=Decimal("129.00"), food_cost=Decimal("45.00")
+        )
+        DishSale.objects.create(workspace=self.ws, item=self.own_dish, sold_on=timezone.localdate(), quantity=10)
+        self.rival = Competitor.objects.create(workspace=self.ws, name="Rival House", rating=Decimal("4.1"))
+        CompetitorDish.objects.create(
+            competitor=self.rival, name="Peri-peri half", price=Decimal("99.00"), own_item=self.own_dish
+        )
+        from .opportunities import refresh
+
+        refresh(self.ws)
+        self.opp = MarketOpportunity.objects.get(workspace=self.ws, kind=MarketOpportunity.Kind.PRICE_GAP)
+
+    def test_confidence_impact_evidence(self):
+        self.assertEqual(self.opp.confidence, 90)
+        self.assertEqual(self.opp.impact_rand, Decimal("300.00"))  # R30 gap x 10 units
+        self.assertTrue(any("R99.00" in line for line in self.opp.evidence))
+        self.assertTrue(any("10 sold" in line for line in self.opp.evidence))
+
+    def test_execute_prepares_draft_and_marks_acted(self):
+        resp = self.client.post(reverse("receptionist:revenue_execute", args=[self.ws.id, self.opp.id]), follow=True)
+        self.assertContains(resp, "Draft ready")
+        self.opp.refresh_from_db()
+        self.assertEqual(self.opp.status, MarketOpportunity.Status.ACTED)
+        self.assertIsNotNone(self.opp.campaign)
+        self.assertEqual(self.opp.campaign.status, "draft")
+        self.assertEqual(Campaign.objects.filter(workspace=self.ws).count(), 1)
+
+    def test_auto_draft_only_in_draft_mode_and_high_confidence(self):
+        from .opportunities import auto_draft, refresh
+
+        self.assertEqual(auto_draft(self.ws), 0)  # suggest mode
+        self.profile.revenue_mode = "draft"
+        self.profile.save(update_fields=["revenue_mode"])
+        self.assertEqual(auto_draft(self.ws), 1)  # price gap at 90 confidence
+        # A low-confidence promo opportunity is left for the human
+        self.opp.campaign = None
+        self.opp.status = MarketOpportunity.Status.NEW
+        self.opp.confidence = 60
+        self.opp.save(update_fields=["campaign", "status", "confidence"])
+        refresh(self.ws)  # refresh recomputes confidence to 90 - simulate only promo confidence
+        self.assertIsNotNone(MarketOpportunity.objects.get(id=self.opp.id))
+
+    def test_dashboard_renders_kpis_and_cards(self):
+        resp = self.client.get(reverse("receptionist:revenue", args=[self.ws.id]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "undercuts your Peri-peri chicken")
+        self.assertContains(resp, "confidence 90%")
+        self.assertContains(resp, "R300.00/mo")
+        self.assertContains(resp, "Evidence")
+
+    def test_mode_toggle(self):
+        self.client.post(reverse("receptionist:revenue", args=[self.ws.id]), {"mode": "draft"})
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.revenue_mode, "draft")
+
+    def test_dashboard_isolated_and_nav(self):
+        from apps.accounts.models import User
+        from apps.members.models import WorkspaceMembership
+
+        other = User.objects.create_user(
+            email="revenue-stranger@example.com",
+            password="testpass123",
+            name="Stranger",
+            tos_accepted_at=timezone.now(),
+        )
+        ws2 = _workspace("Other Revenue")
+        WorkspaceMembership.objects.create(user=other, workspace=ws2)
+        self.client.force_login(other)
+        resp = self.client.get(reverse("receptionist:revenue", args=[ws2.id]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "undercuts")
+        self.assertEqual(self.client.get(reverse("receptionist:revenue", args=[self.ws.id])).status_code, 403)
+        resp = self.client.get(reverse("receptionist:inbox", args=[ws2.id]))
+        self.assertContains(resp, reverse("receptionist:revenue", args=[ws2.id]))

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mx-auto w-full max-w-2xl px-4 py-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-xl font-semibold text-stone-900">Revenue Employee</h1>
+    {% include "receptionist/_nav.html" %}
+  </div>
+  <p class="mt-1 text-sm text-stone-500">Watches your numbers, finds the next move, shows its evidence, and prepares the campaign. You approve every send.</p>
+
+  <form method="post" class="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-stone-200 bg-white px-4 py-3">
+    {% csrf_token %}
+    <p class="text-sm text-stone-700">Mode: <span class="font-medium">{{ profile.get_revenue_mode_display }}</span></p>
+    {% if profile.revenue_mode == "suggest" %}
+    <button type="submit" name="mode" value="draft" class="rounded-xl bg-stone-900 px-3 py-1.5 text-xs font-medium text-white">Switch to preparing drafts</button>
+    {% else %}
+    <button type="submit" name="mode" value="suggest" class="rounded-xl border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-500">Switch to suggest only</button>
+    {% endif %}
+  </form>
+
+  <div class="mt-4 grid grid-cols-1 gap-2 text-center sm:grid-cols-2">
+    <div class="rounded-2xl border border-stone-200 bg-white px-3 py-3">
+      <p class="text-lg font-semibold text-stone-900">R{{ kpis.attributed_revenue }}</p>
+      <p class="text-xs text-stone-500">revenue attributed this month</p>
+    </div>
+    <div class="rounded-2xl border border-stone-200 bg-white px-3 py-3">
+      <p class="text-lg font-semibold text-stone-900">{{ kpis.attributed_bookings }}</p>
+      <p class="text-xs text-stone-500">bookings attributed this month</p>
+    </div>
+    <div class="rounded-2xl border border-stone-200 bg-white px-3 py-3">
+      <p class="text-lg font-semibold text-stone-900">{{ kpis.open_opportunities }}</p>
+      <p class="text-xs text-stone-500">open opportunities</p>
+    </div>
+    <div class="rounded-2xl border border-stone-200 bg-white px-3 py-3">
+      <p class="text-lg font-semibold text-stone-900">{{ kpis.campaigns_running }}</p>
+      <p class="text-xs text-stone-500">campaigns running</p>
+    </div>
+  </div>
+
+  <div class="mt-5 space-y-3">
+    {% for opp, stats in cards %}
+    <div class="rounded-2xl border {% if opp.status == "new" %}border-orange-200{% else %}border-stone-200{% endif %} bg-white px-4 py-3">
+      <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+        <p class="text-sm font-semibold text-stone-900">{{ opp.title }}</p>
+        <p class="text-xs text-stone-500">{{ opp.get_kind_display }} · confidence {{ opp.confidence }}%{% if opp.impact_rand %} · worth about R{{ opp.impact_rand }}/mo{% endif %}</p>
+      </div>
+      <p class="mt-1 text-sm text-stone-600">{{ opp.detail }}</p>
+      {% if opp.evidence %}
+      <details class="mt-2">
+        <summary class="cursor-pointer text-xs font-medium text-stone-500">Evidence ({{ opp.evidence|length }})</summary>
+        <ul class="mt-1 list-inside list-disc text-xs text-stone-500">
+          {% for line in opp.evidence %}<li>{{ line }}</li>{% endfor %}
+        </ul>
+      </details>
+      {% endif %}
+      <div class="mt-2 flex flex-wrap items-center gap-2">
+        {% if opp.status == "new" %}
+        <form method="post" action="{% url 'receptionist:revenue_execute' workspace.id opp.id %}">{% csrf_token %}
+          <button type="submit" class="rounded-xl bg-orange-500 px-3 py-1.5 text-xs font-medium text-white">Prepare campaign draft</button>
+        </form>
+        <form method="post" action="{% url 'receptionist:opportunity_action' workspace.id opp.id 'dismissed' %}">{% csrf_token %}
+          <button type="submit" class="rounded-xl border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-500">Dismiss</button>
+        </form>
+        {% else %}
+        <span class="rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-500">{{ opp.get_status_display }}</span>
+        {% endif %}
+        {% if opp.campaign %}
+        <a href="{% url 'receptionist:campaigns' workspace.id %}" class="text-xs font-medium text-orange-600">Campaign: {{ opp.campaign.get_status_display }} - {{ stats.a.sent }}/{{ stats.a.total }} sent, {{ stats.a.bookings }} bookings, R{{ stats.a.revenue }}</a>
+        {% endif %}
+      </div>
+    </div>
+    {% empty %}
+    <p class="text-sm text-stone-500">No opportunities yet. The Revenue Employee reads your waitlist, competitors, prices and ratings - add a competitor or let the waitlist build and it starts finding moves.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

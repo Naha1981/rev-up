@@ -84,6 +84,12 @@ class BusinessProfile(models.Model):
     )
     emergency_contact_phone = models.CharField(max_length=32, blank=True)
     call_out_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    revenue_mode = models.CharField(
+        max_length=10,
+        choices=[("suggest", "Suggest only"), ("draft", "Prepare drafts")],
+        default="suggest",
+        help_text="Revenue Employee mode: suggest opportunities, or also prepare campaign drafts (owner still approves every send)",
+    )
     google_rating = models.DecimalField(
         max_digits=2,
         decimal_places=1,
@@ -821,6 +827,25 @@ class MarketOpportunity(models.Model):
     detail = models.TextField(blank=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.NEW)
     dedupe_key = models.CharField(max_length=120)
+    confidence = models.PositiveSmallIntegerField(
+        default=0, help_text="0-100: how sure the Revenue Employee is, from the evidence quality"
+    )
+    impact_rand = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Estimated monthly commercial impact in ZAR, when estimable",
+    )
+    evidence = models.JSONField(default=list, blank=True, help_text="Source lines the opportunity is computed from")
+    campaign = models.ForeignKey(
+        Campaign,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="opportunities",
+        help_text="The campaign draft the Revenue Employee prepared for this opportunity",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
