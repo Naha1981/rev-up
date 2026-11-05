@@ -255,12 +255,14 @@ class TestGates:
             assert reviews.send_event(event) == "held"
         assert _capture_sends.call_count == 0
 
-    def test_starter_plan_holds(self, _capture_sends):
+    def test_starter_plan_sends(self, _capture_sends):
+        # The landing page promises the review booster from Starter up;
+        # REVIEW_PLANS is the single source of truth and includes starter.
         ws = _workspace(plan="starter")
         event = self._event(ws, _contact(ws))
         with override_settings(REVIEW_AUTOMATION_ENABLED=True):
-            assert reviews.send_event(event) == "held"
-        assert _capture_sends.call_count == 0
+            assert reviews.send_event(event) == "sent"
+        assert _capture_sends.call_count == 1
 
     def test_no_channel_holds(self, _capture_sends):
         ws = _workspace()

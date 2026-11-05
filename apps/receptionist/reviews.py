@@ -33,10 +33,10 @@ REVIEW_REQUEST_DELAY = timedelta(hours=2)
 REMINDER_DELAY = timedelta(hours=48)
 HELD_RETRY_DELAY = timedelta(minutes=15)
 
-# Plans that include the review-request pipeline. Suggested: Growth and up
-# (follow-up is the Growth lifecycle promise); Business Pro keeps
-# auto-posting on top.
-REVIEW_PLANS = frozenset({"growth", "business-pro"})
+# Plans that include the review-request pipeline. Single source of truth:
+# the landing page promises the Google review booster from Starter up, so
+# every paid plan includes it.
+REVIEW_PLANS = frozenset({"starter", "growth", "business-pro"})
 
 OPT_OUT_FOOTER = "\nReply STOP to opt out."
 OPT_OUT_KEYWORDS = frozenset({"STOP", "STOP ALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"})

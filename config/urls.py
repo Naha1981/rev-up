@@ -52,6 +52,7 @@ urlpatterns = [
     path("workspace/<uuid:workspace_id>/radar/", include("apps.radar.urls")),
     path("workspace/<uuid:workspace_id>/responder/", include("apps.responder.urls")),
     path("workspace/<uuid:workspace_id>/receptionist/", include("apps.receptionist.urls")),
+    path("workspace/<uuid:workspace_id>/menu/", include("apps.menus.urls")),
     path(
         "receptionist/google-calendar/callback/",
         __import__("apps.receptionist.views", fromlist=["calendar_callback"]).calendar_callback,
@@ -60,6 +61,7 @@ urlpatterns = [
     path("workspace/<uuid:workspace_id>/calendar/", include("apps.calendar.urls")),
     path("workspace/<uuid:workspace_id>/inbox/", include("apps.inbox.urls")),
     path("workspace/<uuid:workspace_id>/analytics/", include("apps.analytics.urls")),
+    path("menu/", include("apps.menus.public_urls")),
     path("webhooks/", include("apps.inbox.webhook_urls")),
     path("webhooks/", include("apps.common.webhook_urls")),
     path("webhooks/", include("apps.publisher.webhook_urls")),

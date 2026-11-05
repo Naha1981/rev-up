@@ -34,6 +34,60 @@ def _set_workspace_value(workspace, key, value):
     WorkspaceSetting.objects.update_or_create(workspace=workspace, key=key, defaults={"value": value})
 
 
+def _signal_niche(workspace, area):
+    """Business description for the drafting prompt: trading name + trade + area."""
+    preset = get_preset(workspace.industry)
+    name = workspace.name
+    profile = getattr(workspace, "receptionist_profile", None)
+    if profile and profile.business_name:
+        name = profile.business_name
+    bits = [name, preset.get("label") or "local business"]
+    if area:
+        bits.append(f"in {area}")
+    return ", ".join(bits)
+
+
+@login_required
+@require_http_methods(["POST"])
+def draft_from_signal(request, workspace_id):
+    """Turn one demand signal into an AI-drafted post in the review queue.
+
+    The owner approves every draft - nothing is ever auto-published.
+    """
+    workspace = _get_workspace(request, workspace_id)
+    title = (request.POST.get("title") or "").strip()[:200]
+    summary = (request.POST.get("summary") or "").strip()[:400]
+    if not title:
+        messages.error(request, "That signal has no topic to draft from.")
+        return redirect("radar:dashboard", workspace_id=workspace.id)
+    area = (get_setting(workspace.id, "radar.area", workspace.organization_id) or "").strip()
+
+    from apps.content_agent.models import AgentConfig
+    from apps.content_agent.services import draft_posts, queue_drafts_for_review
+
+    config = AgentConfig(
+        workspace=workspace,
+        niche=_signal_niche(workspace, area),
+        topics=[title],
+        posts_per_run=1,
+    )
+    topic = f"{title}. {summary}".strip(". ")
+    try:
+        drafts = draft_posts(config, [topic])
+    except Exception as exc:
+        logger.warning("radar: signal draft failed for workspace %s: %s", workspace.id, exc)
+        drafts = []
+    if not drafts:
+        messages.error(request, "Could not draft a post from that signal right now - try again in a few minutes.")
+        return redirect("radar:dashboard", workspace_id=workspace.id)
+    created = queue_drafts_for_review(config, drafts[:1])
+    if created:
+        messages.success(request, "Draft created from the signal - it is waiting in your review queue.")
+    else:
+        messages.error(request, "The draft could not be queued - try again shortly.")
+    return redirect("radar:dashboard", workspace_id=workspace.id)
+
+
 @login_required
 @require_http_methods(["GET", "POST"])
 def dashboard(request, workspace_id):
@@ -91,13 +145,17 @@ def dashboard(request, workspace_id):
                     "link": row.link,
                     "source": row.source,
                     "summary": row.summary,
-                    "group": row.group,
+                    "group": "Industry news",
                     "score": row.score,
                     "ingested": row.link in ingested_links,
                     "relevant": relevant,
                 }
             )
         generated = True
+
+    from .demand import build_demand_items
+
+    items = build_demand_items(workspace, area) + items
 
     drafts = (
         RadarIngestedItem.objects.filter(workspace=workspace, post__isnull=False)

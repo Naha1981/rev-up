@@ -56,16 +56,32 @@
     {% if feed %}
     <div class="mb-2 text-xs text-stone-400">{{ feed.business_name }} · {{ feed.area }} · generated {{ feed.generated_at }}</div>
     {% endif %}
-    {% if feed or generated %}
+    {% if items %}
     <div class="bg-white rounded-xl border border-stone-200 divide-y divide-stone-100 mb-6">
         {% for item in items %}
         <div class="px-5 py-3 flex items-start gap-3{% if not item.relevant %} opacity-40{% endif %}">
+            {% if item.is_signal %}
+            <span class="mt-0.5 inline-flex items-center rounded-md bg-orange-100 text-orange-700 text-xs font-medium px-2 py-0.5">{{ item.group }}</span>
+            {% else %}
             <span class="mt-0.5 inline-flex items-center rounded-md bg-blue-50 text-blue-600 text-xs font-medium px-2 py-0.5">{{ item.group }}</span>
+            {% endif %}
             <div class="flex-1 min-w-0">
+                {% if item.is_signal %}
+                <div class="text-sm font-medium text-stone-800">{{ item.title }}</div>
+                {% else %}
                 <a href="{{ item.link }}" target="_blank" rel="noopener" class="text-sm font-medium text-stone-800 hover:text-orange-600">{{ item.title }}</a>
-                <div class="text-xs text-stone-400">{{ item.source }} · score {{ item.score }}</div>
+                {% endif %}
+                {% if item.summary %}<div class="text-xs text-stone-500 mt-0.5">{{ item.summary }}</div>{% endif %}
+                <div class="text-xs text-stone-400">{{ item.source }}</div>
             </div>
-            {% if item.ingested %}<span class="text-xs text-emerald-600 font-medium">Ingested</span>{% elif not item.relevant %}<span class="text-xs text-stone-400">Outside preset</span>{% endif %}
+            {% if item.is_signal %}
+            <form method="post" action="{% url 'radar:draft_from_signal' workspace.id %}" class="shrink-0">
+                {% csrf_token %}
+                <input type="hidden" name="title" value="{{ item.title }}">
+                <input type="hidden" name="summary" value="{{ item.summary }}">
+                <button type="submit" class="text-xs font-medium text-orange-600 hover:text-orange-700 border border-orange-200 rounded-md px-2 py-1">Draft a post</button>
+            </form>
+            {% elif item.ingested %}<span class="text-xs text-emerald-600 font-medium">Ingested</span>{% elif not item.relevant %}<span class="text-xs text-stone-400">Outside preset</span>{% endif %}
         </div>
         {% empty %}
         <div class="px-5 py-6 text-sm text-stone-400">No items in the feed right now.</div>

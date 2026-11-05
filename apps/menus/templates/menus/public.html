@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ business_name }} - Menu</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; margin: 0; }
+    body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: #faf7f2; color: #292524; }
+    .wrap { max-width: 560px; margin: 0 auto; padding: 28px 18px 48px; }
+    h1 { font-size: 26px; }
+    .sub { color: #78716c; font-size: 14px; margin-top: 4px; }
+    .cat { margin-top: 28px; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #b45309; }
+    .item { display: flex; justify-content: space-between; gap: 14px; padding: 14px 0; border-bottom: 1px solid #e7e0d8; }
+    .name { font-weight: 600; font-size: 15px; }
+    .desc { color: #78716c; font-size: 13px; margin-top: 2px; }
+    .tags { margin-top: 4px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .tag { font-size: 11px; background: #ecfdf5; color: #047857; border-radius: 999px; padding: 2px 8px; }
+    .price { font-weight: 700; font-size: 15px; white-space: nowrap; }
+    .hours { margin-top: 28px; background: #fff; border: 1px solid #e7e0d8; border-radius: 14px; padding: 14px 16px; font-size: 13px; color: #57534e; }
+    .hours b { display: block; margin-bottom: 6px; color: #292524; }
+    .empty { margin-top: 40px; text-align: center; color: #a8a29e; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>{{ business_name }}</h1>
+    <p class="sub">Menu</p>
+    {% for group in grouped %}
+    <div class="cat">{{ group.name }}</div>
+    {% for item in group.items %}
+    <div class="item">
+      <div>
+        <div class="name">{{ item.name }}</div>
+        {% if item.description %}<div class="desc">{{ item.description }}</div>{% endif %}
+        {% if item.dietary %}
+        <div class="tags">{% for d in item.dietary %}<span class="tag">{{ d }}</span>{% endfor %}</div>
+        {% endif %}
+      </div>
+      <div class="price">R{{ item.price }}</div>
+    </div>
+    {% endfor %}
+    {% empty %}
+    <p class="empty">The menu is being updated - please check back soon.</p>
+    {% endfor %}
+    {% if hours %}
+    <div class="hours"><b>Trading hours</b>{% for day, span in hours.items %}{{ day|capfirst }}: {{ span }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</div>
+    {% endif %}
+  </div>
+</body>
+</html>

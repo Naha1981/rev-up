@@ -154,7 +154,7 @@ def handle_inbox_message(payload: dict) -> None:
     if media_urls:
         incoming = f"[Customer sent {len(media_urls)} photo{'s' if len(media_urls) != 1 else ''}] {body}".strip()
     try:
-        draft = draft_reply(profile, history[:-1], incoming)
+        draft = draft_reply(profile, history[:-1], incoming, contact=contact)
     except Exception:
         logger.exception("receptionist: reply drafting failed for workspace %s", workspace.id)
         return

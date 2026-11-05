@@ -23,7 +23,7 @@ PLAN_CARDS = [
         "name": "Starter",
         "price": 499,
         "price_fmt": "499",
-        "blurb": "WhatsApp receptionist, inbox, intake, bookings and customers.",
+        "blurb": "WhatsApp receptionist, inbox, intake, bookings, customers and the Google review booster.",
     },
     {
         "id": "growth",

@@ -231,12 +231,47 @@ def needs_human(text: str) -> bool:
     return any(p.search(text) for p in _ESCALATION_PATTERNS)
 
 
+def _menu_block(profile: BusinessProfile) -> str | None:
+    """Compact menu context: item names + prices and the public menu link.
+
+    Keeps the receptionist honest about what is on the menu and what it
+    costs, and gives it the link to share when a customer asks."""
+    from apps.menus.models import MenuItem, public_menu_url
+
+    items = list(
+        MenuItem.objects.filter(workspace_id=profile.workspace_id, is_available=True)
+        .select_related("category")[:60]
+    )
+    if not items:
+        return None
+    parts = []
+    for item in items:
+        entry = f"{item.name} R{item.price}"
+        if item.category:
+            entry = f"{entry} ({item.category.name})"
+        parts.append(entry)
+    lines = ["Menu (ZAR): " + "; ".join(parts)]
+    lines.append(
+        "When a customer asks for the full menu, send this link: "
+        + public_menu_url(profile.workspace_id)
+    )
+    sold_out = [
+        i.name for i in MenuItem.objects.filter(workspace_id=profile.workspace_id, is_available=False)[:10]
+    ]
+    if sold_out:
+        lines.append("Sold out right now: " + ", ".join(sold_out))
+    return "\n".join(lines)
+
+
 def _profile_block(profile: BusinessProfile) -> str:
     lines = [f"Business: {profile.business_name}"]
     if profile.operating_hours:
         lines.append(f"Operating hours: {json.dumps(profile.operating_hours)}")
     if profile.pricing_data:
         lines.append(f"Price list (ZAR): {json.dumps(profile.pricing_data)}")
+    menu = _menu_block(profile)
+    if menu:
+        lines.append(menu)
     if profile.call_out_fee is not None:
         lines.append(f"Call-out fee: R{profile.call_out_fee}")
     if profile.payment_link_url:
@@ -246,7 +281,30 @@ def _profile_block(profile: BusinessProfile) -> str:
     return "\n".join(lines)
 
 
-def draft_reply(profile: BusinessProfile, history: list[tuple[str, str]], incoming: str, *, client=None) -> ReplyDraft:
+def _customer_block(contact) -> str | None:
+    """What the business already knows about this customer, so replies can
+    greet regulars by name, respect dietary notes and treat VIPs well."""
+    if contact is None:
+        return None
+    lines = []
+    if contact.name:
+        lines.append(f"Customer name: {contact.name}")
+    if contact.is_vip:
+        lines.append("This customer is a VIP - treat them especially well.")
+    if contact.visit_count:
+        lines.append(f"They have visited {contact.visit_count} time{'s' if contact.visit_count != 1 else ''} before.")
+    if contact.dietary_notes:
+        lines.append(f"Dietary needs: {contact.dietary_notes}")
+    if contact.birthday:
+        lines.append(f"Birthday on file: {contact.birthday:%d %B} - a warm wish near the day is welcome.")
+    if not lines:
+        return None
+    return "Known about this customer:\n" + "\n".join(lines)
+
+
+def draft_reply(
+    profile: BusinessProfile, history: list[tuple[str, str]], incoming: str, *, client=None, contact=None
+) -> ReplyDraft:
     """Draft one reply. history is (sender_type, body) oldest-first."""
     escalate = needs_human(incoming)
     transcript = "\n".join(
@@ -258,7 +316,9 @@ def draft_reply(profile: BusinessProfile, history: list[tuple[str, str]], incomi
     prompt = (
         f"Today is {now:%A} {now:%d %B %Y}, South Africa time.\n"
         f"{_INDUSTRY_BRIEFS.get(profile.industry, _INDUSTRY_BRIEFS[Industry.GENERAL])}\n"
-        f"{_profile_block(profile)}\n\n"
+        f"{_profile_block(profile)}\n"
+        + (f"{customer}\n" if (customer := _customer_block(contact)) else "")
+        + "\n"
         f"Conversation so far:\n{transcript}\nCustomer: {incoming}\n\n"
         "Reply with JSON only: "
         '{"reply": "...", "intake": {"name": "", "detail": "", "preferred_time": "", "address": "", "policy_number": ""}} '

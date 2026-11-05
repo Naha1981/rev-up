@@ -7,6 +7,7 @@ replies, intake records, and contacts waiting on a human.
 
 import json
 import logging
+import datetime as _dt
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
@@ -207,6 +208,42 @@ def conversation(request, workspace_id, contact_id):
 
 
 @login_required
+@require_http_methods(["POST"])
+def contact_update(request, workspace_id, contact_id):
+    """Owner-kept customer card: name, birthday, dietary, notes, spend, VIP."""
+    workspace = _get_workspace(request, workspace_id)
+    contact = get_object_or_404(Contact, id=contact_id, workspace=workspace)
+    contact.name = (request.POST.get("name") or "").strip()[:120]
+    contact.dietary_notes = (request.POST.get("dietary_notes") or "").strip()[:200]
+    contact.notes = (request.POST.get("notes") or "").strip()
+    contact.is_vip = request.POST.get("is_vip") == "on"
+    birthday_raw = (request.POST.get("birthday") or "").strip()
+    if birthday_raw:
+        try:
+            contact.birthday = _dt.date.fromisoformat(birthday_raw)
+        except ValueError:
+            messages.error(request, "Birthday must be a real date (yyyy-mm-dd).")
+            return redirect("receptionist:conversation", workspace_id=workspace.id, contact_id=contact.id)
+    else:
+        contact.birthday = None
+    spend_raw = (request.POST.get("total_spend") or "").strip().replace(",", ".")
+    if spend_raw:
+        try:
+            spend = round(float(spend_raw), 2)
+            if spend < 0 or spend > 100_000_000:
+                raise ValueError
+            contact.total_spend = spend
+        except (TypeError, ValueError):
+            messages.error(request, "Spend must be a number in rand.")
+            return redirect("receptionist:conversation", workspace_id=workspace.id, contact_id=contact.id)
+    contact.save(
+        update_fields=["name", "dietary_notes", "notes", "is_vip", "birthday", "total_spend", "updated_at"]
+    )
+    messages.success(request, "Customer card saved.")
+    return redirect("receptionist:conversation", workspace_id=workspace.id, contact_id=contact.id)
+
+
+@login_required
 @require_GET
 def bookings(request, workspace_id):
     workspace = _get_workspace(request, workspace_id)
@@ -290,6 +327,16 @@ def booking_action(request, workspace_id, booking_id, action):
     elif action == "done" and booking.status == Booking.Status.CONFIRMED:
         booking.status = Booking.Status.DONE
         booking.save(update_fields=["status"])
+        # Customer history: a finished booking is a visit. Five visits make
+        # a VIP (the owner can untick it on the customer card).
+        contact = booking.contact
+        contact.visit_count = (contact.visit_count or 0) + 1
+        contact.last_visit_at = timezone.now()
+        update = ["visit_count", "last_visit_at", "updated_at"]
+        if contact.visit_count >= 5 and not contact.is_vip:
+            contact.is_vip = True
+            update.append("is_vip")
+        contact.save(update_fields=update)
         # A finished job starts the review pipeline (check-in, review
         # request, reminder). A pipeline hiccup must never break the board.
         try:

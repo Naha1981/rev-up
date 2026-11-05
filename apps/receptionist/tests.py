@@ -888,7 +888,7 @@ class VolumeIsolationTests(TestCase):
     def test_volume_no_cross_tenant_leaks(self, mock_draft, _send):
         from apps.receptionist.services import ReplyDraft
 
-        mock_draft.side_effect = lambda profile, history, incoming: ReplyDraft(
+        mock_draft.side_effect = lambda profile, history, incoming, **kwargs: ReplyDraft(
             body=f"reply for {profile.business_name}"
         )
         workspaces = []

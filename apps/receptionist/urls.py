@@ -20,4 +20,5 @@ urlpatterns = [
     path("setup/your-whatsapp/start/", tenant_connect.tenant_connect_start, name="tenant_wa_start"),
     path("setup/your-whatsapp/callback/", tenant_connect.tenant_callback, name="tenant_wa_callback"),
     path("contacts/<uuid:contact_id>/", views.conversation, name="conversation"),
+    path("contacts/<uuid:contact_id>/card/", views.contact_update, name="contact_update"),
 ]

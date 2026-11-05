@@ -80,6 +80,7 @@ LOCAL_APPS = [
     "apps.api",
     "apps.mcp",
     "apps.radar",
+    "apps.menus",
     "apps.responder",
     "apps.oauth_server",
     "apps.analytics",

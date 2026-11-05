@@ -141,6 +141,15 @@ class Contact(models.Model):
         help_text="Review pipeline position: check_in_sent, review_requested, clicked, issue_flagged, unsubscribed",
     )
     issue_note = models.TextField(blank=True, help_text="Latest issue flagged from a check-in reply")
+    # Customer history (CRM): visits count automatically when a booking is
+    # marked done; spend, birthday, dietary and notes are owner-kept.
+    visit_count = models.PositiveIntegerField(default=0)
+    total_spend = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Lifetime spend in ZAR")
+    last_visit_at = models.DateTimeField(null=True, blank=True)
+    birthday = models.DateField(null=True, blank=True)
+    dietary_notes = models.CharField(max_length=200, blank=True, help_text="Allergies, halaal, preferences")
+    notes = models.TextField(blank=True, help_text="Owner's private notes about this customer")
+    is_vip = models.BooleanField(default=False, help_text="Set automatically at 5 visits; the owner can toggle it")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
