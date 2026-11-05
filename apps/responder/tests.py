@@ -20,7 +20,9 @@ def _workspace(name, industry):
 class MenuContextTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
-            email="responder-owner@example.com", password="testpass123", name="Owner",
+            email="responder-owner@example.com",
+            password="testpass123",
+            name="Owner",
             tos_accepted_at=timezone.now(),
         )
         self.ws = _workspace("Responder Bistro", "restaurant")

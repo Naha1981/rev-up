@@ -481,9 +481,7 @@ class WaitlistEntry(models.Model):
     )
     contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="waitlist_entries")
     party_size = models.PositiveSmallIntegerField(default=2)
-    wanted_time = models.CharField(
-        max_length=200, blank=True, help_text="When they hoped to eat, as they said it."
-    )
+    wanted_time = models.CharField(max_length=200, blank=True, help_text="When they hoped to eat, as they said it.")
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.WAITING)
     offered_at = models.DateTimeField(
         null=True, blank=True, help_text="When a table was offered. The offer expires after offer_minutes."

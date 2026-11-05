@@ -10,6 +10,11 @@ from .models import OrgMembership, WorkspaceMembership
 # membership queries — once per file, and a media-heavy page requests dozens.
 CONTEXT_FREE_PATH_PREFIXES = ("/static/", "/media/")
 
+# Customer-facing routes that carry a workspace_id but must work for anyone,
+# signed in or not: membership is never required and the signed-in user's own
+# workspace context (from __call__) is left untouched.
+PUBLIC_WORKSPACE_ROUTES = {("menus_public", "public")}
+
 
 class RBACMiddleware:
     """Attach org and workspace context to the request.
@@ -98,6 +103,10 @@ class RBACMiddleware:
         # has no workspace in it at all.
         workspace_id = view_kwargs.get("workspace_id")
         if not workspace_id:
+            return None
+
+        match = request.resolver_match
+        if match and (match.app_name, match.url_name) in PUBLIC_WORKSPACE_ROUTES:
             return None
 
         if not hasattr(request, "user") or not request.user.is_authenticated:

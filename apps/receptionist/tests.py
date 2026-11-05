@@ -1395,7 +1395,9 @@ class WaitlistViewTests(TestCase):
         from apps.members.models import WorkspaceMembership
 
         self.user = User.objects.create_user(
-            email="waitlist-owner@example.com", password="testpass123", name="Owner",
+            email="waitlist-owner@example.com",
+            password="testpass123",
+            name="Owner",
             tos_accepted_at=timezone.now(),
         )
         self.ws = _workspace("Waitlist Bistro")
@@ -1431,6 +1433,7 @@ class WaitlistViewTests(TestCase):
 
         self._add()
         entry = WaitlistEntry.objects.get(workspace=self.ws)
+
         def url(action):
             return reverse("receptionist:waitlist_action", args=[self.ws.id, entry.id, action])
 
@@ -1480,15 +1483,15 @@ class WaitlistViewTests(TestCase):
         self._add()
         entry = WaitlistEntry.objects.get(workspace=self.ws)
         other = User.objects.create_user(
-            email="waitlist-outsider@example.com", password="testpass123", name="Outsider",
+            email="waitlist-outsider@example.com",
+            password="testpass123",
+            name="Outsider",
             tos_accepted_at=timezone.now(),
         )
         outsider_ws = _workspace("Outsider Bistro")
         WorkspaceMembership.objects.create(user=other, workspace=outsider_ws)
         self.client.force_login(other)
-        resp = self.client.post(
-            reverse("receptionist:waitlist_action", args=[self.ws.id, entry.id, "cancel"])
-        )
+        resp = self.client.post(reverse("receptionist:waitlist_action", args=[self.ws.id, entry.id, "cancel"]))
         self.assertEqual(resp.status_code, 403)
         entry.refresh_from_db()
         self.assertEqual(entry.status, WaitlistEntry.Status.WAITING)

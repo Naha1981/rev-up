@@ -736,9 +736,7 @@ def waitlist(request, workspace_id):
         name = (request.POST.get("name") or "").strip()
         party = request.POST.get("party_size") or "2"
         if wa_id:
-            contact, _ = Contact.objects.get_or_create(
-                workspace=workspace, wa_id=wa_id, defaults={"name": name}
-            )
+            contact, _ = Contact.objects.get_or_create(workspace=workspace, wa_id=wa_id, defaults={"name": name})
             if name and contact.name != name:
                 contact.name = name
                 contact.save(update_fields=["name", "updated_at"])
@@ -780,7 +778,9 @@ def waitlist_action(request, workspace_id, entry_id, action):
         entry.status = WaitlistEntry.Status.OFFERED
         entry.offered_at = timezone.now()
         entry.save(update_fields=["status", "offered_at"])
-        messages.success(request, f"Table offered to {entry.contact}. The offer stands for {entry.offer_minutes} minutes.")
+        messages.success(
+            request, f"Table offered to {entry.contact}. The offer stands for {entry.offer_minutes} minutes."
+        )
     elif action == "accept" and entry.status == WaitlistEntry.Status.OFFERED:
         entry.status = WaitlistEntry.Status.ACCEPTED
         entry.save(update_fields=["status"])
