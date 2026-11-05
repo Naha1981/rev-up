@@ -3,8 +3,8 @@ from django.contrib.auth import get_user_model
 from django.test import Client
 from django.utils import timezone
 
-from apps.organizations.models import Organization
 from apps.members.models import WorkspaceMembership
+from apps.organizations.models import Organization
 from apps.workspaces.models import Workspace
 
 from .models import BusinessProfile, CalendarConnection, ZernioChannel

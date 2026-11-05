@@ -1,5 +1,4 @@
-from datetime import date, datetime, timedelta
-from unittest.mock import patch
+from datetime import date, datetime
 
 from django.test import TestCase
 
@@ -31,7 +30,9 @@ class HolidaySignalTests(TestCase):
     def test_reconciliation_day_signalled_within_window(self):
         ws = make_workspace()
         items = build_demand_items(ws, "", now=datetime(2026, 12, 10, 9, 0))
-        self.assertTrue(any("Day of Reconciliation in 6 days" in i["title"] for i in items), [i["title"] for i in items])
+        self.assertTrue(
+            any("Day of Reconciliation in 6 days" in i["title"] for i in items), [i["title"] for i in items]
+        )
 
     def test_no_holiday_signal_outside_window(self):
         ws = make_workspace()

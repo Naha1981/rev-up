@@ -22,7 +22,7 @@ jobs:
         run: |
           status=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
             -H "X-Run-Due-Token: ${{ secrets.INTERNAL_CRON_TOKEN }}" \
-            --max-time 30 \
+            --max-time 120 \
             https://revup.nahalabs.co.za/internal/run-due/)
           echo "run-due responded: $status"
           test "$status" = "200"

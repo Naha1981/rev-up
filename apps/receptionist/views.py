@@ -5,9 +5,9 @@ rand, rules) and watch the receptionist work: inbound messages, drafted
 replies, intake records, and contacts waiting on a human.
 """
 
+import datetime as _dt
 import json
 import logging
-import datetime as _dt
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
@@ -238,9 +238,7 @@ def contact_update(request, workspace_id, contact_id):
         except (TypeError, ValueError):
             messages.error(request, "Spend must be a number in rand.")
             return redirect("receptionist:conversation", workspace_id=workspace.id, contact_id=contact.id)
-    contact.save(
-        update_fields=["name", "dietary_notes", "notes", "is_vip", "birthday", "total_spend", "updated_at"]
-    )
+    contact.save(update_fields=["name", "dietary_notes", "notes", "is_vip", "birthday", "total_spend", "updated_at"])
     messages.success(request, "Customer card saved.")
     return redirect("receptionist:conversation", workspace_id=workspace.id, contact_id=contact.id)
 

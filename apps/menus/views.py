@@ -95,11 +95,9 @@ def item_action(request, workspace_id, item_id, action):
 def public(request, workspace_id):
     """Customer-facing menu page. No login; shows available items only."""
     workspace = get_object_or_404(Workspace, id=workspace_id)
-    items = list(
-        MenuItem.objects.filter(workspace=workspace, is_available=True).select_related("category")
-    )
+    items = list(MenuItem.objects.filter(workspace=workspace, is_available=True).select_related("category"))
     profile = getattr(workspace, "receptionist_profile", None)
-    business_name = (profile.business_name if profile and profile.business_name else workspace.name)
+    business_name = profile.business_name if profile and profile.business_name else workspace.name
     grouped = []
     seen = {}
     for item in items:

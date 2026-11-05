@@ -33,9 +33,7 @@ class MenuItem(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     workspace = models.ForeignKey("workspaces.Workspace", on_delete=models.CASCADE, related_name="menu_items")
-    category = models.ForeignKey(
-        MenuCategory, null=True, blank=True, on_delete=models.SET_NULL, related_name="items"
-    )
+    category = models.ForeignKey(MenuCategory, null=True, blank=True, on_delete=models.SET_NULL, related_name="items")
     name = models.CharField(max_length=120)
     description = models.CharField(max_length=300, blank=True, default="")
     price = models.DecimalField(max_digits=10, decimal_places=2)

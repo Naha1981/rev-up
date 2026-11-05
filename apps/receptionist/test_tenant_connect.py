@@ -114,8 +114,9 @@ class TestSaveKey:
         # The stored value is not the plaintext.
         from django.db import connection as db_connection
 
+        pk_literal = conn.pk.hex if db_connection.vendor == "sqlite" else str(conn.pk)
         with db_connection.cursor() as cur:
-            cur.execute("select api_key from receptionist_tenantmessagingconnection where id = %s", [str(conn.pk)])
+            cur.execute("select api_key from receptionist_tenantmessagingconnection where id = %s", [pk_literal])
             raw = cur.fetchone()[0]
         assert raw != "tenant-key"
 

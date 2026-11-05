@@ -33,9 +33,11 @@ def test_draft_from_signal_creates_review_post(ws_owner):
     url = reverse("radar:draft_from_signal", args=[ws.id])
     fake = [Draft(topic="Payday in 2 days", caption="Payday Friday! Book your table now.", hashtags=["#JoburgEats"])]
     # the view imports both helpers inside the function, so patch at the source module
-    with patch("apps.content_agent.services.draft_posts", return_value=fake):
-        with patch("apps.content_agent.services.queue_drafts_for_review", return_value=["post-id"]) as mq:
-            resp = client.post(url, {"title": "Payday in 2 days (the 25th)", "summary": "Customers get paid soon."})
+    with (
+        patch("apps.content_agent.services.draft_posts", return_value=fake),
+        patch("apps.content_agent.services.queue_drafts_for_review", return_value=["post-id"]) as mq,
+    ):
+        resp = client.post(url, {"title": "Payday in 2 days (the 25th)", "summary": "Customers get paid soon."})
     assert resp.status_code == 302
     assert mq.called
 

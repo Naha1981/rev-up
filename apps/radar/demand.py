@@ -11,7 +11,7 @@ import json
 import logging
 import urllib.parse
 import urllib.request
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
 
 from django.utils import timezone
 

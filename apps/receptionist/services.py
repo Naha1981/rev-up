@@ -239,8 +239,7 @@ def _menu_block(profile: BusinessProfile) -> str | None:
     from apps.menus.models import MenuItem, public_menu_url
 
     items = list(
-        MenuItem.objects.filter(workspace_id=profile.workspace_id, is_available=True)
-        .select_related("category")[:60]
+        MenuItem.objects.filter(workspace_id=profile.workspace_id, is_available=True).select_related("category")[:60]
     )
     if not items:
         return None
@@ -251,13 +250,8 @@ def _menu_block(profile: BusinessProfile) -> str | None:
             entry = f"{entry} ({item.category.name})"
         parts.append(entry)
     lines = ["Menu (ZAR): " + "; ".join(parts)]
-    lines.append(
-        "When a customer asks for the full menu, send this link: "
-        + public_menu_url(profile.workspace_id)
-    )
-    sold_out = [
-        i.name for i in MenuItem.objects.filter(workspace_id=profile.workspace_id, is_available=False)[:10]
-    ]
+    lines.append("When a customer asks for the full menu, send this link: " + public_menu_url(profile.workspace_id))
+    sold_out = [i.name for i in MenuItem.objects.filter(workspace_id=profile.workspace_id, is_available=False)[:10]]
     if sold_out:
         lines.append("Sold out right now: " + ", ".join(sold_out))
     return "\n".join(lines)
@@ -316,9 +310,7 @@ def draft_reply(
     prompt = (
         f"Today is {now:%A} {now:%d %B %Y}, South Africa time.\n"
         f"{_INDUSTRY_BRIEFS.get(profile.industry, _INDUSTRY_BRIEFS[Industry.GENERAL])}\n"
-        f"{_profile_block(profile)}\n"
-        + (f"{customer}\n" if (customer := _customer_block(contact)) else "")
-        + "\n"
+        f"{_profile_block(profile)}\n" + (f"{customer}\n" if (customer := _customer_block(contact)) else "") + "\n"
         f"Conversation so far:\n{transcript}\nCustomer: {incoming}\n\n"
         "Reply with JSON only: "
         '{"reply": "...", "intake": {"name": "", "detail": "", "preferred_time": "", "address": "", "policy_number": ""}} '
