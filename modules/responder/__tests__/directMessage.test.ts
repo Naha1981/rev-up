@@ -38,7 +38,7 @@ test("try-it: restaurant enquiry without a phone gets a business reply with the 
     assert.match(text, /Noted: 4 people, this Saturday at 7pm, vegetarian noted\./);
     assert.doesNotMatch(text, /How many people|What day and time|dietary needs or allergies/);
     assert.match(text, /I'll check with the kitchen on vegetarian options/);
-    assert.match(text, /I'll confirm your table here on WhatsApp shortly\./);
+    assert.match(text, /I'll confirm your table here on WhatsApp as soon as it's checked\./);
     assert.doesNotMatch(text, /property|viewing|bond/i);
     assert.equal(r.replies[0]!.to, "+27820000001");
   } finally {
@@ -99,7 +99,7 @@ test("try-it: details already given are acknowledged, not re-asked", async () =>
     assert.match(text, /Noted: 4 people, this Saturday at 7pm, vegetarian noted\./);
     assert.doesNotMatch(text, /How many people|What day and time|dietary needs or allergies/);
     assert.match(text, /Vegetarian options: QA Veggie Bowl R89\.00 \(vegetarian\)/);
-    assert.match(text, /I'll confirm your table here on WhatsApp shortly\./);
+    assert.match(text, /I'll confirm your table here on WhatsApp as soon as it's checked\./);
     assert.doesNotMatch(text, /quick question/);
   } finally {
     await svc.stop();
@@ -119,6 +119,52 @@ test("try-it: dietary ask without a matching menu item gets an honest fallback",
     assert.match(text, /Noted: 2 people, Friday evening, vegan noted\./);
     assert.match(text, /I'll check with the kitchen on vegan options and let you know\./);
     assert.doesNotMatch(text, /How many people|What day and time/);
+  } finally {
+    await svc.stop();
+  }
+});
+
+test("try-it: tester scenario - number words, intent, dietary+price asks, empty menu", async () => {
+  const port = 39500 + Math.floor(Math.random() * 500);
+  const svc = await startService({ PORT: String(port), RESPONDER_SELFTEST: "1" } as NodeJS.ProcessEnv);
+  try {
+    // General preset, workspace with NO menu: honest fallbacks, no generic re-asks
+    const r = await selftest(
+      port,
+      "I'd like a table for four this Friday at 7pm. Do you have halaal chicken and a vegetarian main, and what do they cost?",
+      { "x-industry": "general", "x-business-name": "Naha Thabiso's Workspace" },
+    );
+    assert.equal(r.status, "replied");
+    const text = r.replies[0]!.text;
+    assert.match(text, /enquiry about a table/);
+    assert.match(text, /Noted: 4 people, this Friday at 7pm, vegetarian and halaal noted\./);
+    assert.doesNotMatch(text, /What exactly do you need/);
+    assert.match(text, /I'll check with the kitchen on halaal options and let you know\./);
+    assert.match(text, /I'll check with the kitchen on vegetarian options and let you know\./);
+    assert.match(text, /I'll confirm our current prices with the kitchen and let you know\./);
+    assert.match(text, /I'll pass this to the team and they'll confirm with you on WhatsApp\./);
+  } finally {
+    await svc.stop();
+  }
+});
+
+test("try-it: general workspace with a seeded menu answers dietary and price from it", async () => {
+  const port = 39700 + Math.floor(Math.random() * 200);
+  const svc = await startService({ PORT: String(port), RESPONDER_SELFTEST: "1" } as NodeJS.ProcessEnv);
+  try {
+    const r = await selftest(
+      port,
+      "I'd like a table for four this Friday at 7pm. Do you have halaal chicken and a vegetarian main, and what do they cost?",
+      {
+        "x-industry": "general",
+        "x-menu-context": "Halaal Chicken R129.00 (halaal); Veggie Main R95.00 (vegetarian)",
+      },
+    );
+    const text = r.replies[0]!.text;
+    assert.match(text, /Halaal options: Halaal Chicken R129\.00 \(halaal\)/);
+    assert.match(text, /Vegetarian options: Veggie Main R95\.00 \(vegetarian\)/);
+    assert.doesNotMatch(text, /I'll confirm our current prices/);
+    assert.match(text, /From our current menu:/);
   } finally {
     await svc.stop();
   }

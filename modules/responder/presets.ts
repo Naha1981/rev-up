@@ -29,7 +29,7 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
     questionKeys: ["what", "when", "reach"],
     cta: "I can help you right away.",
     about: "",
-    nextStep: "I'll pass this to the team and confirm here on WhatsApp shortly.",
+    nextStep: "I'll pass this to the team and they'll confirm with you on WhatsApp.",
   },
   restaurant: {
     tone: "warm and welcoming",
@@ -41,7 +41,7 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
     questionKeys: ["party", "when", "dietary"],
     cta: "I can check our tables and book you in right away.",
     about: "a table",
-    nextStep: "I'll confirm your table here on WhatsApp shortly.",
+    nextStep: "I'll confirm your table here on WhatsApp as soon as it's checked.",
   },
   real_estate: {
     tone: "warm and professional",

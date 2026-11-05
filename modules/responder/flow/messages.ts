@@ -16,8 +16,8 @@ export function instantReply(
 ): string {
   const p = preset ?? presetFor("real_estate"); // historical default copy
   const named = enquiry.listingTitle ?? (enquiry.listingRef ? `listing ${enquiry.listingRef}` : null);
-  const subject = named ?? (p.about || null);
   const given = extractGivenDetails(enquiry.message ?? "");
+  const subject = named ?? (p.about || (given.intent === "table" ? "a table" : null));
   const lines = [
     subject
       ? `Hi ${firstName(enquiry.leadName)}, thanks for your enquiry about ${subject}${enquiry.price ? ` (${enquiry.price})` : ""}.`
@@ -32,10 +32,8 @@ export function instantReply(
   if (given.dietary.length) noted.push(`${given.dietary.join(" and ")} noted`);
   if (noted.length) lines.push(`Noted: ${noted.join(", ")}.`);
 
-  if (menuContext) {
-    lines.push(`From our current menu: ${menuContext}`);
-    lines.push(...dietaryAnswers(given, menuContext));
-  }
+  if (menuContext) lines.push(`From our current menu: ${menuContext}`);
+  lines.push(...dietaryAnswers(given, menuContext));
 
   const remaining = p.questions.filter((_, i) => !answered(p.questionKeys[i] ?? "what", given));
   if (remaining.length === 1) {
@@ -59,15 +57,16 @@ function answered(key: QuestionKey, given: GivenDetails): boolean {
     case "party": return given.partySize !== undefined;
     case "when": return given.when !== undefined;
     case "dietary": return given.dietary.length > 0;
+    case "what": return given.intent !== undefined;
     default: return false;
   }
 }
 
 /** Answer "what vegetarian options do you have?" straight from the menu when
  * items carry dietary tags ("Name R129 (vegetarian)"); honest fallback otherwise. */
-function dietaryAnswers(given: GivenDetails, menuContext: string): string[] {
+function dietaryAnswers(given: GivenDetails, menuContext: string | undefined): string[] {
   const lines: string[] = [];
-  const entries = menuContext.split(";").map((e) => e.trim()).filter(Boolean);
+  const entries = (menuContext ?? "").split(";").map((e) => e.trim()).filter(Boolean);
   for (const need of given.dietary) {
     if (need === "allergy") {
       lines.push("Please tell us the allergy and we will make sure the kitchen knows.");
@@ -79,6 +78,9 @@ function dietaryAnswers(given: GivenDetails, menuContext: string): string[] {
     } else {
       lines.push(`I'll check with the kitchen on ${need} options and let you know.`);
     }
+  }
+  if (given.askedPrice && !entries.length) {
+    lines.push("I'll confirm our current prices with the kitchen and let you know.");
   }
   return lines;
 }

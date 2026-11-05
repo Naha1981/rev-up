@@ -54,9 +54,7 @@ def _sidecar_post(path, body: bytes, industry: str = "general", menu_context: st
 
 
 def _menu_context(workspace) -> str:
-    """Short menu summary for the responder's dry-run reply (restaurant workspaces)."""
-    if workspace.industry != "restaurant":
-        return ""
+    """Short menu summary for the responder's dry-run reply (any workspace with a menu)."""
     try:
         from apps.menus.models import MenuItem
     except ImportError:

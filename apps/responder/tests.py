@@ -40,9 +40,10 @@ class MenuContextTests(TestCase):
         self.assertIn("Veggie Bowl R89.00 (vegetarian)", ctx)
         self.assertNotIn("Old Special", ctx)
 
-    def test_non_restaurant_workspace_gets_no_menu(self):
+    def test_non_restaurant_workspace_with_a_menu_also_gets_summary(self):
         ws = _workspace("Responder Salon", "salon")
-        self.assertEqual(_menu_context(ws), "")
+        MenuItem.objects.create(workspace=ws, name="Gel Nails", price="250.00")
+        self.assertIn("Gel Nails R250.00", _menu_context(ws))
 
     def test_restaurant_without_menu_gets_empty(self):
         self.assertEqual(_menu_context(self.ws), "")
