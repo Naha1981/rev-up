@@ -38,8 +38,21 @@ def _sidecar_get(path):
         return None, str(exc)
 
 
-def _sidecar_post(path, body: bytes, industry: str = "general", menu_context: str = "", business_name: str = ""):
-    headers = {"Content-Type": "text/plain", "X-Industry": industry}
+def _sidecar_post(
+    path,
+    body: bytes,
+    industry: str = "general",
+    menu_context: str = "",
+    business_name: str = "",
+    calendar_connected: bool = False,
+    whatsapp_connected: bool = False,
+):
+    headers = {
+        "Content-Type": "text/plain",
+        "X-Industry": industry,
+        "X-Calendar-Connected": "1" if calendar_connected else "0",
+        "X-Whatsapp-Connected": "1" if whatsapp_connected else "0",
+    }
     if menu_context:
         headers["X-Menu-Context"] = menu_context
     if business_name:
@@ -51,6 +64,24 @@ def _sidecar_post(path, body: bytes, industry: str = "general", menu_context: st
     )
     with urllib.request.urlopen(req, timeout=SIDECAR_TIMEOUT) as resp:
         return json.loads(resp.read().decode("utf-8"))
+
+
+def _connection_state(workspace):
+    """(calendar_connected, whatsapp_connected) for honest reply promises."""
+    from apps.receptionist.models import (
+        CalendarConnection,
+        TenantMessagingConnection,
+        ZernioChannel,
+    )
+
+    calendar = CalendarConnection.objects.filter(workspace=workspace).exists()
+    whatsapp = (
+        ZernioChannel.objects.filter(workspace=workspace).exists()
+        or TenantMessagingConnection.objects.filter(
+            workspace=workspace, status=TenantMessagingConnection.Status.CONNECTED
+        ).exists()
+    )
+    return calendar, whatsapp
 
 
 def _menu_context(workspace) -> str:
@@ -100,6 +131,7 @@ def dashboard(request, workspace_id):
                 workspace.industry,
                 _menu_context(workspace),
                 workspace.name,
+                *_connection_state(workspace),
             )
         except Exception:
             logger.exception("responder: test enquiry failed for workspace %s", workspace.id)

@@ -1495,3 +1495,120 @@ class WaitlistViewTests(TestCase):
         self.assertEqual(resp.status_code, 403)
         entry.refresh_from_db()
         self.assertEqual(entry.status, WaitlistEntry.Status.WAITING)
+
+
+class LoyaltyTests(TestCase):
+    """Loyalty: welcome bonus, earn on done bookings, vouchers."""
+
+    def setUp(self):
+        from apps.accounts.models import User
+        from apps.members.models import WorkspaceMembership
+
+        self.user = User.objects.create_user(
+            email="loyalty-owner@example.com",
+            password="testpass123",
+            name="Owner",
+            tos_accepted_at=timezone.now(),
+        )
+        self.ws = _workspace("Loyalty Bistro")
+        WorkspaceMembership.objects.create(user=self.user, workspace=self.ws)
+        self.client.force_login(self.user)
+        self.contact = Contact.objects.create(workspace=self.ws, wa_id="27821119999", name="Loyal Lerato")
+
+    def _done_booking(self):
+        booking = Booking.objects.create(workspace=self.ws, contact=self.contact, status=Booking.Status.CONFIRMED)
+        self.client.post(reverse("receptionist:booking_action", args=[self.ws.id, booking.id, "done"]))
+        return booking
+
+    def test_done_booking_awards_welcome_and_points_once(self):
+        from .models import LoyaltyAccount, LoyaltyTransaction
+
+        booking = self._done_booking()
+        account = LoyaltyAccount.objects.get(workspace=self.ws, contact=self.contact)
+        # 25 welcome + 10 for the visit
+        self.assertEqual(account.balance, 35)
+        self.assertTrue(account.welcomed)
+        # marking done again (impossible via the view, but the service must be idempotent)
+        from . import loyalty as _loyalty
+
+        _loyalty.award_for_booking(booking)
+        account.refresh_from_db()
+        self.assertEqual(account.balance, 35)
+        self.assertEqual(LoyaltyTransaction.objects.filter(account=account).count(), 2)
+
+    def test_disabled_loyalty_awards_nothing(self):
+        from .loyalty import settings_for
+        from .models import LoyaltyAccount
+
+        settings = settings_for(self.ws)
+        settings.enabled = False
+        settings.save()
+        self._done_booking()
+        self.assertFalse(LoyaltyAccount.objects.filter(workspace=self.ws).exists())
+
+    def test_issue_voucher_spends_points(self):
+        from .loyalty import account_for, issue_voucher
+        from .models import Voucher
+
+        account = account_for(self.ws, self.contact)  # 25 welcome
+        with self.assertRaises(ValueError):
+            issue_voucher(self.ws, self.contact)  # needs 100
+        account.balance = 120
+        account.save(update_fields=["balance"])
+        voucher = issue_voucher(self.ws, self.contact)
+        account.refresh_from_db()
+        self.assertEqual(account.balance, 20)
+        self.assertEqual(voucher.status, Voucher.Status.ACTIVE)
+        self.assertEqual(voucher.amount_rand, 50)
+        self.assertTrue(voucher.code)
+
+    def test_redeem_and_expiry(self):
+        from .loyalty import account_for, issue_voucher, redeem_voucher
+        from .models import Voucher
+
+        account = account_for(self.ws, self.contact)
+        account.balance = 100
+        account.save(update_fields=["balance"])
+        voucher = issue_voucher(self.ws, self.contact)
+        self.assertTrue(redeem_voucher(voucher))
+        self.assertFalse(redeem_voucher(voucher))  # already used
+        # expired voucher cannot be redeemed
+        account.balance = 100
+        account.save(update_fields=["balance"])
+        v2 = issue_voucher(self.ws, self.contact)
+        v2.expires_at = timezone.now() - timedelta(days=1)
+        v2.save(update_fields=["expires_at"])
+        self.assertFalse(redeem_voucher(v2))
+        v2.refresh_from_db()
+        self.assertEqual(v2.status, Voucher.Status.EXPIRED)
+
+    def test_balance_line(self):
+        from .loyalty import account_for, balance_line
+
+        account = account_for(self.ws, self.contact)
+        line = balance_line(self.ws, self.contact)
+        self.assertIn("25 points", line)
+        self.assertIn("75 more", line)
+        account.balance = 100
+        account.save(update_fields=["balance"])
+        self.assertIn("enough for a R50 voucher", balance_line(self.ws, self.contact))
+
+    def test_loyalty_screen_and_isolation(self):
+        from .loyalty import account_for
+
+        account_for(self.ws, self.contact)
+        resp = self.client.get(reverse("receptionist:loyalty", args=[self.ws.id]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Loyal Lerato")
+        from apps.accounts.models import User
+        from apps.members.models import WorkspaceMembership
+
+        other = User.objects.create_user(
+            email="loyalty-outsider@example.com",
+            password="testpass123",
+            name="Out",
+            tos_accepted_at=timezone.now(),
+        )
+        WorkspaceMembership.objects.create(user=other, workspace=_workspace("Other Bistro"))
+        self.client.force_login(other)
+        self.assertEqual(self.client.get(reverse("receptionist:loyalty", args=[self.ws.id])).status_code, 403)

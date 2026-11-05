@@ -13,6 +13,7 @@ export function instantReply(
   agentName: string,
   preset?: IndustryPreset,
   menuContext?: string,
+  connections?: { calendarConnected?: boolean; whatsappConnected?: boolean },
 ): string {
   const p = preset ?? presetFor("real_estate"); // historical default copy
   const named = enquiry.listingTitle ?? (enquiry.listingRef ? `listing ${enquiry.listingRef}` : null);
@@ -22,7 +23,7 @@ export function instantReply(
     subject
       ? `Hi ${firstName(enquiry.leadName)}, thanks for your enquiry about ${subject}${enquiry.price ? ` (${enquiry.price})` : ""}.`
       : `Hi ${firstName(enquiry.leadName)}, thanks for getting in touch.`,
-    `I'm ${agentName}'s assistant - ${p.cta}`,
+    `I'm ${agentName}'s assistant - ${connections?.calendarConnected === false ? p.ctaOffline : p.cta}`,
   ];
 
   // Acknowledge what the customer already told us instead of asking again.
@@ -48,7 +49,7 @@ export function instantReply(
       `3) ${remaining[2]}`,
     );
   }
-  lines.push(p.nextStep);
+  lines.push(connections?.whatsappConnected === false ? p.nextStepOffline : p.nextStep);
   return lines.join("\n");
 }
 

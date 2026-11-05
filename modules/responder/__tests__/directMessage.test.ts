@@ -169,3 +169,48 @@ test("try-it: general workspace with a seeded menu answers dietary and price fro
     await svc.stop();
   }
 });
+
+test("try-it: disconnected calendar/WhatsApp softens booking promises", async () => {
+  const port = 39200 + Math.floor(Math.random() * 300);
+  const svc = await startService({ PORT: String(port), RESPONDER_SELFTEST: "1" } as NodeJS.ProcessEnv);
+  try {
+    const r = await selftest(
+      port,
+      "I'd like a table for four this Friday at 7pm please",
+      {
+        "x-industry": "restaurant",
+        "x-calendar-connected": "0",
+        "x-whatsapp-connected": "0",
+        "x-business-name": "QA Grill House",
+      },
+    );
+    const text = r.replies[0]!.text;
+    assert.match(text, /I can take your details and the team will confirm your table\./);
+    assert.match(text, /I'll check with the team and confirm your table\./);
+    assert.doesNotMatch(text, /book you in right away|here on WhatsApp/);
+  } finally {
+    await svc.stop();
+  }
+});
+
+test("try-it: connected calendar/WhatsApp keeps the direct booking promise", async () => {
+  const port = 39900 + Math.floor(Math.random() * 90);
+  const svc = await startService({ PORT: String(port), RESPONDER_SELFTEST: "1" } as NodeJS.ProcessEnv);
+  try {
+    const r = await selftest(
+      port,
+      "I'd like a table for four this Friday at 7pm please",
+      {
+        "x-industry": "restaurant",
+        "x-calendar-connected": "1",
+        "x-whatsapp-connected": "1",
+        "x-business-name": "QA Grill House",
+      },
+    );
+    const text = r.replies[0]!.text;
+    assert.match(text, /I can check our tables and book you in right away\./);
+    assert.match(text, /I'll confirm your table here on WhatsApp as soon as it's checked\./);
+  } finally {
+    await svc.stop();
+  }
+});

@@ -362,6 +362,18 @@ def booking_action(request, workspace_id, booking_id, action):
             _reminders.schedule_for_booking(booking)
         except Exception:
             logger.exception("reminders: scheduling failed for booking %s", booking.id)
+        # Loyalty: points for the completed visit.
+        try:
+            from . import loyalty as _loyalty
+
+            account = _loyalty.award_for_booking(booking)
+            if account is not None:
+                messages.success(
+                    request,
+                    f"{booking.contact} now has {account.balance} loyalty points.",
+                )
+        except Exception:
+            logger.exception("loyalty: awarding failed for booking %s", booking.id)
         messages.success(request, "Booking marked done.")
     elif action == "cancel" and booking.status in (Booking.Status.REQUESTED, Booking.Status.CONFIRMED):
         booking.status = Booking.Status.CANCELLED
@@ -792,3 +804,85 @@ def waitlist_action(request, workspace_id, entry_id, action):
     else:
         messages.error(request, "That change does not apply to this entry.")
     return redirect("receptionist:waitlist", workspace_id=workspace.id)
+
+
+@login_required
+def loyalty(request, workspace_id):
+    """Loyalty screen: members with balances, vouchers, and the rules form."""
+    workspace = _get_workspace(request, workspace_id)
+    from . import loyalty as _loyalty
+    from .models import LoyaltyAccount, Voucher
+
+    settings = _loyalty.settings_for(workspace)
+    if request.method == "POST":
+        form = request.POST.get("form", "")
+        if form == "settings":
+            settings.enabled = request.POST.get("enabled") == "on"
+            for field, _cast in [
+                ("points_per_visit", int),
+                ("welcome_bonus", int),
+                ("points_for_voucher", int),
+                ("voucher_value_rand", int),
+                ("voucher_valid_days", int),
+            ]:
+                raw = (request.POST.get(field) or "").strip()
+                if raw.isdigit():
+                    setattr(settings, field, max(0, min(100000, int(raw))))
+            settings.save()
+            messages.success(request, "Loyalty rules saved.")
+        elif form == "issue":
+            contact = get_object_or_404(Contact, id=request.POST.get("contact_id"), workspace=workspace)
+            try:
+                voucher = _loyalty.issue_voucher(workspace, contact)
+                messages.success(
+                    request,
+                    f"Voucher {voucher.code} (R{voucher.amount_rand}) issued to {contact}.",
+                )
+            except ValueError as exc:
+                messages.error(request, str(exc))
+        return redirect("receptionist:loyalty", workspace_id=workspace.id)
+
+    accounts = list(
+        LoyaltyAccount.objects.filter(workspace=workspace).select_related("contact").order_by("-balance")[:100]
+    )
+    vouchers = list(Voucher.objects.filter(workspace=workspace).select_related("contact")[:50])
+    now = timezone.now()
+    for v in vouchers:
+        if v.expired(now):
+            v.status = Voucher.Status.EXPIRED
+            v.save(update_fields=["status"])
+    return render(
+        request,
+        "receptionist/loyalty.html",
+        {
+            "workspace": workspace,
+            "settings": settings,
+            "accounts": accounts,
+            "vouchers": vouchers,
+            "contacts": Contact.objects.filter(workspace=workspace).order_by("name")[:200],
+        },
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def voucher_action(request, workspace_id, voucher_id, action):
+    workspace = _get_workspace(request, workspace_id)
+    from . import loyalty as _loyalty
+    from .models import Voucher
+
+    voucher = get_object_or_404(Voucher, id=voucher_id, workspace=workspace)
+    if action == "redeem":
+        if _loyalty.redeem_voucher(voucher):
+            messages.success(request, f"Voucher {voucher.code} redeemed.")
+        else:
+            messages.error(
+                request, f"Voucher {voucher.code} is {voucher.get_status_display().lower()} - it can't be redeemed."
+            )
+    elif action == "cancel" and voucher.status == Voucher.Status.ACTIVE:
+        voucher.status = Voucher.Status.CANCELLED
+        voucher.save(update_fields=["status"])
+        messages.success(request, f"Voucher {voucher.code} cancelled.")
+    else:
+        messages.error(request, "That change does not apply to this voucher.")
+    return redirect("receptionist:loyalty", workspace_id=workspace.id)

@@ -129,6 +129,10 @@ export async function startService(env: NodeJS.ProcessEnv = process.env): Promis
           const industry = (req.headers["x-industry"] as string | undefined) ?? "general";
           const menuContext = (req.headers["x-menu-context"] as string | undefined) ?? undefined;
           const businessName = (req.headers["x-business-name"] as string | undefined) ?? undefined;
+          const connFlag = (name: string): boolean | undefined => {
+            const v = req.headers[name] as string | undefined;
+            return v === undefined ? undefined : v === "1";
+          };
           const result = await processDirectMessage(raw, {
             whatsApp: capture,
             store: testStore,
@@ -137,6 +141,8 @@ export async function startService(env: NodeJS.ProcessEnv = process.env): Promis
               ...deps.convoOpts,
               preset: presetFor(industry),
               menuContext,
+              calendarConnected: connFlag("x-calendar-connected"),
+              whatsappConnected: connFlag("x-whatsapp-connected"),
               ...(businessName ? { agentName: businessName } : {}),
             },
           });

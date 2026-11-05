@@ -34,6 +34,9 @@ export interface ConversationOptions {
   agentName: string;
   calendar: BookingCalendar;
   preset?: import("../presets.js").IndustryPreset;
+  /** Connection state of the workspace; undefined means "unknown, assume connected". */
+  calendarConnected?: boolean;
+  whatsappConnected?: boolean;
   /** Short "name Rprice, ..." line from the business's saved menu, when available. */
   menuContext?: string;
 }
@@ -82,7 +85,12 @@ export class LeadConversation {
 
   /** The instant first reply sent seconds after the enquiry arrives. */
   initialMessages(): string[] {
-    return [msg.instantReply(this.enquiry, this.opts.agentName, this.opts.preset, this.opts.menuContext)];
+    return [
+      msg.instantReply(this.enquiry, this.opts.agentName, this.opts.preset, this.opts.menuContext, {
+        calendarConnected: this.opts.calendarConnected,
+        whatsappConnected: this.opts.whatsappConnected,
+      }),
+    ];
   }
 
   async handleReply(text: string): Promise<ReplyResult> {

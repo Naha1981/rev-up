@@ -16,6 +16,10 @@ export interface IndustryPreset {
   about: string;
   /** Closing line confirming what happens next. */
   nextStep: string;
+  /** cta when no calendar is connected (we cannot book right away). */
+  ctaOffline: string;
+  /** nextStep when no WhatsApp line is connected (we cannot confirm on WhatsApp). */
+  nextStepOffline: string;
 }
 
 export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
@@ -30,6 +34,8 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
     cta: "I can help you right away.",
     about: "",
     nextStep: "I'll pass this to the team and they'll confirm with you on WhatsApp.",
+    ctaOffline: "I can take your details and the team will confirm.",
+    nextStepOffline: "I'll pass this to the team and they'll confirm with you.",
   },
   restaurant: {
     tone: "warm and welcoming",
@@ -42,6 +48,8 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
     cta: "I can check our tables and book you in right away.",
     about: "a table",
     nextStep: "I'll confirm your table here on WhatsApp as soon as it's checked.",
+    ctaOffline: "I can take your details and the team will confirm your table.",
+    nextStepOffline: "I'll check with the team and confirm your table.",
   },
   real_estate: {
     tone: "warm and professional",
@@ -54,6 +62,8 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
     cta: "I can book you in for a viewing right away.",
     about: "the property",
     nextStep: "I'll confirm your viewing here on WhatsApp shortly.",
+    ctaOffline: "I can take your details and the agent will confirm the viewing.",
+    nextStepOffline: "I'll check with the agent and confirm your viewing.",
   },
   dental: {
     tone: "caring and reassuring",
@@ -66,6 +76,8 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
     cta: "I can book your appointment right away.",
     about: "your appointment",
     nextStep: "I'll confirm your appointment here on WhatsApp shortly.",
+    ctaOffline: "I can take your details and the practice will confirm your appointment.",
+    nextStepOffline: "I'll check with the practice and confirm your appointment.",
   },
   auto: {
     tone: "helpful and energetic",
@@ -78,6 +90,8 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
     cta: "I can set up a test drive for you right away.",
     about: "the car",
     nextStep: "I'll confirm your test drive here on WhatsApp shortly.",
+    ctaOffline: "I can take your details and the team will confirm the test drive.",
+    nextStepOffline: "I'll check with the team and confirm your test drive.",
   },
 };
 

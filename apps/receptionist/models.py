@@ -505,3 +505,102 @@ class WaitlistEntry(models.Model):
 
     def __str__(self) -> str:
         return f"{self.contact} party of {self.party_size} ({self.status})"
+
+
+class LoyaltySettings(models.Model):
+    """Per-workspace loyalty rules. One row per workspace, editable on the Loyalty screen."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.OneToOneField("workspaces.Workspace", on_delete=models.CASCADE, related_name="loyalty_settings")
+    enabled = models.BooleanField(default=True)
+    points_per_visit = models.PositiveIntegerField(default=10, help_text="Points earned for each completed visit.")
+    welcome_bonus = models.PositiveIntegerField(default=25, help_text="Points given the first time a customer earns.")
+    points_for_voucher = models.PositiveIntegerField(default=100, help_text="Balance needed to issue a reward voucher.")
+    voucher_value_rand = models.PositiveIntegerField(default=50, help_text="Rand value of the reward voucher.")
+    voucher_valid_days = models.PositiveIntegerField(default=90, help_text="How long an issued voucher stays valid.")
+
+    def __str__(self) -> str:
+        return f"loyalty settings for {self.workspace_id}"
+
+
+class LoyaltyAccount(models.Model):
+    """A customer's points balance at one workspace."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey("workspaces.Workspace", on_delete=models.CASCADE, related_name="loyalty_accounts")
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="loyalty_accounts")
+    balance = models.PositiveIntegerField(default=0)
+    lifetime_points = models.PositiveIntegerField(default=0)
+    welcomed = models.BooleanField(default=False, help_text="Welcome bonus already given")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["workspace", "contact"], name="uniq_loyalty_account_ws_contact"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.contact} - {self.balance} pts"
+
+
+class LoyaltyTransaction(models.Model):
+    """One points movement (welcome, earn, redeem, manual adjustment)."""
+
+    class Kind(models.TextChoices):
+        WELCOME = "welcome", "Welcome bonus"
+        EARN = "earn", "Earned on a visit"
+        REDEEM = "redeem", "Spent on a voucher"
+        ADJUST = "adjust", "Owner adjustment"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    account = models.ForeignKey(LoyaltyAccount, on_delete=models.CASCADE, related_name="transactions")
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    points = models.IntegerField(help_text="Positive to add, negative to spend")
+    note = models.CharField(max_length=200, blank=True)
+    booking = models.ForeignKey(Booking, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.kind} {self.points:+d} for {self.account.contact}"
+
+
+class Voucher(models.Model):
+    """A rand-value voucher: a loyalty reward or a service-recovery apology."""
+
+    class Kind(models.TextChoices):
+        LOYALTY = "loyalty", "Loyalty reward"
+        RECOVERY = "recovery", "Service recovery"
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        REDEEMED = "redeemed", "Redeemed"
+        EXPIRED = "expired", "Expired"
+        CANCELLED = "cancelled", "Cancelled"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey("workspaces.Workspace", on_delete=models.CASCADE, related_name="vouchers")
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="vouchers")
+    kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.LOYALTY)
+    code = models.CharField(max_length=12, unique=True)
+    amount_rand = models.PositiveIntegerField()
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.ACTIVE)
+    note = models.CharField(max_length=200, blank=True)
+    expires_at = models.DateTimeField()
+    redeemed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["workspace", "status"], name="voucher_ws_status")]
+
+    def expired(self, now=None) -> bool:
+        from django.utils import timezone as _tz
+
+        return self.status == self.Status.ACTIVE and (now or _tz.now()) > self.expires_at
+
+    def __str__(self) -> str:
+        return f"{self.code} R{self.amount_rand} ({self.status})"
