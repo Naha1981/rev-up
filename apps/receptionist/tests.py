@@ -1431,7 +1431,8 @@ class WaitlistViewTests(TestCase):
 
         self._add()
         entry = WaitlistEntry.objects.get(workspace=self.ws)
-        url = lambda action: reverse("receptionist:waitlist_action", args=[self.ws.id, entry.id, action])
+        def url(action):
+            return reverse("receptionist:waitlist_action", args=[self.ws.id, entry.id, action])
 
         self.client.post(url("offer"))
         entry.refresh_from_db()
@@ -1473,6 +1474,7 @@ class WaitlistViewTests(TestCase):
     def test_other_workspaces_cannot_touch_entries(self):
         from apps.accounts.models import User
         from apps.members.models import WorkspaceMembership
+
         from .models import WaitlistEntry
 
         self._add()
