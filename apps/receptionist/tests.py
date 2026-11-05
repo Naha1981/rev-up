@@ -39,6 +39,17 @@ def _workspace(name):
     return Workspace.objects.create(organization=org, name=name)
 
 
+def _activate_user_org(user):
+    """Pay-first: a signed-up user's own org is locked until payment. Tests
+    that drive workspace-less paths (OAuth callbacks) act for a paying user."""
+    from apps.members.models import OrgMembership
+
+    membership = OrgMembership.objects.filter(user=user).select_related("organization").first()
+    if membership:
+        membership.organization.subscription_status = "active"
+        membership.organization.save(update_fields=["subscription_status"])
+
+
 def _payload(account_id, wa="27821234567", text="Hi, do you open on Saturdays?", mid="m1"):
     return {
         "event": "message.received",
@@ -993,6 +1004,7 @@ class WhatsAppConnectTests(TestCase):
         )
         ws = _workspace("Connect WS")
         WorkspaceMembership.objects.create(user=user, workspace=ws, workspace_role="owner")
+        _activate_user_org(user)
         self.client.force_login(user)
         return ws
 
@@ -1059,6 +1071,7 @@ class CalendarConnectionTests(TestCase):
             email="cal@example.com", password="x" * 20, tos_accepted_at=timezone.now()
         )
         WorkspaceMembership.objects.create(user=self.user, workspace=self.ws)
+        _activate_user_org(self.user)
         BusinessProfile.objects.create(workspace=self.ws, industry="plumber", business_name="PP Plumbing")
         ZernioChannel.objects.create(workspace=self.ws, zernio_account_id="acct-pp")
 

@@ -8,11 +8,11 @@
 
   {% if status == "trial" %}
   <div class="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-    Free trial: day {{ trial_day }} of 7. {{ days_left }} day{{ days_left|pluralize }} left - pick a plan below to keep everything running.
+    Early access: your last {{ days_left }} day{{ days_left|pluralize }} - pick a plan below to keep everything running.
   </div>
   {% elif status == "expired" %}
   <div class="mt-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-    Your free trial has ended. Pick a plan and pay by EFT - we activate your account within one business day of your payment reflecting.
+    Your subscription is not active. Pick a plan and pay by EFT - we activate your account within one business day of your payment reflecting.
   </div>
   {% else %}
   <div class="mt-4 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">

@@ -7,6 +7,9 @@ from django.urls import reverse
 class TrialLockMiddleware:
     EXEMPT_PREFIXES = (
         "/accounts/",
+        # Organisation settings stay reachable when locked: cancelling an
+        # account (deleting the org) is the cancel route promised in terms.
+        "/organizations/",
         "/admin/",
         "/platform-admin/",
         "/health/",

@@ -84,6 +84,8 @@ def _validate_key(api_key: str, workspace) -> tuple[str, str]:
     except ZernioError as exc:
         if exc.status_code in (401, 403):
             return "", "That key was not accepted. Copy the full key from your messaging account and paste it again."
+        if exc.status_code == 402:
+            return "", "Your messaging plan covers 2 numbers. Add a card in your messaging account to connect more."
         logger.exception("tenant messaging: key validation call failed")
         return "", "Could not reach the messaging service. Please try again."
     return profile.get("_id") or profile.get("id") or "", ""
@@ -94,7 +96,7 @@ def _error_message(error: str, detail: str) -> str:
     if "already_connected" in text or ("already" in text and "connect" in text):
         return "This number is connected somewhere else. Disconnect it there first, then try again."
     if "402" in text or "free_tier" in text or "payment" in text:
-        return "Your free tier covers 2 numbers. Add a card in your messaging account to connect more."
+        return "Your messaging plan covers 2 numbers. Add a card in your messaging account to connect more."
     if error in ("oauth_denied", "connection_cancelled") or "cancel" in text:
         return "The connection was cancelled before it finished. Nothing was connected."
     return "The connection did not finish. Please try again."
@@ -166,7 +168,7 @@ def tenant_connect_start(request, workspace_id):
     except ZernioError as exc:
         if exc.status_code == 402:
             messages.error(
-                request, "Your free tier covers 2 numbers. Add a card in your messaging account to connect more."
+                request, "Your messaging plan covers 2 numbers. Add a card in your messaging account to connect more."
             )
         else:
             logger.exception("tenant messaging: connect URL failed for workspace %s", workspace_id)

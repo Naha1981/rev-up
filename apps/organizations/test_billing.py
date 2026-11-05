@@ -26,6 +26,27 @@ def _setup(email="owner@example.com", staff=False):
 
 
 class TrialStateTests(TestCase):
+    def test_signup_org_is_locked_until_payment(self):
+        """New signups get no free trial: paid SaaS from day one."""
+        from django.contrib.auth import get_user_model
+
+        from apps.accounts.signals import provision_organization_and_workspace
+
+        user = get_user_model().objects.create_user(
+            email="fresh-signup@example.com", password="x" * 20, tos_accepted_at=timezone.now()
+        )
+        provision_organization_and_workspace(user)
+        org = Organization.objects.get(memberships__user=user)
+        self.assertEqual(org.subscription_status, "expired")
+        status, _day, days_left = org.trial_state()
+        self.assertEqual(status, "expired")
+        self.assertEqual(days_left, 0)
+
+    def test_explicit_expired_org_is_locked_immediately(self):
+        org = Organization.objects.create(name="Locked Org", subscription_status="expired")
+        status, _day, _left = org.trial_state()
+        self.assertEqual(status, "expired")
+
     def test_new_org_is_on_trial_day_one_with_reference(self):
         org = Organization.objects.create(name="Fresh Org")
         self.assertEqual(org.subscription_status, "trial")
@@ -48,6 +69,30 @@ class TrialStateTests(TestCase):
         self.assertEqual(status, "active")
 
 
+class WeekOneEntitlementTests(TestCase):
+    """His rule (5 Nov 2026): week one of a paid subscription unlocks every
+    feature on any plan; after that the org keeps its own plan's allowances."""
+
+    def test_week_one_unlocks_all_allowances_on_starter(self):
+        org = Organization.objects.create(name="New Paid", subscription_status="active")
+        self.assertEqual(org.plan, "starter")
+        self.assertIsNotNone(org.activated_at)
+        self.assertEqual(org.monthly_reply_allowance(), 2500)
+        self.assertEqual(org.channel_allowance(), 3)
+
+    def test_after_week_one_plan_allowances_apply(self):
+        org = Organization.objects.create(name="Old Paid", subscription_status="active")
+        Organization.objects.filter(id=org.id).update(activated_at=timezone.now() - timedelta(days=8))
+        org.refresh_from_db()
+        self.assertEqual(org.monthly_reply_allowance(), 500)
+        self.assertEqual(org.channel_allowance(), 1)
+
+    def test_unpaid_org_gets_no_week_one_unlock(self):
+        org = Organization.objects.create(name="Unpaid", subscription_status="expired")
+        self.assertFalse(org._in_week_one())
+        self.assertEqual(org.monthly_reply_allowance(), 500)
+
+
 class BillingPageTests(TestCase):
     def test_page_shows_plans_reference_and_trial(self):
         org, ws, user = _setup()
@@ -57,7 +102,7 @@ class BillingPageTests(TestCase):
         self.assertContains(resp, "R999")
         self.assertContains(resp, "R1,999")
         self.assertContains(resp, org.payment_reference)
-        self.assertContains(resp, "day 1 of 7")
+        self.assertContains(resp, "Early access: your last 7 days")
         self.assertContains(resp, "wa.me/27612980377")
         self.assertContains(resp, "auto-posting")
 
@@ -88,6 +133,33 @@ class BillingPageTests(TestCase):
         self.assertIn(resp.status_code, (403, 404))
 
 
+class NoFreeCopyTests(TestCase):
+    """The owner removed every free offer: pricing copy must not regress."""
+
+    def test_landing_and_signup_and_billing_have_no_free_offers(self):
+        import pathlib
+
+        root = pathlib.Path(__file__).resolve().parents[2]
+        for rel in [
+            "templates/landing.html",
+            "templates/account/signup.html",
+            "templates/workspaces/billing.html",
+            "templates/legal/terms.html",
+        ]:
+            text = (root / rel).read_text().lower()
+            for banned in ["free trial", "first week free", "free for 7 days", "start free", "no card"]:
+                self.assertNotIn(banned, text, f"{rel} still offers: {banned}")
+
+    def test_billing_page_renders_no_free_wording(self):
+        org, ws, user = _setup()
+        org.subscription_status = "expired"
+        org.save(update_fields=["subscription_status"])
+        self.client.force_login(user)
+        resp = self.client.get(f"/workspaces/{ws.id}/billing/")
+        self.assertNotContains(resp, "free trial", status_code=200)
+        self.assertNotContains(resp, "Free trial")
+
+
 class TrialLockTests(TestCase):
     def _expire(self, org):
         org.trial_started_at = timezone.now() - timedelta(days=8)
@@ -107,7 +179,7 @@ class TrialLockTests(TestCase):
         self.client.force_login(user)
         resp = self.client.get(f"/workspaces/{ws.id}/billing/")
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "trial has ended")
+        self.assertContains(resp, "subscription is not active")
 
     def test_active_org_not_locked(self):
         org, ws, user = _setup()

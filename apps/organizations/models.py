@@ -47,9 +47,9 @@ class Organization(models.Model):
     PLAN_CHANNEL_LIMITS = {"starter": 1, "growth": 2, "business-pro": 3}
 
     class SubscriptionStatus(models.TextChoices):
-        TRIAL = "trial", "Free trial"
+        TRIAL = "trial", "Early access"
         ACTIVE = "active", "Active"
-        EXPIRED = "expired", "Trial expired"
+        EXPIRED = "expired", "Not active"
 
     TRIAL_DAYS = 7
 
@@ -62,6 +62,10 @@ class Organization(models.Model):
     # PayFast subscription token, set by the verified ITN when a plan goes
     # active; used if the subscription ever needs cancelling.
     payfast_token = models.CharField(max_length=64, blank=True, default="")
+    # When the subscription first went active (first confirmed payment). Week
+    # one from this moment unlocks every feature on any plan; afterwards the
+    # org keeps its own plan's allowances (his rule, 5 Nov 2026).
+    activated_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         db_table = "organizations_organization"
@@ -73,12 +77,30 @@ class Organization(models.Model):
             from django.utils import timezone
 
             self.trial_started_at = timezone.now()
+        if self.activated_at is None and self.subscription_status == self.SubscriptionStatus.ACTIVE:
+            from django.utils import timezone
+
+            self.activated_at = timezone.now()
         super().save(*args, **kwargs)
 
+    WEEK_ONE_DAYS = 7
+
+    def _in_week_one(self) -> bool:
+        """First week of a paid subscription: every plan runs all features."""
+        from django.utils import timezone
+
+        if self.activated_at is None or self.subscription_status != self.SubscriptionStatus.ACTIVE:
+            return False
+        return (timezone.now() - self.activated_at).days < self.WEEK_ONE_DAYS
+
     def monthly_reply_allowance(self) -> int:
+        if self._in_week_one():
+            return max(self.PLAN_MONTHLY_REPLIES.values())
         return self.PLAN_MONTHLY_REPLIES.get(self.plan, self.PLAN_MONTHLY_REPLIES["starter"])
 
     def channel_allowance(self) -> int:
+        if self._in_week_one():
+            return max(self.PLAN_CHANNEL_LIMITS.values())
         return self.PLAN_CHANNEL_LIMITS.get(self.plan, self.PLAN_CHANNEL_LIMITS["starter"])
 
     def trial_state(self, now=None):
@@ -87,6 +109,8 @@ class Organization(models.Model):
 
         if self.subscription_status == self.SubscriptionStatus.ACTIVE:
             return (self.SubscriptionStatus.ACTIVE, self.TRIAL_DAYS, 0)
+        if self.subscription_status == self.SubscriptionStatus.EXPIRED:
+            return (self.SubscriptionStatus.EXPIRED, self.TRIAL_DAYS, 0)
         now = now or timezone.now()
         start = self.trial_started_at or self.created_at or now
         elapsed = max(0, (now - start).days)

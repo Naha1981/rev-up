@@ -39,6 +39,10 @@ def provision_organization_and_workspace(user):
     org = Organization.objects.create(
         name=f"{label}'s Organization",
         default_timezone="UTC",
+        # Paid SaaS from day one: no free trial. The subscription activates on
+        # first confirmed payment (card or EFT); until then every workspace
+        # screen lands on the billing page.
+        subscription_status=Organization.SubscriptionStatus.EXPIRED,
     )
 
     OrgMembership.objects.create(
