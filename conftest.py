@@ -9,9 +9,17 @@ from apps.organizations.models import Organization
 
 @pytest.fixture
 def user(db):
-    return User.objects.create_user(
+    u = User.objects.create_user(
         email="test@example.com", password="testpass123", name="Test User", tos_accepted_at=timezone.now()
     )
+    # Pay-first: signup auto-provisions a locked (expired) org. Most tests act
+    # for a paying customer, so activate the auto-provisioned org here; tests
+    # for the locked state build their own users.
+    membership = OrgMembership.objects.filter(user=u).select_related("organization").first()
+    if membership:
+        membership.organization.subscription_status = Organization.SubscriptionStatus.ACTIVE
+        membership.organization.save(update_fields=["subscription_status"])
+    return u
 
 
 @pytest.fixture
