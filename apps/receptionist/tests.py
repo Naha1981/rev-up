@@ -1385,3 +1385,108 @@ class BookingTimeSlotTests(TestCase):
         self.assertTrue(calendar_sync.delete_booking_event(conn, booking))
         booking.refresh_from_db()
         self.assertEqual(booking.google_event_id, "")
+
+
+class WaitlistViewTests(TestCase):
+    """Waitlist screen: add, offer, accept, cancel, auto-expire."""
+
+    def setUp(self):
+        from apps.accounts.models import User
+        from apps.members.models import WorkspaceMembership
+
+        self.user = User.objects.create_user(
+            email="waitlist-owner@example.com", password="testpass123", name="Owner",
+            tos_accepted_at=timezone.now(),
+        )
+        self.ws = _workspace("Waitlist Bistro")
+        WorkspaceMembership.objects.create(user=self.user, workspace=self.ws)
+        self.client.force_login(self.user)
+
+    def _add(self, wa="27821112223", name="Thandi", party="4"):
+        return self.client.post(
+            reverse("receptionist:waitlist", args=[self.ws.id]),
+            {"wa_id": wa, "name": name, "party_size": party, "wanted_time": "tonight 7pm"},
+        )
+
+    def test_add_creates_entry_and_contact(self):
+        from .models import WaitlistEntry
+
+        resp = self._add()
+        self.assertEqual(resp.status_code, 302)
+        entry = WaitlistEntry.objects.get(workspace=self.ws)
+        self.assertEqual(entry.status, WaitlistEntry.Status.WAITING)
+        self.assertEqual(entry.party_size, 4)
+        self.assertEqual(entry.contact.name, "Thandi")
+        self.assertEqual(entry.contact.wa_id, "27821112223")
+
+    def test_add_requires_a_number(self):
+        from .models import WaitlistEntry
+
+        resp = self._add(wa="")
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(WaitlistEntry.objects.filter(workspace=self.ws).exists())
+
+    def test_offer_accept_cancel_flow(self):
+        from .models import WaitlistEntry
+
+        self._add()
+        entry = WaitlistEntry.objects.get(workspace=self.ws)
+        url = lambda action: reverse("receptionist:waitlist_action", args=[self.ws.id, entry.id, action])
+
+        self.client.post(url("offer"))
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, WaitlistEntry.Status.OFFERED)
+        self.assertIsNotNone(entry.offered_at)
+
+        self.client.post(url("accept"))
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, WaitlistEntry.Status.ACCEPTED)
+
+        # accepted entries can no longer be cancelled or re-offered
+        self.client.post(url("cancel"))
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, WaitlistEntry.Status.ACCEPTED)
+
+    def test_waiting_entry_can_be_cancelled(self):
+        from .models import WaitlistEntry
+
+        self._add()
+        entry = WaitlistEntry.objects.get(workspace=self.ws)
+        self.client.post(reverse("receptionist:waitlist_action", args=[self.ws.id, entry.id, "cancel"]))
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, WaitlistEntry.Status.CANCELLED)
+
+    def test_stale_offer_expires_on_view(self):
+        from .models import WaitlistEntry
+
+        self._add()
+        entry = WaitlistEntry.objects.get(workspace=self.ws)
+        entry.status = WaitlistEntry.Status.OFFERED
+        entry.offered_at = timezone.now() - timedelta(minutes=entry.offer_minutes + 5)
+        entry.save(update_fields=["status", "offered_at"])
+
+        resp = self.client.get(reverse("receptionist:waitlist", args=[self.ws.id]))
+        self.assertEqual(resp.status_code, 200)
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, WaitlistEntry.Status.EXPIRED)
+
+    def test_other_workspaces_cannot_touch_entries(self):
+        from apps.accounts.models import User
+        from apps.members.models import WorkspaceMembership
+        from .models import WaitlistEntry
+
+        self._add()
+        entry = WaitlistEntry.objects.get(workspace=self.ws)
+        other = User.objects.create_user(
+            email="waitlist-outsider@example.com", password="testpass123", name="Outsider",
+            tos_accepted_at=timezone.now(),
+        )
+        outsider_ws = _workspace("Outsider Bistro")
+        WorkspaceMembership.objects.create(user=other, workspace=outsider_ws)
+        self.client.force_login(other)
+        resp = self.client.post(
+            reverse("receptionist:waitlist_action", args=[self.ws.id, entry.id, "cancel"])
+        )
+        self.assertEqual(resp.status_code, 403)
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, WaitlistEntry.Status.WAITING)

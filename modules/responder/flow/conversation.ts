@@ -34,6 +34,8 @@ export interface ConversationOptions {
   agentName: string;
   calendar: BookingCalendar;
   preset?: import("../presets.js").IndustryPreset;
+  /** Short "name Rprice, ..." line from the business's saved menu, when available. */
+  menuContext?: string;
 }
 
 /** Extracts whatever qualification facts appear in free text. Tolerant: answers can arrive in any order, in one message or many. */
@@ -80,7 +82,7 @@ export class LeadConversation {
 
   /** The instant first reply sent seconds after the enquiry arrives. */
   initialMessages(): string[] {
-    return [msg.instantReply(this.enquiry, this.opts.agentName, this.opts.preset)];
+    return [msg.instantReply(this.enquiry, this.opts.agentName, this.opts.preset, this.opts.menuContext)];
   }
 
   async handleReply(text: string): Promise<ReplyResult> {

@@ -8,6 +8,8 @@ export interface PipelineDeps {
   whatsApp: WhatsAppClient;
   store: LeadStore;
   convoOpts: ConversationOptions;
+  /** Dry-run only: synthetic sender number for try-it enquiries without one. */
+  testSenderPhone?: string;
 }
 
 export type PipelineStatus = "replied" | "needs_review";
@@ -31,37 +33,74 @@ export async function processEnquiryEmail(
   deps: PipelineDeps,
 ): Promise<PipelineResult> {
   const enquiry = parseEnquiry(raw);
-  const sent: { to: string; text: string }[] = [];
+  // Dry-run try-it: a real WhatsApp message always carries the sender's number,
+  // so the console injects one when the typed enquiry has none.
+  if (!enquiry.leadPhone && deps.testSenderPhone) {
+    enquiry.leadPhone = deps.testSenderPhone;
+  }
 
   if (!enquiry.leadPhone) {
-    return { status: "needs_review", enquiry, sent, reason: "no usable SA phone number found in enquiry" };
+    return { status: "needs_review", enquiry, sent: [], reason: "no usable SA phone number found in enquiry" };
   }
   if (enquiry.confidence < MIN_CONFIDENCE) {
     return {
       status: "needs_review",
       enquiry,
-      sent,
+      sent: [],
       reason: `parse confidence ${enquiry.confidence} below ${MIN_CONFIDENCE} (missing: ${enquiry.missing.join(", ") || "none"})`,
     };
   }
+  return replyToEnquiry(enquiry, deps);
+}
 
+/**
+ * Dry-run try-it path: the typed text IS the customer's WhatsApp message, not a
+ * portal email, so the email-parse gates (listing ref, name, confidence) do not
+ * apply. The sender's number always exists on a real WhatsApp message; the
+ * console injects a synthetic one when the text has none.
+ */
+export async function processDirectMessage(
+  raw: string,
+  deps: PipelineDeps,
+): Promise<PipelineResult> {
+  const parsed = parseEnquiry(raw);
+  const enquiry: ParsedEnquiry = {
+    ...parsed,
+    leadPhone: parsed.leadPhone ?? deps.testSenderPhone,
+    message: parsed.message ?? raw,
+    confidence: 1,
+    missing: [],
+  };
+  if (!enquiry.leadPhone) {
+    return { status: "needs_review", enquiry, sent: [], reason: "no usable SA phone number found in enquiry" };
+  }
+  return replyToEnquiry(enquiry, deps);
+}
+
+async function replyToEnquiry(
+  enquiry: ParsedEnquiry,
+  deps: PipelineDeps,
+): Promise<PipelineResult> {
+  const sent: { to: string; text: string }[] = [];
   const convo = new LeadConversation(enquiry, deps.convoOpts);
 
   const texts = convo.initialMessages();
   if (deps.whatsApp.sendInitial) {
     // Official-API transport: first contact must be the approved template.
     // The full free-text opener follows only once the lead replies (24h window).
-    const listing = enquiry.listingTitle ?? (enquiry.listingRef ? `listing ${enquiry.listingRef}` : "the property");
+    const listing =
+      enquiry.listingTitle ??
+      (enquiry.listingRef ? `listing ${enquiry.listingRef}` : deps.convoOpts.preset?.about ?? "your enquiry");
     const first = (enquiry.leadName ?? "").trim().split(/\s+/)[0] || "there";
-    await deps.whatsApp.sendInitial(enquiry.leadPhone, first, listing);
-    sent.push({ to: enquiry.leadPhone, text: `[template] ${texts[0]!}` });
+    await deps.whatsApp.sendInitial(enquiry.leadPhone!, first, listing);
+    sent.push({ to: enquiry.leadPhone!, text: `[template] ${texts[0]!}` });
   } else {
     for (const text of texts) {
-      await deps.whatsApp.sendText(enquiry.leadPhone, text);
-      sent.push({ to: enquiry.leadPhone, text });
+      await deps.whatsApp.sendText(enquiry.leadPhone!, text);
+      sent.push({ to: enquiry.leadPhone!, text });
     }
   }
-  await deps.store.saveConvo(enquiry.leadPhone, convo.snapshot());
+  await deps.store.saveConvo(enquiry.leadPhone!, convo.snapshot());
   return { status: "replied", enquiry, sent };
 }
 

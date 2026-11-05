@@ -7,18 +7,30 @@ export function firstName(name?: string): string {
   return name.trim().split(/\s+/)[0]!;
 }
 
-export function instantReply(enquiry: ParsedEnquiry, agentName: string, preset?: IndustryPreset): string {
-  const listing = enquiry.listingTitle ?? (enquiry.listingRef ? `listing ${enquiry.listingRef}` : "the property");
+export function instantReply(
+  enquiry: ParsedEnquiry,
+  agentName: string,
+  preset?: IndustryPreset,
+  menuContext?: string,
+): string {
   const p = preset ?? presetFor("real_estate"); // historical default copy
+  const named = enquiry.listingTitle ?? (enquiry.listingRef ? `listing ${enquiry.listingRef}` : null);
+  const subject = named ?? (p.about || null);
   const [q1, q2, q3] = p.questions;
-  return [
-    `Hi ${firstName(enquiry.leadName)}, thanks for your enquiry about ${listing}${enquiry.price ? ` (${enquiry.price})` : ""}.`,
+  const lines = [
+    subject
+      ? `Hi ${firstName(enquiry.leadName)}, thanks for your enquiry about ${subject}${enquiry.price ? ` (${enquiry.price})` : ""}.`
+      : `Hi ${firstName(enquiry.leadName)}, thanks for getting in touch.`,
     `I'm ${agentName}'s assistant - ${p.cta}`,
-    `Three quick questions so we line up the right place and time:`,
+  ];
+  if (menuContext) lines.push(`From our current menu: ${menuContext}`);
+  lines.push(
+    "Three quick questions so I can help you right away:",
     `1) ${q1}`,
     `2) ${q2}`,
     `3) ${q3}`,
-  ].join("\n");
+  );
+  return lines.join("\n");
 }
 
 export function slotOffer(slots: ViewingSlot[]): string {

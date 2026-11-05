@@ -8,6 +8,7 @@ the workspace from the connected Zernio channel before writing anything.
 from __future__ import annotations
 
 import uuid
+from datetime import timedelta
 
 from django.db import models
 
@@ -462,3 +463,47 @@ class TenantMessagingConnection(models.Model):
 
     def __str__(self) -> str:
         return f"tenant messaging for {self.workspace_id} ({self.status})"
+
+
+class WaitlistEntry(models.Model):
+    """A customer waiting for a table when the restaurant is full."""
+
+    class Status(models.TextChoices):
+        WAITING = "waiting", "Waiting"
+        OFFERED = "offered", "Table offered"
+        ACCEPTED = "accepted", "Accepted"
+        CANCELLED = "cancelled", "Cancelled"
+        EXPIRED = "expired", "Offer expired"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        "workspaces.Workspace", on_delete=models.CASCADE, related_name="receptionist_waitlist"
+    )
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="waitlist_entries")
+    party_size = models.PositiveSmallIntegerField(default=2)
+    wanted_time = models.CharField(
+        max_length=200, blank=True, help_text="When they hoped to eat, as they said it."
+    )
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.WAITING)
+    offered_at = models.DateTimeField(
+        null=True, blank=True, help_text="When a table was offered. The offer expires after offer_minutes."
+    )
+    offer_minutes = models.PositiveSmallIntegerField(
+        default=15, help_text="How long a table offer stands before it lapses."
+    )
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["status", "created_at"]
+        indexes = [models.Index(fields=["workspace", "status", "created_at"], name="waitlist_ws_status_ts")]
+
+    def offer_expired(self, now=None) -> bool:
+        if self.status != self.Status.OFFERED or not self.offered_at:
+            return False
+        from django.utils import timezone as _tz
+
+        return (now or _tz.now()) > self.offered_at + timedelta(minutes=self.offer_minutes)
+
+    def __str__(self) -> str:
+        return f"{self.contact} party of {self.party_size} ({self.status})"

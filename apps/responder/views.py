@@ -38,14 +38,34 @@ def _sidecar_get(path):
         return None, str(exc)
 
 
-def _sidecar_post(path, body: bytes, industry: str = "general"):
+def _sidecar_post(path, body: bytes, industry: str = "general", menu_context: str = "", business_name: str = ""):
+    headers = {"Content-Type": "text/plain", "X-Industry": industry}
+    if menu_context:
+        headers["X-Menu-Context"] = menu_context
+    if business_name:
+        headers["X-Business-Name"] = business_name
     req = urllib.request.Request(
         _sidecar_url(path),
         data=body,
-        headers={"Content-Type": "text/plain", "X-Industry": industry},
+        headers=headers,
     )
     with urllib.request.urlopen(req, timeout=SIDECAR_TIMEOUT) as resp:
         return json.loads(resp.read().decode("utf-8"))
+
+
+def _menu_context(workspace) -> str:
+    """Short menu summary for the responder's dry-run reply (restaurant workspaces)."""
+    if workspace.industry != "restaurant":
+        return ""
+    try:
+        from apps.menus.models import MenuItem
+    except ImportError:
+        return ""
+    items = MenuItem.objects.filter(workspace=workspace, is_available=True).order_by(
+        "category__name", "position", "name"
+    )[:12]
+    parts = [f"{item.name} R{item.price}" for item in items]
+    return "; ".join(parts)
 
 
 def _get_workspace(request, workspace_id):
@@ -71,7 +91,13 @@ def dashboard(request, workspace_id):
             )
             return redirect("responder:dashboard", workspace_id=workspace.id)
         try:
-            result = _sidecar_post("/selftest/enquiry", enquiry.encode("utf-8"), workspace.industry)
+            result = _sidecar_post(
+                "/selftest/enquiry",
+                enquiry.encode("utf-8"),
+                workspace.industry,
+                _menu_context(workspace),
+                workspace.name,
+            )
         except Exception:
             logger.exception("responder: test enquiry failed for workspace %s", workspace.id)
             messages.error(request, "The responder could not answer that just now - please try again in a moment.")

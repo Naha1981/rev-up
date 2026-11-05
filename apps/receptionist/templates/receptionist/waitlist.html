@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mx-auto w-full max-w-2xl px-4 py-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-xl font-semibold text-stone-900">Waitlist</h1>
+    <div class="flex items-center gap-4">
+      <a href="{% url 'receptionist:inbox' workspace.id %}" class="text-sm font-medium text-orange-600">Inbox</a>
+      <a href="{% url 'receptionist:bookings' workspace.id %}" class="text-sm font-medium text-orange-600">Bookings</a>
+    </div>
+  </div>
+  {% include "receptionist/_connect_status.html" %}
+
+  <form method="post" class="mt-5 rounded-2xl border border-stone-200 bg-white p-4">
+    {% csrf_token %}
+    <p class="text-sm font-medium text-stone-900">Add a waiting party</p>
+    <div class="mt-3 grid grid-cols-2 gap-2">
+      <input type="text" name="name" placeholder="Name" class="rounded-xl border border-stone-200 px-3 py-2 text-sm text-stone-700" />
+      <input type="tel" name="wa_id" placeholder="WhatsApp number" required class="rounded-xl border border-stone-200 px-3 py-2 text-sm text-stone-700" />
+      <input type="number" name="party_size" min="1" max="30" value="2" class="rounded-xl border border-stone-200 px-3 py-2 text-sm text-stone-700" />
+      <input type="text" name="wanted_time" placeholder="When, e.g. tonight 7pm" class="rounded-xl border border-stone-200 px-3 py-2 text-sm text-stone-700" />
+    </div>
+    <button type="submit" class="mt-3 rounded-xl bg-orange-500 px-4 py-2 text-sm font-medium text-white">Add to waitlist</button>
+  </form>
+
+  {% if active %}
+  <div class="mt-5 space-y-2">
+    {% for e in active %}
+    <div class="rounded-2xl border border-stone-200 bg-white px-4 py-3">
+      <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <p class="font-medium text-stone-900">{{ e.contact.name|default:e.contact.wa_id }} <span class="text-sm font-normal text-stone-500">&middot; party of {{ e.party_size }}</span></p>
+          <p class="text-sm text-stone-500">{% if e.wanted_time %}{{ e.wanted_time }} &middot; {% endif %}added {{ e.created_at|date:"j M, H:i" }}</p>
+          {% if e.status == "offered" %}<p class="mt-1 text-xs text-orange-600">Table offered {{ e.offered_at|date:"H:i" }} &middot; stands for {{ e.offer_minutes }} min</p>{% endif %}
+        </div>
+        <div class="flex shrink-0 items-center gap-2">
+          {% if e.status == "waiting" %}
+          <form method="post" action="{% url 'receptionist:waitlist_action' workspace.id e.id 'offer' %}">{% csrf_token %}
+            <button type="submit" class="rounded-xl bg-orange-500 px-3 py-1.5 text-xs font-medium text-white">Offer table</button>
+          </form>
+          {% elif e.status == "offered" %}
+          <form method="post" action="{% url 'receptionist:waitlist_action' workspace.id e.id 'accept' %}">{% csrf_token %}
+            <button type="submit" class="rounded-xl bg-stone-900 px-3 py-1.5 text-xs font-medium text-white">Accepted</button>
+          </form>
+          {% endif %}
+          <form method="post" action="{% url 'receptionist:waitlist_action' workspace.id e.id 'cancel' %}">{% csrf_token %}
+            <button type="submit" class="rounded-xl border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-500">Remove</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="mt-6 rounded-2xl border border-stone-200 bg-white p-6 text-center">
+    <p class="text-stone-600">Nobody waiting right now. When you're full, add walk-ins here and offer them a table the moment one frees up.</p>
+  </div>
+  {% endif %}
+
+  {% if closed %}
+  <p class="mt-6 text-sm font-medium text-stone-500">Recent</p>
+  <div class="mt-2 space-y-2">
+    {% for e in closed %}
+    <div class="flex items-center justify-between rounded-2xl border border-stone-100 bg-white px-4 py-2.5">
+      <p class="text-sm text-stone-600">{{ e.contact.name|default:e.contact.wa_id }} <span class="text-stone-400">&middot; party of {{ e.party_size }}</span></p>
+      <span class="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-500">{{ e.get_status_display }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

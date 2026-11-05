@@ -723,3 +723,72 @@ def review_redirect(request, code: str):
             "card_image": card_image,
         },
     )
+
+
+@login_required
+def waitlist(request, workspace_id):
+    """The waitlist: waiting parties first, then recent outcomes."""
+    workspace = _get_workspace(request, workspace_id)
+    from .models import WaitlistEntry
+
+    if request.method == "POST":
+        wa_id = "".join(ch for ch in request.POST.get("wa_id", "") if ch.isdigit())
+        name = (request.POST.get("name") or "").strip()
+        party = request.POST.get("party_size") or "2"
+        if wa_id:
+            contact, _ = Contact.objects.get_or_create(
+                workspace=workspace, wa_id=wa_id, defaults={"name": name}
+            )
+            if name and contact.name != name:
+                contact.name = name
+                contact.save(update_fields=["name", "updated_at"])
+            WaitlistEntry.objects.create(
+                workspace=workspace,
+                contact=contact,
+                party_size=int(party) if party.isdigit() else 2,
+                wanted_time=(request.POST.get("wanted_time") or "").strip(),
+            )
+            messages.success(request, "Added to the waitlist.")
+        else:
+            messages.error(request, "A WhatsApp number is needed so you can reach them.")
+        return redirect("receptionist:waitlist", workspace_id=workspace.id)
+
+    entries = list(WaitlistEntry.objects.filter(workspace=workspace).select_related("contact"))
+    now = timezone.now()
+    expired = [e for e in entries if e.offer_expired(now)]
+    for e in expired:
+        e.status = WaitlistEntry.Status.EXPIRED
+        e.save(update_fields=["status"])
+    active = [e for e in entries if e.status in (WaitlistEntry.Status.WAITING, WaitlistEntry.Status.OFFERED)]
+    closed = [e for e in entries if e not in active][:20]
+    return render(
+        request,
+        "receptionist/waitlist.html",
+        {"workspace": workspace, "active": active, "closed": closed},
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def waitlist_action(request, workspace_id, entry_id, action):
+    """Offer a table / mark accepted / cancel a waitlist entry."""
+    workspace = _get_workspace(request, workspace_id)
+    from .models import WaitlistEntry
+
+    entry = get_object_or_404(WaitlistEntry, id=entry_id, workspace=workspace)
+    if action == "offer" and entry.status == WaitlistEntry.Status.WAITING:
+        entry.status = WaitlistEntry.Status.OFFERED
+        entry.offered_at = timezone.now()
+        entry.save(update_fields=["status", "offered_at"])
+        messages.success(request, f"Table offered to {entry.contact}. The offer stands for {entry.offer_minutes} minutes.")
+    elif action == "accept" and entry.status == WaitlistEntry.Status.OFFERED:
+        entry.status = WaitlistEntry.Status.ACCEPTED
+        entry.save(update_fields=["status"])
+        messages.success(request, f"{entry.contact} accepted the table.")
+    elif action == "cancel" and entry.status in (WaitlistEntry.Status.WAITING, WaitlistEntry.Status.OFFERED):
+        entry.status = WaitlistEntry.Status.CANCELLED
+        entry.save(update_fields=["status"])
+        messages.success(request, "Removed from the waitlist.")
+    else:
+        messages.error(request, "That change does not apply to this entry.")
+    return redirect("receptionist:waitlist", workspace_id=workspace.id)

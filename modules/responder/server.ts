@@ -14,7 +14,7 @@
 import http from "node:http";
 import { clientFromEnv, type WhatsAppClient } from "./transport/operatorClient.js";
 import { StubCalendarProvider } from "./flow/slots.js";
-import { processEnquiryEmail, handleLeadReply, type PipelineDeps } from "./pipeline.js";
+import { processDirectMessage, processEnquiryEmail, handleLeadReply, type PipelineDeps } from "./pipeline.js";
 import { presetFor } from "./presets.js";
 import { GoogleAuth, googleConfigFromEnv } from "./intake/auth.js";
 import { GoogleCalendarProvider } from "./intake/googleCalendar.js";
@@ -115,7 +115,7 @@ export async function startService(env: NodeJS.ProcessEnv = process.env): Promis
           const raw = Buffer.concat(chunks).toString("utf8");
           if (raw.length < 20 || raw.length > 200_000) {
             res.writeHead(422, { "content-type": "application/json" });
-            res.end(JSON.stringify({ error: "body must be a raw enquiry email (20-200k chars)" }));
+            res.end(JSON.stringify({ error: "body must be the customer's message (20-200k chars)" }));
             return;
           }
           const sends: { to: string; text: string }[] = [];
@@ -127,10 +127,18 @@ export async function startService(env: NodeJS.ProcessEnv = process.env): Promis
           // (the postgres store is for live intake only).
           const testStore = new InMemoryLeadStore();
           const industry = (req.headers["x-industry"] as string | undefined) ?? "general";
-          const result = await processEnquiryEmail(raw, {
+          const menuContext = (req.headers["x-menu-context"] as string | undefined) ?? undefined;
+          const businessName = (req.headers["x-business-name"] as string | undefined) ?? undefined;
+          const result = await processDirectMessage(raw, {
             whatsApp: capture,
             store: testStore,
-            convoOpts: { ...deps.convoOpts, preset: presetFor(industry) },
+            testSenderPhone: "+27820000001",
+            convoOpts: {
+              ...deps.convoOpts,
+              preset: presetFor(industry),
+              menuContext,
+              ...(businessName ? { agentName: businessName } : {}),
+            },
           });
           res.writeHead(200, { "content-type": "application/json" });
           res.end(JSON.stringify({ status: result.status, reason: result.reason ?? null, replies: sends }));
