@@ -216,7 +216,7 @@ export async function handleZernioWebhook(db: Pool, env: any, payload: any): Pro
   if (detail || preferred) {
     try {
       await db.query(`INSERT INTO receptionist_booking(id,service,preferred_time,status,notes,created_at,contact_id,workspace_id,duration_minutes,google_event_id,value)
-        VALUES($1,$2,$3,'new','',now(),$4,$5,60,'',0)`,
+        VALUES($1,$2,$3,'requested','',now(),$4,$5,60,'',0)`,
         [crypto.randomUUID(), detail.slice(0, 200), preferred.slice(0, 200), contact.id, channel.workspace_id]);
     } catch { /* intake is best-effort */ }
   }

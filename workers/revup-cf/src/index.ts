@@ -52,6 +52,7 @@ export function navLinks(user: any): string {
   h += `<a href="/onboarding">Onboarding</a>`;
   if (show("reviews")) h += `<a href="/reviews">Reviews</a>`;
   if (show("receptionist")) h += `<a href="/receptionist">Receptionist</a>`;
+  if (show("receptionist")) h += `<a href="/bookings">Bookings</a>`;
   if (show("leads", "receptionist")) h += `<a href="/inbox">Inbox</a>`;
   if (show("leads")) h += `<a href="/frontdesk">Leads</a>`;
   if (show("reviews", "leads", "receptionist")) h += `<a href="/approvals">Approvals</a>`;
@@ -1205,6 +1206,50 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
         } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }
       }
 
+
+      if (path === "/bookings") {
+        const bk = await db.query(
+          `SELECT b.*, c.name AS contact_name, c.wa_id FROM receptionist_booking b
+           JOIN receptionist_contact c ON c.id=b.contact_id
+           WHERE b.workspace_id=$1 ORDER BY b.created_at DESC LIMIT 50`, [mem.workspace_id]);
+        const msg = url.searchParams.get("msg") || "";
+        const rows = bk.rows.map((b: any) => `<tr>
+<td><b>${esc(b.contact_name || b.wa_id)}</b><br><span class="mut">${esc(b.service || "booking")}</span></td>
+<td class="mut">${b.status === "confirmed" && b.scheduled_start ? new Date(b.scheduled_start).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" }) : esc(b.preferred_time || "to confirm")}</td>
+<td>${b.status === "confirmed" ? '<span class="ok">confirmed</span>' : b.status === "done" ? "done" : b.status === "cancelled" ? '<span class="mut">cancelled</span>' : "<b>requested</b>"}</td>
+<td>${b.status === "requested" ? `<form class="inline" method="post" action="/bookings/${b.id}/confirm"><input type="datetime-local" name="when" required style="width:auto"><button>Confirm</button></form>` : ""}
+${b.status === "confirmed" ? `<form class="inline" method="post" action="/bookings/${b.id}/done"><button>Mark done</button></form>` : ""}
+${["requested", "confirmed"].includes(b.status) ? `<form class="inline" method="post" action="/bookings/${b.id}/cancel"><button class="link">Cancel</button></form>` : ""}</td></tr>`).join("");
+        return html(layout("Bookings", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+<p class="mut">Booking requests land here from your WhatsApp receptionist. Confirm a time, and when the job is finished mark it done - that starts the review request flow automatically.</p>
+<div class="card">${bk.rows.length ? `<table><tr><th>Customer</th><th>Time</th><th>Status</th><th></th></tr>${rows}</table>` : `<p class="mut">No bookings yet. When a customer books on WhatsApp, it shows up here.</p>`}</div>`, user));
+      }
+
+      const bact = /^\/bookings\/([0-9a-f-]{36})\/(confirm|done|cancel)$/.exec(path);
+      if (bact && req.method === "POST") {
+        const own = await db.query(`SELECT id, contact_id, status FROM receptionist_booking WHERE id=$1 AND workspace_id=$2`, [bact[1], mem.workspace_id]);
+        const b = own.rows[0];
+        if (!b) return redirect("/bookings");
+        if (bact[2] === "confirm" && b.status === "requested") {
+          const f = await formData(req);
+          const when = String(f.when || "").trim();
+          if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(when)) return redirect("/bookings");
+          await db.query(`UPDATE receptionist_booking SET status='confirmed', scheduled_start=($1 || ':00+02')::timestamptz WHERE id=$2`, [when.slice(0, 16), b.id]);
+          return redirect("/bookings?msg=" + encodeURIComponent("Booking confirmed."));
+        }
+        if (bact[2] === "done" && b.status === "confirmed") {
+          await db.query(`UPDATE receptionist_booking SET status='done' WHERE id=$1`, [b.id]);
+          await db.query(`UPDATE receptionist_contact SET visit_count=visit_count+1, updated_at=now() WHERE id=$1`, [b.contact_id]);
+          const evId = await startPipeline(db, mem.workspace_id, b.contact_id, b.id);
+          return redirect("/bookings?msg=" + encodeURIComponent(evId ? "Marked done - the review check-in goes out in 15 minutes." : "Marked done. (This customer opted out of messages.)"));
+        }
+        if (bact[2] === "cancel" && ["requested", "confirmed"].includes(b.status)) {
+          await db.query(`UPDATE receptionist_booking SET status='cancelled' WHERE id=$1`, [b.id]);
+          return redirect("/bookings?msg=" + encodeURIComponent("Booking cancelled."));
+        }
+        return redirect("/bookings");
+      }
 
       if (path === "/reviews") return html(await reviewsPage(db, user, mem, base, url.searchParams.get("msg") || ""));
 
