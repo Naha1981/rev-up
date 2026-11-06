@@ -272,3 +272,160 @@ export async function campaignStats(db: Pool, campaignId: string): Promise<any> 
   for (const row of r.rows) out[row.variant] = row;
   return out;
 }
+
+// ---------- competitors + market opportunities ----------
+const PRICE_GAP_RAND = 10;
+const DRAFT_BODIES: Record<string, string> = {
+  price_gap: "Hi {first name}, this week only: come in for your favourite and mention this message - we will make it worth your while. Book on WhatsApp.",
+  price_advantage: "Hi {first name}, did you know our best dish also beats the neighbours on price? Come taste it this week - book on WhatsApp.",
+  rating_gap: "Hi {first name}, thank you for rating us the area's favourite! Bring a friend this week and show them why - book on WhatsApp.",
+  promo: "Hi {first name}, we would rather spoil YOU than watch you try the neighbour's special. This week, your usual comes with something extra - book on WhatsApp.",
+  demand: "Hi {first name}, weekends are filling up fast. Book a midweek table this week and skip the wait entirely - reply here and we will sort it.",
+};
+
+export async function competitorAdd(db: Pool, ws: string, name: string, area: string, website: string, rating: string, notes: string): Promise<void> {
+  if (!name.trim()) throw new Error("Give the competitor a name.");
+  const r = rating ? Number(rating) : null;
+  if (r !== null && (isNaN(r) || r < 0 || r > 5)) throw new Error("Rating is 0 to 5.");
+  await db.query(
+    `INSERT INTO receptionist_competitor(id,workspace_id,name,area,website,rating,notes,created_at)
+     VALUES($1,$2,$3,$4,$5,$6,$7,now())
+     ON CONFLICT (workspace_id, name) DO UPDATE SET area=$4, website=$5, rating=$6, notes=$7`,
+    [crypto.randomUUID(), ws, name.trim().slice(0, 120), area.trim().slice(0, 120), website.trim().slice(0, 200), r, notes.trim()]);
+}
+
+export async function dishAdd(db: Pool, ws: string, competitorId: string, name: string, price: number, ownItemId: string): Promise<void> {
+  const own = await db.query(`SELECT 1 FROM receptionist_competitor WHERE id=$1 AND workspace_id=$2`, [competitorId]);
+  if (!own.rows.length) throw new Error("Competitor not found.");
+  if (!name.trim() || !(price >= 0)) throw new Error("Dish needs a name and a price.");
+  const ownId = /^[0-9a-f-]{36}$/.test(ownItemId) ? ownItemId : null;
+  if (ownId) {
+    const ok = await db.query(`SELECT 1 FROM menus_item WHERE id=$1 AND workspace_id=$2`, [ownId, ws]);
+    if (!ok.rows.length) throw new Error("That menu item is not yours.");
+  }
+  await db.query(
+    `INSERT INTO receptionist_competitordish(id,competitor_id,name,price,own_item_id,created_at) VALUES($1,$2,$3,$4,$5,now())`,
+    [crypto.randomUUID(), competitorId, name.trim().slice(0, 120), price, ownId]);
+}
+
+export async function promoAdd(db: Pool, ws: string, competitorId: string, text: string, validUntil: string): Promise<void> {
+  const own = await db.query(`SELECT 1 FROM receptionist_competitor WHERE id=$1 AND workspace_id=$2`, [competitorId]);
+  if (!own.rows.length) throw new Error("Competitor not found.");
+  if (!text.trim()) throw new Error("Say what the promotion is.");
+  await db.query(
+    `INSERT INTO receptionist_competitorpromo(id,competitor_id,text,valid_until,created_at) VALUES($1,$2,$3,$4,now())`,
+    [crypto.randomUUID(), competitorId, text.trim().slice(0, 200), /^\d{4}-\d{2}-\d{2}$/.test(validUntil) ? validUntil : null]);
+}
+
+async function oppUpsert(db: Pool, ws: string, key: string, kind: string, title: string, detail: string, competitorId: string | null, confidence: number, impact: number | null, evidence: string[]): Promise<void> {
+  await db.query(
+    `INSERT INTO receptionist_marketopportunity(id,workspace_id,competitor_id,kind,title,detail,status,dedupe_key,confidence,impact_rand,evidence,created_at,updated_at)
+     VALUES($1,$2,$3,$4,$5,$6,'new',$7,$8,$9,$10::jsonb,now(),now())
+     ON CONFLICT (workspace_id, dedupe_key) DO UPDATE SET kind=$4, title=$5, detail=$6, competitor_id=$3, confidence=$8, impact_rand=$9, evidence=$10::jsonb, updated_at=now()`,
+    [crypto.randomUUID(), ws, competitorId, kind, title.slice(0, 160), detail, key.slice(0, 120), confidence, impact, JSON.stringify(evidence)]);
+}
+
+export async function refreshOpportunities(db: Pool, ws: string): Promise<void> {
+  const bp = await db.query(`SELECT google_rating FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [ws]);
+  const ownRating = bp.rows[0]?.google_rating !== null && bp.rows[0]?.google_rating !== undefined ? Number(bp.rows[0].google_rating) : null;
+  const seen: string[] = [];
+  const comps = await db.query(`SELECT * FROM receptionist_competitor WHERE workspace_id=$1 ORDER BY name`, [ws]);
+  for (const comp of comps.rows) {
+    const dishes = await db.query(
+      `SELECT d.*, m.name AS own_name, m.price AS own_price FROM receptionist_competitordish d
+       LEFT JOIN menus_item m ON m.id=d.own_item_id WHERE d.competitor_id=$1 ORDER BY d.name`, [comp.id]);
+    for (const dish of dishes.rows) {
+      if (!dish.own_item_id || dish.own_price === null) continue;
+      const gap = Number(dish.own_price) - Number(dish.price);
+      const u = await db.query(
+        `SELECT COALESCE(sum(quantity),0) q FROM menus_dishsale WHERE workspace_id=$1 AND item_id=$2 AND sold_on >= (now() AT TIME ZONE 'Africa/Johannesburg')::date - 30`, [ws, dish.own_item_id]);
+      const units = Number(u.rows[0].q) || 0;
+      const impact = units ? Math.abs(gap) * units : null;
+      if (gap > PRICE_GAP_RAND) {
+        const key = `price_gap:${dish.id}`;
+        seen.push(key);
+        await oppUpsert(db, ws, key, "price_gap",
+          `${comp.name} undercuts your ${dish.own_name}`,
+          `Their ${dish.name} is R${Number(dish.price).toFixed(2)}; yours is R${Number(dish.own_price).toFixed(2)} - R${gap.toFixed(2)} more. Match it, beat it on portion or quality, or let the dish compete on something else.`,
+          comp.id, 90, impact,
+          [`Their menu: ${dish.name} R${Number(dish.price).toFixed(2)} (logged on the Competitors screen)`,
+           `Your menu: ${dish.own_name} R${Number(dish.own_price).toFixed(2)}`,
+           units ? `Your sales: ${units} sold in the last 30 days` : "No sales logged yet, so no rand impact estimate"]);
+      } else if (gap < -PRICE_GAP_RAND) {
+        const key = `price_advantage:${dish.id}`;
+        seen.push(key);
+        await oppUpsert(db, ws, key, "price_advantage",
+          `Your ${dish.own_name} beats ${comp.name} on price`,
+          `Their ${dish.name} is R${Number(dish.price).toFixed(2)}; yours is R${Number(dish.own_price).toFixed(2)} - R${(-gap).toFixed(2)} less. Worth saying out loud: feature it on the public menu and in campaigns.`,
+          comp.id, 80, impact,
+          [`Their menu: ${dish.name} R${Number(dish.price).toFixed(2)} (logged on the Competitors screen)`,
+           `Your menu: ${dish.own_name} R${Number(dish.own_price).toFixed(2)}`]);
+      }
+    }
+    if (comp.rating !== null && ownRating !== null && ownRating > Number(comp.rating)) {
+      const key = `rating:${comp.id}`;
+      seen.push(key);
+      await oppUpsert(db, ws, key, "rating_gap",
+        `You outrate ${comp.name}`,
+        `Google: you ${ownRating}, them ${comp.rating}. Ask happy customers for reviews while the gap is in your favour.`,
+        comp.id, 70, null,
+        [`Your Google rating: ${ownRating} (Competitors screen)`, `Their Google rating: ${comp.rating} (Competitors screen)`]);
+    }
+    const promo = await db.query(
+      `SELECT * FROM receptionist_competitorpromo WHERE competitor_id=$1 AND created_at >= now() - interval '7 days' ORDER BY created_at DESC LIMIT 1`, [comp.id]);
+    if (promo.rows[0]) {
+      const p = promo.rows[0];
+      const key = `promo:${p.id}`;
+      seen.push(key);
+      await oppUpsert(db, ws, key, "promo",
+        `${comp.name} is running a promotion`,
+        `Spotted: "${p.text}". Answer with your own campaign to regulars before they drift - the Campaigns screen drafts it in minutes.`,
+        comp.id, 60, null, [`Promotion logged: "${p.text}" (Competitors screen)`]);
+    }
+  }
+  const wl = await db.query(
+    `SELECT count(*) c FROM receptionist_waitlistentry WHERE workspace_id=$1 AND created_at >= now() - interval '7 days'`, [ws]);
+  const recent = Number(wl.rows[0].c);
+  if (recent >= 5) {
+    const key = "demand:waitlist";
+    seen.push(key);
+    const avg = await db.query(
+      `SELECT avg(value) v FROM (SELECT value FROM receptionist_booking WHERE workspace_id=$1 AND status='done' AND value IS NOT NULL LIMIT 50) t`, [ws]);
+    const avgValue = avg.rows[0].v !== null ? Number(avg.rows[0].v) : null;
+    await oppUpsert(db, ws, key, "demand",
+      "Demand is outgrowing your tables",
+      `${recent} parties joined the waitlist in the last 7 days. Consider longer hours on the busy nights or an off-peak campaign to spread the load.`,
+      null, 65, avgValue ? avgValue * recent : null,
+      [`${recent} waitlist entries in the last 7 days (Waitlist screen)`,
+       avgValue ? `Average booking value: R${avgValue.toFixed(2)}` : "No booking values captured yet"]);
+  }
+  if (seen.length) {
+    await db.query(
+      `DELETE FROM receptionist_marketopportunity WHERE workspace_id=$1 AND status='new' AND NOT (dedupe_key = ANY($2))`, [ws, seen]);
+  } else {
+    await db.query(`DELETE FROM receptionist_marketopportunity WHERE workspace_id=$1 AND status='new'`, [ws]);
+  }
+}
+
+export async function opportunityAction(db: Pool, ws: string, id: string, action: string): Promise<boolean> {
+  if (!["acted", "dismissed"].includes(action)) return false;
+  return !!(await db.query(
+    `UPDATE receptionist_marketopportunity SET status=$1, updated_at=now() WHERE id=$2 AND workspace_id=$3 AND status='new'`, [action, id, ws])).rowCount;
+}
+
+export async function opportunityDraftCampaign(db: Pool, ws: string, id: string): Promise<void> {
+  const o = await db.query(`SELECT * FROM receptionist_marketopportunity WHERE id=$1 AND workspace_id=$2`, [id, ws]);
+  const opp = o.rows[0];
+  if (!opp) throw new Error("Opportunity not found.");
+  if (opp.campaign_id) throw new Error("A draft already exists for this one.");
+  const body = DRAFT_BODIES[opp.kind];
+  if (!body) throw new Error("No draft available for this opportunity.");
+  const segment = ["promo", "demand"].includes(opp.kind) ? "dormant" : "all";
+  const campId = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO receptionist_campaign(id,workspace_id,name,segment,body_a,body_b,status,created_at)
+     VALUES($1,$2,$3,$4,$5,'','draft',now())`,
+    [campId, ws, `Revenue: ${opp.title}`.slice(0, 120), segment, body]);
+  await db.query(
+    `UPDATE receptionist_marketopportunity SET campaign_id=$1, status='acted', updated_at=now() WHERE id=$2`, [campId, id]);
+}

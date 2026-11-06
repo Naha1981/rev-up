@@ -7,7 +7,7 @@ export { landingPage } from "./landing";
 import { INDUSTRIES, getPreset, industryLabel } from "./presets";
 import { handleZernioWebhook, verifyZernioSignature, validateTenantKey, tenantConnectUrl, tenantConfirmAndBind, tenantWebhookSecret } from "./receptionist";
 import { startPipeline, cancelPending, runDueReviewEvents, resolveIssue, scheduleServiceReminder, runDueServiceReminders } from "./reviews";
-import { waitlistAdd, waitlistExpire, waitlistAction, loyaltySettings, loyaltyAccount, awardForBooking, issueVoucher, redeemVoucher, expireVouchers, quoteCreate, quoteAction, segmentContacts, campaignCreate, campaignApprove, campaignCancel, runDueCampaigns, attributeBookingToCampaign, campaignStats } from "./features";
+import { waitlistAdd, waitlistExpire, waitlistAction, loyaltySettings, loyaltyAccount, awardForBooking, issueVoucher, redeemVoucher, expireVouchers, quoteCreate, quoteAction, segmentContacts, campaignCreate, campaignApprove, campaignCancel, runDueCampaigns, attributeBookingToCampaign, campaignStats, competitorAdd, dishAdd, promoAdd, refreshOpportunities, opportunityAction, opportunityDraftCampaign } from "./features";
 
 interface Env {
   DATABASE_URL: string;
@@ -58,6 +58,7 @@ export function navLinks(user: any): string {
   if (show("receptionist")) h += `<a href="/loyalty">Loyalty</a>`;
   if (show("receptionist")) h += `<a href="/quotes">Quotes</a>`;
   if (show("receptionist")) h += `<a href="/campaigns">Campaigns</a>`;
+  if (show("receptionist")) h += `<a href="/competitors">Competitors</a>`;
   if (show("leads", "receptionist")) h += `<a href="/inbox">Inbox</a>`;
   if (show("leads")) h += `<a href="/frontdesk">Leads</a>`;
   if (show("reviews", "leads", "receptionist")) h += `<a href="/approvals">Approvals</a>`;
@@ -464,6 +465,64 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <div class="card">${vouchers.rows.length ? `<table><tr><th>Code</th><th>Customer</th><th>Value</th><th>Status</th><th>Valid</th><th></th></tr>${vRows}</table>` : `<p class="mut">No vouchers issued yet.</p>`}</div>`, user);
 }
 
+
+
+async function competitorsPage(db: Pool, user: any, mem: any, msg = ""): Promise<string> {
+  await refreshOpportunities(db, mem.workspace_id);
+  const comps = await db.query(`SELECT * FROM receptionist_competitor WHERE workspace_id=$1 ORDER BY name`, [mem.workspace_id]);
+  const menu = await db.query(`SELECT id, name, price FROM menus_item WHERE workspace_id=$1 ORDER BY position LIMIT 100`, [mem.workspace_id]);
+  const opps = await db.query(
+    `SELECT o.*, c.name AS competitor_name FROM receptionist_marketopportunity o
+     LEFT JOIN receptionist_competitor c ON c.id=o.competitor_id
+     WHERE o.workspace_id=$1 ORDER BY CASE o.status WHEN 'new' THEN 0 WHEN 'acted' THEN 1 ELSE 2 END, o.confidence DESC, o.updated_at DESC LIMIT 30`, [mem.workspace_id]);
+  const kindLabel: any = { price_gap: "Price gap", price_advantage: "Price advantage", rating_gap: "Rating gap", promo: "Competitor promotion", demand: "Demand" };
+  const compCards: string[] = [];
+  for (const c of comps.rows) {
+    const dishes = await db.query(
+      `SELECT d.*, m.name AS own_name, m.price AS own_price FROM receptionist_competitordish d
+       LEFT JOIN menus_item m ON m.id=d.own_item_id WHERE d.competitor_id=$1 ORDER BY d.name`, [c.id]);
+    const promos = await db.query(`SELECT * FROM receptionist_competitorpromo WHERE competitor_id=$1 ORDER BY created_at DESC LIMIT 5`, [c.id]);
+    const dishRows = dishes.rows.map((d: any) => `<tr><td>${esc(d.name)}</td><td>R${Number(d.price).toFixed(2)}</td>
+<td>${d.own_name ? `${esc(d.own_name)} (yours R${Number(d.own_price).toFixed(2)})` : '<span class="mut">not mapped</span>'}</td></tr>`).join("");
+    const promoRows = promos.rows.map((p: any) => `<li>${esc(p.text)}${p.valid_until ? ` <span class="mut">to ${new Date(p.valid_until).toLocaleDateString("en-ZA")}</span>` : ""}</li>`).join("");
+    const menuOpts = ['<option value="">(map to your menu)</option>', ...menu.rows.map((m: any) => `<option value="${m.id}">${esc(m.name)} R${Number(m.price).toFixed(2)}</option>`)].join("");
+    compCards.push(`<div class="card"><h3 style="margin-top:0">${esc(c.name)} <span class="mut">${esc(c.area || "")}${c.rating !== null ? ` · their Google ${c.rating}` : ""}</span></h3>
+${dishes.rows.length ? `<table><tr><th>Their dish</th><th>Price</th><th>Mapped to</th></tr>${dishRows}</table>` : `<p class="mut">No dishes logged yet.</p>`}
+<form method="post" action="/competitors/${c.id}/dishes" style="margin-top:10px">
+<input name="name" required maxlength="120" placeholder="Their dish" style="width:180px">
+<input name="price" type="number" min="0" step="0.01" required placeholder="R" style="width:90px">
+<select name="own_item_id">${menuOpts}</select>
+<button>Add dish</button></form>
+${promos.rows.length ? `<ul>${promoRows}</ul>` : ""}
+<form class="inline" method="post" action="/competitors/${c.id}/promos">
+<input name="text" required maxlength="200" placeholder="Promotion they are running" style="width:280px">
+<input name="valid_until" type="date">
+<button>Log promo</button></form></div>`);
+  }
+  const oppRows = opps.rows.map((o: any) => {
+    const ev = Array.isArray(o.evidence) ? o.evidence : [];
+    return `<tr>
+<td><b>${esc(o.title)}</b><br><span class="mut">${kindLabel[o.kind] || esc(o.kind)}${o.competitor_name ? " · " + esc(o.competitor_name) : ""} · confidence ${o.confidence}%${o.impact_rand !== null ? ` · about R${Number(o.impact_rand).toLocaleString("en-ZA")}/month` : ""}</span><br>
+${esc(o.detail)}${ev.length ? `<br><span class="mut">${ev.map((e: string) => esc(e)).join("<br>")}</span>` : ""}</td>
+<td>${o.status === "new" ? "<b>new</b>" : o.status === "acted" ? '<span class="ok">acted on</span>' : '<span class="mut">dismissed</span>'}</td>
+<td>${o.status === "new" ? `<form class="inline" method="post" action="/opportunities/${o.id}/draft"><button>Draft a campaign</button></form>
+<form class="inline" method="post" action="/opportunities/${o.id}/acted"><button class="link">Acted on</button></form>
+<form class="inline" method="post" action="/opportunities/${o.id}/dismissed"><button class="link">Dismiss</button></form>` : o.campaign_id ? `<a href="/campaigns">campaign</a>` : ""}</td></tr>`;
+  }).join("");
+  return layout("Competitors", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+<h2>Opportunities</h2>
+<div class="card">${opps.rows.length ? `<table><tr><th>Opportunity</th><th>Status</th><th></th></tr>${oppRows}</table>` : `<p class="mut">No opportunities right now. Log competitors, their dishes and their promos below and the board fills itself.</p>`}</div>
+<h2>Competitors</h2>
+<div class="card"><form method="post" action="/competitors">
+<input name="name" required maxlength="120" placeholder="Competitor name" style="width:180px">
+<input name="area" maxlength="120" placeholder="Area" style="width:140px">
+<input name="rating" type="number" min="0" max="5" step="0.1" placeholder="Google rating" style="width:110px">
+<input name="website" maxlength="200" placeholder="Website" style="width:180px">
+<button>Track competitor</button></form>
+<p class="mut">Adding the same name again updates it.</p></div>
+${compCards.join("")}`, user);
+}
 
 async function campaignsPage(db: Pool, user: any, mem: any, msg = ""): Promise<string> {
   const r = await db.query(`SELECT * FROM receptionist_campaign WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 30`, [mem.workspace_id]);
@@ -1518,6 +1577,44 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
       if (ccan && req.method === "POST") {
         await campaignCancel(db, mem.workspace_id, ccan[1]);
         return redirect("/campaigns?msg=" + encodeURIComponent("Cancelled."));
+      }
+
+      if (path === "/competitors") {
+        if (req.method === "POST") {
+          const f = await formData(req);
+          try {
+            await competitorAdd(db, mem.workspace_id, String(f.name || ""), String(f.area || ""), String(f.website || ""), String(f.rating || ""), "");
+            return redirect("/competitors?msg=" + encodeURIComponent("Competitor saved."));
+          } catch (e: any) { return redirect("/competitors?msg=" + encodeURIComponent(String(e?.message || e))); }
+        }
+        return html(await competitorsPage(db, user, mem, url.searchParams.get("msg") || ""));
+      }
+      const cdish = /^\/competitors\/([0-9a-f-]{36})\/dishes$/.exec(path);
+      if (cdish && req.method === "POST") {
+        const f = await formData(req);
+        try {
+          await dishAdd(db, mem.workspace_id, cdish[1], String(f.name || ""), Number(f.price), String(f.own_item_id || ""));
+          return redirect("/competitors?msg=" + encodeURIComponent("Dish logged."));
+        } catch (e: any) { return redirect("/competitors?msg=" + encodeURIComponent(String(e?.message || e))); }
+      }
+      const cpromo = /^\/competitors\/([0-9a-f-]{36})\/promos$/.exec(path);
+      if (cpromo && req.method === "POST") {
+        const f = await formData(req);
+        try {
+          await promoAdd(db, mem.workspace_id, cpromo[1], String(f.text || ""), String(f.valid_until || ""));
+          return redirect("/competitors?msg=" + encodeURIComponent("Promotion logged."));
+        } catch (e: any) { return redirect("/competitors?msg=" + encodeURIComponent(String(e?.message || e))); }
+      }
+      const oppact = /^\/opportunities\/([0-9a-f-]{36})\/(acted|dismissed|draft)$/.exec(path);
+      if (oppact && req.method === "POST") {
+        try {
+          if (oppact[2] === "draft") {
+            await opportunityDraftCampaign(db, mem.workspace_id, oppact[1]);
+            return redirect("/campaigns?msg=" + encodeURIComponent("Draft campaign ready - approve it when you are ready to send."));
+          }
+          await opportunityAction(db, mem.workspace_id, oppact[1], oppact[2]);
+          return redirect("/competitors?msg=" + encodeURIComponent("Marked."));
+        } catch (e: any) { return redirect("/competitors?msg=" + encodeURIComponent(String(e?.message || e))); }
       }
 
       if (path === "/reviews") return html(await reviewsPage(db, user, mem, base, url.searchParams.get("msg") || ""));
