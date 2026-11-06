@@ -47,6 +47,7 @@ export function navLinks(user: any): string {
   if (show("social")) h += `<a href="/analytics">Analytics</a>`;
   if (show("reviews")) h += `<a href="/radar">Radar</a>`;
   if (show("social")) h += `<a href="/posts">Posts</a>`;
+  if (show("social")) h += `<a href="/media">Media</a>`;
   h += `<a href="/onboarding">Onboarding</a>`;
   if (show("reviews")) h += `<a href="/reviews">Reviews</a>`;
   if (show("receptionist")) h += `<a href="/receptionist">Receptionist</a>`;
@@ -432,7 +433,9 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <label>Topic<input name="topic" maxlength="200" value="${esc(pre.topic || "")}" placeholder="e.g. teeth whitening special this month" required></label>
 <button class="btn-secondary">Draft with AI</button>
 </form></div>
+${pre.media ? `<div class="card"><h2 style="margin-top:0">Attached image</h2><img src="/media/${esc(pre.media)}/raw" style="max-width:280px;border-radius:8px"></div>` : ""}
 <div class="card"><form method="post" action="/posts/new">
+${pre.media ? `<input type="hidden" name="media_id" value="${esc(pre.media)}">` : ""}
 <label>Title<input name="title" maxlength="200" value="${esc(pre.title || "")}" placeholder="Internal title"></label>
 <label>Caption<textarea name="caption" rows="6" placeholder="What should go out?">${esc(pre.caption || "")}</textarea></label>
 <button>Save draft</button>
@@ -1039,6 +1042,50 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
         return redirect("/frontdesk");
       }
 
+      if (path === "/media") {
+        if (req.method === "POST") {
+          const fd = await req.formData();
+          const file = fd.get("file");
+          if (!(file instanceof File) || !file.size) return redirect("/media?err=" + encodeURIComponent("Choose an image first."));
+          if (!(file.type || "").startsWith("image/")) return redirect("/media?err=" + encodeURIComponent("Images only (jpg, png, webp, gif)."));
+          if (file.size > 2 * 1024 * 1024) return redirect("/media?err=" + encodeURIComponent("That image is over 2 MB - please use a smaller one."));
+          const caps = await db.query(`SELECT count(*) c, COALESCE(sum(size),0) b FROM cf_media WHERE workspace_id=$1`, [mem.workspace_id]);
+          if (Number(caps.rows[0].c) >= 25) return redirect("/media?err=" + encodeURIComponent("Library full (25 images on the free library) - delete one first."));
+          if (Number(caps.rows[0].b) + file.size > 50 * 1024 * 1024) return redirect("/media?err=" + encodeURIComponent("Library storage limit reached (50 MB) - delete something first."));
+          const buf = Buffer.from(await file.arrayBuffer());
+          await db.query(`INSERT INTO cf_media(id,workspace_id,filename,mime,size,data) VALUES($1,$2,$3,$4,$5,$6)`,
+            [crypto.randomUUID(), mem.workspace_id, (file.name || "image").slice(0, 200), file.type, file.size, buf]);
+          return redirect("/media?msg=" + encodeURIComponent("Image added to your library."));
+        }
+        const items = await db.query(`SELECT id, filename, mime, size, created_at FROM cf_media WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 60`, [mem.workspace_id]);
+        const msg = url.searchParams.get("msg") || "", err = url.searchParams.get("err") || "";
+        const cards = items.rows.map((m: any) => `<div class="card" style="padding:10px">
+<img src="/media/${m.id}/raw" alt="${esc(m.filename)}" style="width:100%;height:140px;object-fit:cover;border-radius:8px;background:var(--line)">
+<p style="margin:6px 0 2px"><b>${esc(m.filename)}</b><br><span class="mut">${Math.round(m.size / 1024)} KB · ${new Date(m.created_at).toLocaleDateString("en-ZA")}</span></p>
+<p style="margin:4px 0"><a href="/posts/new?media=${m.id}">Use in a post</a></p>
+<form method="post" action="/media/${m.id}/delete" onsubmit="return confirm('Delete this image?')"><button class="link" style="color:var(--bad)">Delete</button></form>
+</div>`).join("");
+        return html(layout("Media library", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}</p>` : ""}
+<div class="card"><h2 style="margin-top:0">Add an image</h2>
+<form method="post" enctype="multipart/form-data"><input type="file" name="file" accept="image/*" required><button>Upload</button></form>
+<p class="mut">Images up to 2 MB. Your library holds 25 images (50 MB) - plenty for a month of posts.</p></div>
+<div class="grid">${cards || '<div class="card"><p class="mut">No images yet. Your first upload lands here.</p></div>'}</div>`, user));
+      }
+
+      const mraw = /^\/media\/([0-9a-f-]{36})\/raw$/.exec(path);
+      if (mraw) {
+        const r = await db.query(`SELECT mime, data FROM cf_media WHERE id=$1 AND workspace_id=$2`, [mraw[1], mem.workspace_id]);
+        if (!r.rows[0]) return new Response("not found", { status: 404 });
+        return new Response(new Uint8Array(r.rows[0].data), { headers: { "content-type": r.rows[0].mime, "cache-control": "private, max-age=3600" } });
+      }
+
+      const mdel = /^\/media\/([0-9a-f-]{36})\/delete$/.exec(path);
+      if (mdel && req.method === "POST") {
+        await db.query(`DELETE FROM cf_media WHERE id=$1 AND workspace_id=$2`, [mdel[1], mem.workspace_id]);
+        return redirect("/media?msg=" + encodeURIComponent("Image deleted."));
+      }
+
       if (path === "/posts") {
         const msg = url.searchParams.get("msg") || "";
         return html((msg ? `<p class="ok">${esc(msg)}</p>` : "") + await postsPage(db, user, mem));
@@ -1053,9 +1100,9 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
           try {
             await client.query("BEGIN");
             await client.query(
-              `INSERT INTO composer_post(id,title,caption,first_comment,internal_notes,tags,workspace_id,author_id,created_at,updated_at)
-               VALUES($1,$2,$3,'','','{}'::jsonb,$4,$5,now(),now())`,
-              [postId, (f.title || "").trim(), (f.caption || "").trim(), mem.workspace_id, user.id]);
+              `INSERT INTO composer_post(id,title,caption,first_comment,internal_notes,tags,workspace_id,author_id,media_id,created_at,updated_at)
+               VALUES($1,$2,$3,'','','{}'::jsonb,$4,$5,$6,now(),now())`,
+              [postId, (f.title || "").trim(), (f.caption || "").trim(), mem.workspace_id, user.id, /^[0-9a-f-]{36}$/.test(f.media_id || "") ? f.media_id : null]);
             // One draft platform post per connected account, like the Django composer.
             const accs = await client.query(
               `SELECT id, provider FROM social_accounts_social_account WHERE workspace_id=$1 AND connection_status='connected'`, [mem.workspace_id]);
@@ -1069,7 +1116,7 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
             return redirect("/posts?msg=" + encodeURIComponent("Draft created."));
           } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }
         }
-        return html(newPostPage(user, mem, {}, url.searchParams.get("msg") || ""));
+        return html(newPostPage(user, mem, { media: url.searchParams.get("media") || "" }, url.searchParams.get("msg") || ""));
       }
 
       if (path === "/posts/draft" && req.method === "POST") {
