@@ -124,6 +124,15 @@ async function newSession(db: Pool, userId: string, req: Request): Promise<strin
     [th, userId, (req.headers.get("user-agent") || "").slice(0, 200)]);
   return token;
 }
+async function rateLimited(db: Pool, bucket: string, req: Request, limit: number): Promise<boolean> {
+  const ip = (req.headers.get("cf-connecting-ip") || "unknown").slice(0, 64);
+  const day = new Date().toISOString().slice(0, 10);
+  const r = await db.query(
+    `INSERT INTO cf_ratelimit(key,count) VALUES($1,1) ON CONFLICT (key) DO UPDATE SET count=cf_ratelimit.count+1 RETURNING count`,
+    [`${bucket}:${ip}:${day}`]);
+  return Number(r.rows[0].count) > limit;
+}
+
 function sessionCookie(token: string): string {
   return `cf_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${14 * 86400}`;
 }
@@ -587,8 +596,24 @@ ${mem.trial_started_at ? `<p class="mut">Trial started ${new Date(mem.trial_star
 }
 
 // ---------- router ----------
+function withSecurity(res: Response, path: string): Response {
+  const h = new Headers(res.headers);
+  h.set("X-Content-Type-Options", "nosniff");
+  h.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  h.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  // /f/<ws> is the public enquiry form customers embed on their own sites.
+  if (!path.startsWith("/f/")) h.set("X-Frame-Options", "SAMEORIGIN");
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
+    const res = await handle(req, env);
+    return withSecurity(res, new URL(req.url).pathname);
+  },
+};
+
+async function handle(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
     const base = url.origin;
     const path = url.pathname;
@@ -658,6 +683,11 @@ export default {
 
     if (path === "/signup") {
       if (req.method === "GET") return html(signupPage());
+      {
+        const rl = pool(env);
+        try { if (await rateLimited(rl, "signup", req, 10)) { await rl.end().catch(() => {}); return html(signupPage("Too many signups from this network today - please try again tomorrow."), 429); } await rl.end().catch(() => {}); }
+        catch { await rl.end().catch(() => {}); }
+      }
       const f = await formData(req);
       const db = pool(env);
       try {
@@ -701,6 +731,7 @@ export default {
       const f = await formData(req);
       const db = pool(env);
       try {
+        if (await rateLimited(db, "login", req, 20)) return html(loginPage("Too many attempts from this network today - please try again tomorrow."), 429);
         const r = await db.query(`SELECT id,password FROM accounts_user WHERE lower(email)=lower($1) AND is_active`, [(f.email || "").trim()]);
         const row = r.rows[0];
         let ok = false;
@@ -709,6 +740,7 @@ export default {
           ok = v.rows[0]?.ok === true;
         }
         if (!ok) return html(loginPage("Wrong email or password."), 401);
+      // (rate limit checked below before password verify)
         const token = await newSession(db, row.id, req);
         return new Response(null, { status: 303, headers: { location: "/", "set-cookie": sessionCookie(token) } });
       } finally { await db.end().catch(() => {}); }
@@ -1091,5 +1123,4 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
     } catch (e: any) {
       return html(layout("Error", `<p class="bad">${esc(String(e).slice(0, 300))}</p>`), 500);
     } finally { await db.end().catch(() => {}); }
-  },
-};
+}
