@@ -4,6 +4,7 @@
 import { Client, Pool } from "pg";
 import { LOGO_B64, landingPage } from "./landing";
 import { INDUSTRIES, getPreset, industryLabel } from "./presets";
+import { handleZernioWebhook, verifyZernioSignature } from "./receptionist";
 
 interface Env {
   DATABASE_URL: string;
@@ -11,6 +12,8 @@ interface Env {
   PF_MERCHANT_KEY: string;
   PF_PASSPHRASE: string;
   GROQ_API_KEY: string;
+  ZERNIO_API_KEY: string;
+  ZERNIO_WEBHOOK_SECRET: string;
 }
 
 // ---------- db ----------
@@ -45,6 +48,7 @@ function navLinks(user: any): string {
   if (show("social")) h += `<a href="/posts">Posts</a>`;
   h += `<a href="/onboarding">Onboarding</a>`;
   if (show("reviews")) h += `<a href="/reviews">Reviews</a>`;
+  if (show("receptionist")) h += `<a href="/receptionist">Receptionist</a>`;
   if (show("leads", "receptionist")) h += `<a href="/inbox">Inbox</a>`;
   if (show("leads")) h += `<a href="/frontdesk">Leads</a>`;
   if (show("reviews", "leads", "receptionist")) h += `<a href="/approvals">Approvals</a>`;
@@ -588,6 +592,29 @@ export default {
     const base = url.origin;
     const path = url.pathname;
 
+    if (path === "/webhooks/zernio" && req.method === "POST") {
+      const raw = await req.text();
+      const sig = req.headers.get("x-zernio-signature") || req.headers.get("x-late-signature") || "";
+      if (!(await verifyZernioSignature(env.ZERNIO_WEBHOOK_SECRET || "", raw, sig.toLowerCase())))
+        return json({ ok: false }, 403);
+      let payload: any = {};
+      try { payload = JSON.parse(raw); } catch { return json({ ok: false }, 400); }
+      const eventId = String(payload.id || req.headers.get("x-zernio-event-id") || "");
+      const db = pool(env);
+      try {
+        if (eventId) {
+          const ins = await db.query(`INSERT INTO cf_webhook_event(id,event,received_at) VALUES($1,$2,now()) ON CONFLICT (id) DO NOTHING RETURNING id`, [eventId, String(payload.event || "")]);
+          if (!ins.rows[0]) { await db.end().catch(() => {}); return json({ ok: true, deduped: true }); }
+        }
+        await handleZernioWebhook(db, env, payload);
+        await db.end().catch(() => {});
+        return json({ ok: true });
+      } catch (e: any) {
+        await db.end().catch(() => {});
+        return json({ ok: false, error: String(e).slice(0, 200) }, 500);
+      }
+    }
+
     if (path === "/health") {
       try {
         const db = pool(env);
@@ -743,6 +770,29 @@ export default {
         return html(layout("Switch business", `
 <div class="card"><table><tr><th>Business</th><th>Plan</th><th></th></tr>${rows}</table>
 <p class="mut">Each business has its own posts, inbox, reviews and billing.</p></div>`, user));
+      }
+
+      if (path === "/receptionist") {
+        const [ch, prof, usedM, planRow] = await Promise.all([
+          db.query(`SELECT phone_number, label, is_sandbox, connected_at FROM receptionist_zerniochannel WHERE workspace_id=$1`, [mem.workspace_id]),
+          db.query(`SELECT business_name, industry, is_active FROM receptionist_businessprofile WHERE workspace_id=$1 LIMIT 1`, [mem.workspace_id]),
+          db.query(`SELECT count(*) c FROM receptionist_message m JOIN workspaces_workspace w ON w.id=m.workspace_id WHERE w.organization_id=$1 AND m.direction='outbound' AND m.sender_type='ai' AND m.is_draft=false AND m.created_at >= date_trunc('month', now())`, [mem.org_id]),
+          db.query(`SELECT plan FROM organizations_organization WHERE id=$1`, [mem.org_id]),
+        ]);
+        const allowance: Record<string, number> = { starter: 500, growth: 1000, "business-pro": 2500 };
+        const pl = planRow.rows[0]?.plan || "starter";
+        const lim = allowance[pl] ?? 500;
+        const chan = ch.rows.map((c: any) => `<tr><td>+${esc(c.phone_number || "")}</td><td>${esc(c.label || "")}</td><td>${c.is_sandbox ? "demo line" : "live"}</td></tr>`).join("");
+        const p = prof.rows[0];
+        return html(layout("Receptionist", `
+${!ch.rows.length ? `<div class="card" style="border-color:var(--brand)"><h2 style="margin-top:0">Connect your WhatsApp</h2><p>Your receptionist answers customers on your own business WhatsApp number. Contact NahaLabs to connect your number - it takes a few minutes.</p></div>` : ""}
+<div class="card"><h2 style="margin-top:0">Your receptionist</h2>
+<p>${p ? `${esc(p.business_name || mem.org_name)} · ${esc(p.industry || "general")} · ${p.is_active ? '<span class="ok">answering</span>' : '<span class="warn">paused</span>'}` : "Tell RevUp about your business in onboarding so the receptionist knows what to say."}</p>
+<p class="mut">Business details, hours and prices come from <a href="/onboarding">onboarding</a>. Conversations live in your <a href="/inbox">inbox</a> - step in any time.</p></div>
+<div class="grid">
+<div class="card"><h2>AI replies this month</h2><p class="stat">${usedM.rows[0].c} / ${lim}</p><p class="mut">on the ${esc(pl)} plan</p></div>
+<div class="card"><h2>Connected numbers</h2>${ch.rows.length ? `<table><tr><th>Number</th><th>Label</th><th>Type</th></tr>${chan}</table>` : `<p class="mut">None yet.</p>`}</div>
+</div>`, user));
       }
 
       if (path === "/") return html(await dashboardPage(db, user, mem, url.searchParams.get("msg") || ""));
