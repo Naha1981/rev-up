@@ -271,14 +271,18 @@ async function draftCaption(env: Env, business: string, topic: string): Promise<
   throw new Error(lastErr);
 }
 
-async function groqFollowup(env: Env, business: string, lead: any): Promise<string> {
+async function groqFollowup(env: Env, db: Pool, ws: string, business: string, lead: any): Promise<string> {
   const models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
+  const pq = await db.query(`SELECT pricing_data FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [ws]);
+  const pricing = JSON.stringify(pq.rows[0]?.pricing_data || {});
   const prompt = `Business: ${business} (South Africa).
 A website visitor sent an enquiry.
 Name: ${lead.name}
 Contact: ${lead.contact}
 Enquiry: ${lead.message}
-Write one short follow-up message the business can send back (max 120 words, warm and professional, plain text, no subject line, prices in ZAR if mentioned). Reply with the message text only.`;
+Known prices for this business (JSON, may be empty): ${pricing}
+Write one short follow-up message the business can send back (max 120 words, warm and professional, plain text, no subject line).
+Hard rules: use ONLY the facts above. Never invent prices, discounts, payment plans, opening hours, addresses or phone numbers. The visitor's own contact detail above is NOT the business's - never quote it back as a way to reach the business. If pricing is asked and not in the known prices, say the business will confirm the exact price directly. Sign off as the business name only. Reply with the message text only.`;
   let lastErr = "no model replied";
   for (const model of models) {
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -1425,7 +1429,7 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
         const lr = await db.query(`SELECT * FROM frontdesk_lead WHERE id=$1 AND workspace_id=$2`, [fdraft[1], mem.workspace_id]);
         if (!lr.rows[0]) return redirect("/frontdesk");
         try {
-          const body = await groqFollowup(env, mem.workspace_name, lr.rows[0]);
+          const body = await groqFollowup(env, db, mem.workspace_id, mem.workspace_name, lr.rows[0]);
           await db.query(`INSERT INTO frontdesk_followup_draft(id,lead_id,workspace_id,body,status,created_at,updated_at) VALUES($1,$2,$3,$4,'draft',now(),now())`,
             [crypto.randomUUID(), fdraft[1], mem.workspace_id, body]);
         } catch (e) { return redirect("/frontdesk?err=" + encodeURIComponent("Drafting failed - try again.")); }
