@@ -38,7 +38,7 @@ function esc(s: any): string {
 }
 function layout(title: string, body: string, user?: any): string {
   const nav = user
-    ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a href="/">Dashboard</a><a href="/analytics">Analytics</a><a href="/radar">Radar</a><a href="/posts">Posts</a><a href="/onboarding">Onboarding</a><a href="/reviews">Reviews</a><a href="/inbox">Inbox</a><a href="/approvals">Approvals</a><a href="/billing">Billing</a>${user._cur_ws ? `<a href="/switch" title="Switch business" style="border:1px solid var(--line);border-radius:8px;padding:2px 8px">${esc(user._cur_ws)}${(user._ws_count||0) > 1 ? " &#9662;" : ""}</a>` : ""}<form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>`
+    ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a href="/">Dashboard</a><a href="/analytics">Analytics</a><a href="/radar">Radar</a><a href="/posts">Posts</a><a href="/onboarding">Onboarding</a><a href="/reviews">Reviews</a><a href="/inbox">Inbox</a><a href="/frontdesk">Leads</a><a href="/approvals">Approvals</a><a href="/billing">Billing</a>${user._cur_ws ? `<a href="/switch" title="Switch business" style="border:1px solid var(--line);border-radius:8px;padding:2px 8px">${esc(user._cur_ws)}${(user._ws_count||0) > 1 ? " &#9662;" : ""}</a>` : ""}<form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>`
     : `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a class="btn btn-ghost" href="/login">Log in</a><a class="btn btn-primary" href="/signup">Get started</a></div></nav>`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} · RevUp</title><style>
 :root{--brand:#F97316;--brand-dark:#EA580C;--brand-soft:#FFF7ED;--ink:#1C1917;--ink2:#57534E;--ink3:#A8A29E;--line:#E7E5E4;--bg:#FAFAF9}
@@ -228,6 +228,43 @@ async function draftCaption(env: Env, business: string, topic: string): Promise<
   }
   throw new Error(lastErr);
 }
+
+async function groqFollowup(env: Env, business: string, lead: any): Promise<string> {
+  const models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
+  const prompt = `Business: ${business} (South Africa).
+A website visitor sent an enquiry.
+Name: ${lead.name}
+Contact: ${lead.contact}
+Enquiry: ${lead.message}
+Write one short follow-up message the business can send back (max 120 words, warm and professional, plain text, no subject line, prices in ZAR if mentioned). Reply with the message text only.`;
+  let lastErr = "no model replied";
+  for (const model of models) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${env.GROQ_API_KEY}` },
+          body: JSON.stringify({ model, temperature: 0.3, max_tokens: 500, reasoning_effort: "low", messages: [{ role: "user", content: prompt }] }),
+        });
+        if (!resp.ok) { lastErr = `groq ${resp.status}`; continue; }
+        const data: any = await resp.json();
+        const text: string = (data?.choices?.[0]?.message?.content || "").trim();
+        if (text) return text;
+        lastErr = "empty reply";
+      } catch (e: any) { lastErr = String(e?.message || e); }
+    }
+  }
+  throw new Error(lastErr);
+}
+
+const enquiryForm = (biz: string, err = "") => layout(`Enquire - ${biz}`, `
+<div class="card"><h2>Send ${esc(biz)} an enquiry</h2>
+${err ? `<p class="bad">${esc(err)}</p>` : ""}
+<form method="post">
+<label>Your name<input name="name" required maxlength="200"></label>
+<label>WhatsApp number or email<input name="contact" required maxlength="200"></label>
+<label>How can they help?<textarea name="message" rows="4" required maxlength="2000"></textarea></label>
+<button>Send enquiry</button></form></div>`);
 
 // ---------- pages ----------
 const signupPage = (err = "") => layout("Create your RevUp account", `
@@ -463,7 +500,7 @@ async function billingPage(db: Pool, user: any, mem: any, base: string, env: Env
   const plans = [
     { slug: "starter", name: "Starter", price: 499, feat: "1 workspace · core publishing" },
     { slug: "growth", name: "Growth", price: 999, feat: "3 workspaces · approvals · reviews" },
-    { slug: "business-pro", name: "Business Pro", price: 1999, feat: "unlimited workspaces · priority support" },
+    { slug: "business-pro", name: "Business Pro", price: 1999, feat: "everything in Growth · FrontDesk lead pipeline + follow-ups · 3 channels" },
   ];
   const cards = plans.map((p) => `<div class="card"><h2>${p.name}</h2>
 <p style="font-size:26px;margin:0">R${p.price.toLocaleString("en-ZA")}<span class="mut">/month</span></p>
@@ -582,6 +619,41 @@ export default {
       return new Response(null, { status: 303, headers: { location: "/login", "set-cookie": "cf_session=; Path=/; Max-Age=0" } });
     }
 
+    // FrontDesk public enquiry form (no login)
+    const fm = /^\/f\/([0-9a-f-]{36})$/.exec(path);
+    if (fm) {
+      const pdb = pool(env);
+      try {
+        const w = await pdb.query(
+          `SELECT w.id, w.name, o.plan FROM workspaces_workspace w JOIN organizations_organization o ON o.id=w.organization_id WHERE w.id=$1 AND w.is_archived=false AND o.deleted_at IS NULL`, [fm[1]]);
+        const biz = w.rows[0];
+        if (!biz || biz.plan !== "business-pro") return html(layout("Enquiries closed", `<div class="card"><p>This business is not taking online enquiries right now.</p></div>`), 404);
+        if (req.method === "POST") {
+          const f = await formData(req);
+          const name = (f.name || "").trim().slice(0, 200), contact = (f.contact || "").trim().slice(0, 200), message = (f.message || "").trim().slice(0, 2000);
+          if (!name || !contact || !message) return html(enquiryForm(biz.name, "Please fill in your name, contact and message."));
+          const ip = req.headers.get("cf-connecting-ip") || "";
+          const day = new Date().toISOString().slice(0, 10);
+          const key = (await sha256hex(fm[1] + ip + day)).slice(0, 40);
+          const leadId = crypto.randomUUID();
+          const ins = await pdb.query(
+            `INSERT INTO frontdesk_lead(id,workspace_id,name,contact,message,stage,value_cents,request_key,created_at,updated_at)
+             VALUES($1,$2,$3,$4,$5,'new',0,$6,now(),now()) ON CONFLICT (workspace_id,request_key) DO NOTHING RETURNING id`, [leadId, fm[1], name, contact, message, key]);
+          if (ins.rows[0]) {
+            const cid = crypto.randomUUID();
+            await pdb.query(
+              `INSERT INTO receptionist_contact(id,workspace_id,wa_id,name,tags,needs_human,opted_out,zernio_conversation_id,issue_note,review_status,dietary_notes,is_vip,notes,total_spend,visit_count,created_at,updated_at)
+               VALUES($1,$2,$3,$4,'[]'::jsonb,true,false,'','','new','',false,'web enquiry',0,0,now(),now())`, [cid, fm[1], ("web:" + contact).slice(0, 32), name.slice(0, 120)]);
+            await pdb.query(
+              `INSERT INTO receptionist_message(id,direction,sender_type,body,zernio_message_id,is_draft,created_at,contact_id,workspace_id,media_urls)
+               VALUES($1,'inbound','user',$2,$3,false,now(),$4,$5,'[]'::jsonb)`, [crypto.randomUUID(), message, "fd-" + leadId, cid, fm[1]]);
+          }
+          return html(layout("Thank you", `<div class="card"><h2>Thank you, ${esc(name)}</h2><p>${esc(biz.name)} has your enquiry and will get back to you shortly.</p></div>`));
+        }
+        return html(enquiryForm(biz.name));
+      } finally { await pdb.end().catch(() => {}); }
+    }
+
     // everything below needs auth
     const db = pool(env);
     try {
@@ -645,6 +717,68 @@ export default {
         return html(await radarPage(db, user, mem, url.searchParams.get("msg") || ""));
       }
       if (path === "/analytics") return html(await analyticsPage(db, user, mem));
+
+      if (path === "/frontdesk") {
+        if (mem.plan !== "business-pro") return html(layout("Leads", `
+<div class="card"><h2>Leads is a Business Pro feature</h2>
+<p>Capture website enquiries, work a shared lead pipeline, and send considered follow-ups. <a href="/billing">Upgrade to Business Pro - R1,999/month</a>.</p></div>`, user));
+        const leads = await db.query(`SELECT * FROM frontdesk_lead WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 200`, [mem.workspace_id]);
+        const drafts = await db.query(`SELECT * FROM frontdesk_followup_draft WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 100`, [mem.workspace_id]);
+        const totals = await db.query(`SELECT stage, count(*) c, coalesce(sum(value_cents),0) v FROM frontdesk_lead WHERE workspace_id=$1 GROUP BY stage`, [mem.workspace_id]);
+        const tmap: Record<string, any> = {}; for (const t of totals.rows) tmap[t.stage] = t;
+        const STAGES = ["new", "contacted", "quoted", "won", "lost"];
+        const summary = STAGES.map((s) => `<div class="card"><h2 style="text-transform:capitalize">${s}</h2><p class="stat">${tmap[s]?.c || 0}</p><p class="mut">R${((tmap[s]?.v || 0) / 100).toLocaleString("en-ZA")}</p></div>`).join("");
+        const byLead: Record<string, any[]> = {}; for (const d of drafts.rows) (byLead[d.lead_id] = byLead[d.lead_id] || []).push(d);
+        const rows = leads.rows.map((l: any) => {
+          const ds = (byLead[l.id] || []).map((d: any) => `<div style="border:1px solid var(--line);border-radius:8px;padding:8px;margin:6px 0">
+<div class="mut" style="font-size:11px">Follow-up draft · ${esc(d.status)} · ${new Date(d.created_at).toLocaleString("en-ZA")}</div>
+<div style="white-space:pre-wrap">${esc(d.body)}</div>
+${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/approve" style="margin-top:6px"><button>Mark approved</button></form>` : ""}</div>`).join("");
+          return `<tr>
+<td><b>${esc(l.name)}</b><br><span class="mut">${esc(l.contact)}</span></td>
+<td>${esc(l.message.slice(0, 100))}${ds}</td>
+<td><form method="post" action="/frontdesk/${l.id}/save" style="display:flex;gap:6px;align-items:center">
+<select name="stage">${STAGES.map((s) => `<option${l.stage === s ? " selected" : ""}>${s}</option>`).join("")}</select>
+<input name="value" type="number" min="0" step="0.01" value="${(l.value_cents / 100).toFixed(2)}" style="width:90px" title="Value (ZAR)">
+<button>Save</button></form>
+<form method="post" action="/frontdesk/${l.id}/draft" style="margin-top:6px"><button>Draft follow-up</button></form></td>
+<td class="mut">${new Date(l.created_at).toLocaleString("en-ZA")}</td></tr>`;
+        }).join("");
+        return html(layout("Leads", `
+<p class="mut">Your public enquiry form: <a href="/f/${mem.workspace_id}" target="_blank" rel="noopener">/f/${mem.workspace_id.slice(0, 8)}…</a> - share it anywhere. Enquiries land here and in your inbox.</p>
+<div class="grid">${summary}</div>
+<div class="card">${leads.rows.length ? `<table><tr><th>Lead</th><th>Enquiry + follow-ups</th><th>Stage · value (ZAR)</th><th>When</th></tr>${rows}</table>` : `<p class="mut">No enquiries yet. Share your enquiry form link to start capturing leads.</p>`}</div>`, user));
+      }
+
+      const fsave = /^\/frontdesk\/([0-9a-f-]{36})\/save$/.exec(path);
+      if (fsave && req.method === "POST") {
+        if (mem.plan !== "business-pro") return redirect("/frontdesk");
+        const f = await formData(req);
+        const stage = ["new", "contacted", "quoted", "won", "lost"].includes(f.stage) ? f.stage : "new";
+        const cents = Math.max(0, Math.round(parseFloat(f.value || "0") * 100) || 0);
+        await db.query(`UPDATE frontdesk_lead SET stage=$1, value_cents=$2, updated_at=now() WHERE id=$3 AND workspace_id=$4`, [stage, cents, fsave[1], mem.workspace_id]);
+        return redirect("/frontdesk");
+      }
+
+      const fdraft = /^\/frontdesk\/([0-9a-f-]{36})\/draft$/.exec(path);
+      if (fdraft && req.method === "POST") {
+        if (mem.plan !== "business-pro") return redirect("/frontdesk");
+        const lr = await db.query(`SELECT * FROM frontdesk_lead WHERE id=$1 AND workspace_id=$2`, [fdraft[1], mem.workspace_id]);
+        if (!lr.rows[0]) return redirect("/frontdesk");
+        try {
+          const body = await groqFollowup(env, mem.workspace_name, lr.rows[0]);
+          await db.query(`INSERT INTO frontdesk_followup_draft(id,lead_id,workspace_id,body,status,created_at,updated_at) VALUES($1,$2,$3,$4,'draft',now(),now())`,
+            [crypto.randomUUID(), fdraft[1], mem.workspace_id, body]);
+        } catch (e) { return redirect("/frontdesk?err=" + encodeURIComponent("Drafting failed - try again.")); }
+        return redirect("/frontdesk");
+      }
+
+      const fappr = /^\/frontdesk\/draft\/([0-9a-f-]{36})\/approve$/.exec(path);
+      if (fappr && req.method === "POST") {
+        if (mem.plan !== "business-pro") return redirect("/frontdesk");
+        await db.query(`UPDATE frontdesk_followup_draft SET status='approved', updated_at=now() WHERE id=$1 AND workspace_id=$2`, [fappr[1], mem.workspace_id]);
+        return redirect("/frontdesk");
+      }
 
       if (path === "/posts") {
         const msg = url.searchParams.get("msg") || "";
