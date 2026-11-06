@@ -108,7 +108,7 @@ async function reviewGate(db: Pool, workspaceId: string): Promise<string> {
 
 // Same guarded send path as receptionist replies: draft row first, then the
 // send attempt; failure leaves the draft in the inbox.
-async function deliver(db: Pool, env: any, workspaceId: string, contact: any, body: string): Promise<void> {
+export async function deliver(db: Pool, env: any, workspaceId: string, contact: any, body: string): Promise<void> {
   const ch = await db.query(`SELECT * FROM receptionist_zerniochannel WHERE workspace_id=$1 LIMIT 1`, [workspaceId]);
   const channel = ch.rows[0];
   if (!channel) throw new Error("No connected WhatsApp number.");

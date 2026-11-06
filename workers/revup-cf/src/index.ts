@@ -7,6 +7,7 @@ export { landingPage } from "./landing";
 import { INDUSTRIES, getPreset, industryLabel } from "./presets";
 import { handleZernioWebhook, verifyZernioSignature, validateTenantKey, tenantConnectUrl, tenantConfirmAndBind, tenantWebhookSecret } from "./receptionist";
 import { startPipeline, cancelPending, runDueReviewEvents, resolveIssue, scheduleServiceReminder, runDueServiceReminders } from "./reviews";
+import { waitlistAdd, waitlistExpire, waitlistAction, loyaltySettings, loyaltyAccount, awardForBooking, issueVoucher, redeemVoucher, expireVouchers, quoteCreate, quoteAction } from "./features";
 
 interface Env {
   DATABASE_URL: string;
@@ -53,6 +54,9 @@ export function navLinks(user: any): string {
   if (show("reviews")) h += `<a href="/reviews">Reviews</a>`;
   if (show("receptionist")) h += `<a href="/receptionist">Receptionist</a>`;
   if (show("receptionist")) h += `<a href="/bookings">Bookings</a>`;
+  if (show("receptionist")) h += `<a href="/waitlist">Waitlist</a>`;
+  if (show("receptionist")) h += `<a href="/loyalty">Loyalty</a>`;
+  if (show("receptionist")) h += `<a href="/quotes">Quotes</a>`;
   if (show("leads", "receptionist")) h += `<a href="/inbox">Inbox</a>`;
   if (show("leads")) h += `<a href="/frontdesk">Leads</a>`;
   if (show("reviews", "leads", "receptionist")) h += `<a href="/approvals">Approvals</a>`;
@@ -401,6 +405,98 @@ ${PLAN_CARDS.map((p) => `<label style="display:block;border:1px solid ${cur === 
 </form></div>`, user);
 }
 
+
+async function waitlistPage(db: Pool, user: any, mem: any, msg = ""): Promise<string> {
+  await waitlistExpire(db, mem.workspace_id);
+  const r = await db.query(
+    `SELECT w.*, c.name AS contact_name, c.wa_id FROM receptionist_waitlistentry w
+     JOIN receptionist_contact c ON c.id=w.contact_id
+     WHERE w.workspace_id=$1 ORDER BY CASE WHEN w.status IN ('waiting','offered') THEN 0 ELSE 1 END, w.created_at LIMIT 40`, [mem.workspace_id]);
+  const badge: any = { waiting: "<b>waiting</b>", offered: '<span class="pill warn">offered</span>', accepted: '<span class="ok">accepted</span>', cancelled: '<span class="mut">cancelled</span>', expired: '<span class="mut">expired</span>' };
+  const rows = r.rows.map((w: any) => `<tr>
+<td><b>${esc(w.contact_name || w.wa_id)}</b><br><span class="mut">party of ${w.party_size}${w.wanted_time ? " · " + esc(w.wanted_time) : ""}</span></td>
+<td>${badge[w.status] || esc(w.status)}${w.status === "offered" ? `<br><span class="mut">${w.offer_minutes} min to answer</span>` : ""}</td>
+<td>${w.status === "waiting" ? `<form class="inline" method="post" action="/waitlist/${w.id}/offer"><button>Offer a table</button></form>` : ""}
+${w.status === "offered" ? `<form class="inline" method="post" action="/waitlist/${w.id}/accept"><button>They accepted</button></form>` : ""}
+${["waiting", "offered"].includes(w.status) ? `<form class="inline" method="post" action="/waitlist/${w.id}/cancel"><button class="link">Remove</button></form>` : ""}</td></tr>`).join("");
+  return layout("Waitlist", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+<div class="card"><h2 style="margin-top:0">Add a waiting party</h2>
+<form method="post" action="/waitlist">
+<label>Name<input name="name" maxlength="120"></label>
+<label>WhatsApp / phone<input name="wa_id" required maxlength="32" placeholder="27…"></label>
+<label>Party size<input name="party_size" type="number" min="1" max="30" value="2" style="width:90px"></label>
+<label>They hoped for<input name="wanted_time" maxlength="200" placeholder="tonight around 7"></label>
+<button>Add to the waitlist</button></form></div>
+<div class="card">${r.rows.length ? `<table><tr><th>Party</th><th>Status</th><th></th></tr>${rows}</table>` : `<p class="mut">Nobody waiting. When the restaurant is full, add parties here and offer tables as they open up.</p>`}</div>`, user);
+}
+
+async function loyaltyPage(db: Pool, user: any, mem: any, msg = ""): Promise<string> {
+  const s = await loyaltySettings(db, mem.workspace_id);
+  const accounts = await db.query(
+    `SELECT a.*, c.name AS contact_name, c.wa_id FROM receptionist_loyaltyaccount a
+     JOIN receptionist_contact c ON c.id=a.contact_id WHERE a.workspace_id=$1 ORDER BY a.balance DESC LIMIT 50`, [mem.workspace_id]);
+  const vouchers = await db.query(
+    `SELECT v.*, c.name AS contact_name FROM receptionist_voucher v
+     JOIN receptionist_contact c ON c.id=v.contact_id WHERE v.workspace_id=$1 ORDER BY v.created_at DESC LIMIT 30`, [mem.workspace_id]);
+  const aRows = accounts.rows.map((a: any) => `<tr><td><b>${esc(a.contact_name || a.wa_id)}</b></td><td>${a.balance} pts</td><td class="mut">${a.lifetime_points} lifetime</td>
+<td>${a.balance >= s.points_for_voucher ? `<form class="inline" method="post" action="/loyalty/vouchers/new"><input type="hidden" name="contact_id" value="${a.contact_id}"><button>Issue R${s.voucher_value_rand} voucher</button></form>` : `<span class="mut">${s.points_for_voucher - a.balance} to go</span>`}</td></tr>`).join("");
+  const vRows = vouchers.rows.map((v: any) => `<tr><td><b>${esc(v.code)}</b></td><td>${esc(v.contact_name)}</td><td>R${v.amount_rand}</td>
+<td>${v.status === "active" ? '<span class="ok">active</span>' : esc(v.status)}</td>
+<td class="mut">to ${new Date(v.expires_at).toLocaleDateString("en-ZA")}</td>
+<td>${v.status === "active" ? `<form class="inline" method="post" action="/loyalty/vouchers/${v.id}/redeem"><button class="link">Redeem</button></form>` : ""}</td></tr>`).join("");
+  return layout("Loyalty", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+<div class="card"><h2 style="margin-top:0">Rules</h2>
+<form method="post" action="/loyalty/settings">
+<label>Programme <select name="enabled"><option value="on" ${s.enabled ? "selected" : ""}>on</option><option value="off" ${!s.enabled ? "selected" : ""}>off</option></select></label>
+<label>Points per visit<input name="points_per_visit" type="number" min="0" value="${s.points_per_visit}" style="width:100px"></label>
+<label>Welcome bonus<input name="welcome_bonus" type="number" min="0" value="${s.welcome_bonus}" style="width:100px"></label>
+<label>Points for a voucher<input name="points_for_voucher" type="number" min="1" value="${s.points_for_voucher}" style="width:100px"></label>
+<label>Voucher value (R)<input name="voucher_value_rand" type="number" min="1" value="${s.voucher_value_rand}" style="width:100px"></label>
+<label>Valid days<input name="voucher_valid_days" type="number" min="1" value="${s.voucher_valid_days}" style="width:100px"></label>
+<button>Save rules</button></form>
+<p class="mut">Customers earn points automatically when you mark a booking done. First visit earns the welcome bonus.</p></div>
+<h2>Customers</h2>
+<div class="card">${accounts.rows.length ? `<table><tr><th>Customer</th><th>Balance</th><th>Lifetime</th><th></th></tr>${aRows}</table>` : `<p class="mut">No points yet. Mark a booking done and the customer starts earning.</p>`}</div>
+<h2>Vouchers</h2>
+<div class="card">${vouchers.rows.length ? `<table><tr><th>Code</th><th>Customer</th><th>Value</th><th>Status</th><th>Valid</th><th></th></tr>${vRows}</table>` : `<p class="mut">No vouchers issued yet.</p>`}</div>`, user);
+}
+
+async function quotesPage(db: Pool, user: any, mem: any, msg = ""): Promise<string> {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Johannesburg" });
+  const r = await db.query(
+    `SELECT q.*, c.name AS contact_name FROM receptionist_quote q
+     LEFT JOIN receptionist_contact c ON c.id=q.contact_id
+     WHERE q.workspace_id=$1 ORDER BY CASE q.status WHEN 'draft' THEN 0 WHEN 'sent' THEN 1 WHEN 'won' THEN 2 ELSE 3 END, q.follow_up_on NULLS LAST, q.created_at DESC LIMIT 50`, [mem.workspace_id]);
+  const contacts = await db.query(`SELECT id, name, wa_id FROM receptionist_contact WHERE workspace_id=$1 ORDER BY updated_at DESC LIMIT 100`, [mem.workspace_id]);
+  const opts = ['<option value="">(no linked customer)</option>', ...contacts.rows.map((c: any) => `<option value="${c.id}">${esc(c.name || c.wa_id)}</option>`)].join("");
+  const rows = r.rows.map((q: any) => {
+    const chase = q.status === "sent" && q.follow_up_on && new Date(q.follow_up_on) <= new Date(today + "T00:00:00");
+    return `<tr${chase ? ' style="background:#fff7ed"' : ""}>
+<td><b>${esc(q.customer_name)}</b><br><span class="mut">${esc(q.title || "Quote")}</span></td>
+<td>R${(q.amount_cents / 100).toLocaleString("en-ZA", { minimumFractionDigits: 2 })}</td>
+<td>${q.status === "sent" ? '<span class="pill warn">sent</span>' : q.status === "won" ? '<span class="ok">won</span>' : q.status === "lost" ? '<span class="mut">lost</span>' : "<b>draft</b>"}
+${chase ? `<br><span class="bad">chase today</span>` : q.follow_up_on ? `<br><span class="mut">chase ${new Date(q.follow_up_on).toLocaleDateString("en-ZA")}</span>` : ""}</td>
+<td>${q.status === "draft" ? `<form class="inline" method="post" action="/quotes/${q.id}/sent"><button>Mark sent</button></form>` : ""}
+${["draft", "sent"].includes(q.status) ? `<form class="inline" method="post" action="/quotes/${q.id}/won"><button class="link">Won</button></form> <form class="inline" method="post" action="/quotes/${q.id}/lost"><button class="link">Lost</button></form>` : ""}</td></tr>`;
+  }).join("");
+  const won = r.rows.filter((q: any) => q.status === "won").reduce((t: number, q: any) => t + q.amount_cents, 0) / 100;
+  return layout("Quotes", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+<div class="card"><h2 style="margin-top:0">New quote</h2>
+<form method="post" action="/quotes">
+<label>Customer name<input name="customer_name" required maxlength="200"></label>
+<label>Link a customer (for WhatsApp send)<select name="contact_id">${opts}</select></label>
+<label>What is it for<input name="title" maxlength="200" placeholder="Geyser replacement"></label>
+<label>Amount (R)<input name="amount" type="number" min="0" step="0.01" required style="width:140px"></label>
+<label>Chase on<input name="follow_up_on" type="date"></label>
+<button>Save quote</button></form>
+<p class="mut">Mark it sent when it goes out - a linked customer gets it on WhatsApp too. Chase rows highlight when the follow-up day arrives.</p></div>
+<p class="mut">Won so far: <b>R${won.toLocaleString("en-ZA", { minimumFractionDigits: 2 })}</b></p>
+<div class="card">${r.rows.length ? `<table><tr><th>Customer</th><th>Amount</th><th>Status</th><th></th></tr>${rows}</table>` : `<p class="mut">No quotes yet.</p>`}</div>`, user);
+}
+
 async function reviewsPage(db: Pool, user: any, mem: any, base: string, msg = ""): Promise<string> {
   const bp = await db.query(`SELECT * FROM receptionist_businessprofile WHERE workspace_id=$1 LIMIT 1`, [mem.workspace_id]);
   const b = bp.rows[0] || {};
@@ -534,6 +630,16 @@ async function conversationPage(db: Pool, user: any, mem: any, contactId: string
   }).join("");
   return html(layout(`Chat: ${esc(c.rows[0].name || c.rows[0].wa_id)}`, `
 <p><a href="/inbox">&larr; all conversations</a></p>
+<div class="card"><h2 style="margin-top:0">Customer card</h2>
+<form method="post" action="/inbox/${c.rows[0].id}/card">
+<label>Name<input name="name" maxlength="120" value="${esc(c.rows[0].name || "")}"></label>
+<label>Birthday<input name="birthday" type="date" value="${c.rows[0].birthday ? new Date(c.rows[0].birthday).toISOString().slice(0, 10) : ""}"></label>
+<label>Dietary / preferences<input name="dietary_notes" maxlength="200" value="${esc(c.rows[0].dietary_notes || "")}"></label>
+<label>Lifetime spend (R)<input name="total_spend" inputmode="decimal" value="${esc(String(c.rows[0].total_spend ?? "0"))}" style="width:140px"></label>
+<label><input type="checkbox" name="is_vip" ${c.rows[0].is_vip ? "checked" : ""} style="width:auto"> VIP</label>
+<label>Private notes<textarea name="notes">${esc(c.rows[0].notes || "")}</textarea></label>
+<button>Save card</button></form>
+<p class="mut">${c.rows[0].visit_count || 0} visits${c.rows[0].opted_out ? " · opted out of automated messages" : ""}</p></div>
 <div class="card">${bubbles || `<p class="mut">No messages.</p>`}</div>`, user));
 }
 
@@ -675,6 +781,7 @@ export default {
       ctx.waitUntil((async () => {
         await runDueReviewEvents(db, env, "https://revup.nahalabs.co.za");
         await runDueServiceReminders(db, env);
+        await expireVouchers(db);
         await db.end().catch(() => {});
       })());
     } catch { await db.end().catch(() => {}); }
@@ -1202,6 +1309,19 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
 
       if (path === "/inbox") return html(await inboxPage(db, user, mem));
 
+      const cardPost = /^\/inbox\/([0-9a-f-]{36})\/card$/.exec(path);
+      if (cardPost && req.method === "POST") {
+        const f = await formData(req);
+        const spend = Number(String(f.total_spend || "0").replace(",", "."));
+        if (isNaN(spend) || spend < 0 || spend > 100000000) return redirect("/inbox/" + cardPost[1]);
+        const bday = /^\d{4}-\d{2}-\d{2}$/.test(f.birthday || "") ? f.birthday : null;
+        await db.query(
+          `UPDATE receptionist_contact SET name=$1, birthday=$2, dietary_notes=$3, notes=$4, total_spend=$5, is_vip=$6, updated_at=now()
+           WHERE id=$7 AND workspace_id=$8`,
+          [String(f.name || "").trim().slice(0, 120), bday, String(f.dietary_notes || "").trim().slice(0, 200), String(f.notes || "").trim(), spend, f.is_vip === "on", cardPost[1], mem.workspace_id]);
+        return redirect("/inbox/" + cardPost[1]);
+      }
+
       const ires = /^\/inbox\/intake\/(receptionist_funeralclaim|receptionist_dentalappointment|receptionist_tradedispatch)\/([0-9a-f-]{36})\/resolve$/.exec(path);
       if (ires && req.method === "POST") {
         await db.query(`UPDATE ${ires[1]} SET status='resolved' WHERE id=$1 AND workspace_id=$2`, [ires[2], mem.workspace_id]);
@@ -1268,18 +1388,73 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
         }
         if (bact[2] === "done" && b.status === "confirmed") {
           await db.query(`UPDATE receptionist_booking SET status='done' WHERE id=$1`, [b.id]);
-          await db.query(`UPDATE receptionist_contact SET visit_count=visit_count+1, updated_at=now() WHERE id=$1`, [b.contact_id]);
+          await db.query(`UPDATE receptionist_contact SET visit_count=visit_count+1, last_visit_at=now(), is_vip=(visit_count+1>=5 OR is_vip), updated_at=now() WHERE id=$1`, [b.contact_id]);
+          const lacc = await awardForBooking(db, mem.workspace_id, b.id, b.contact_id);
+          const loyaltyNote = lacc ? ` ${lacc.balance} loyalty points on their card.` : "";
           const evId = await startPipeline(db, mem.workspace_id, b.contact_id, b.id);
           const svc = await db.query(`SELECT service FROM receptionist_booking WHERE id=$1`, [b.id]);
           const remId = await scheduleServiceReminder(db, mem.workspace_id, b.id, b.contact_id, svc.rows[0]?.service || "");
           const extra = remId ? " A service reminder is scheduled too." : "";
-          return redirect("/bookings?msg=" + encodeURIComponent((evId ? "Marked done - the review check-in goes out in 15 minutes." : "Marked done. (This customer opted out of messages.)") + extra));
+          return redirect("/bookings?msg=" + encodeURIComponent((evId ? "Marked done - the review check-in goes out in 15 minutes." : "Marked done. (This customer opted out of messages.)") + extra + loyaltyNote));
         }
         if (bact[2] === "cancel" && ["requested", "confirmed"].includes(b.status)) {
           await db.query(`UPDATE receptionist_booking SET status='cancelled' WHERE id=$1`, [b.id]);
           return redirect("/bookings?msg=" + encodeURIComponent("Booking cancelled."));
         }
         return redirect("/bookings");
+      }
+
+      if (path === "/waitlist") {
+        if (req.method === "POST") {
+          const f = await formData(req);
+          const wa = String(f.wa_id || "").replace(/\D/g, "");
+          if (!wa) return redirect("/waitlist");
+          await waitlistAdd(db, mem.workspace_id, wa, String(f.name || "").trim(), Number(f.party_size) || 2, String(f.wanted_time || "").trim());
+          return redirect("/waitlist?msg=" + encodeURIComponent("Added to the waitlist."));
+        }
+        return html(await waitlistPage(db, user, mem, url.searchParams.get("msg") || ""));
+      }
+      const wact = /^\/waitlist\/([0-9a-f-]{36})\/(offer|accept|cancel)$/.exec(path);
+      if (wact && req.method === "POST") {
+        const okd = await waitlistAction(db, mem.workspace_id, wact[1], wact[2]);
+        return redirect("/waitlist?msg=" + encodeURIComponent(okd ? "Done." : "That change does not apply to this entry."));
+      }
+
+      if (path === "/loyalty") return html(await loyaltyPage(db, user, mem, url.searchParams.get("msg") || ""));
+      if (path === "/loyalty/settings" && req.method === "POST") {
+        const f = await formData(req);
+        await loyaltySettings(db, mem.workspace_id);
+        await db.query(
+          `UPDATE receptionist_loyaltysettings SET enabled=$1, points_per_visit=$2, welcome_bonus=$3, points_for_voucher=$4, voucher_value_rand=$5, voucher_valid_days=$6 WHERE workspace_id=$7`,
+          [f.enabled === "on", Math.max(0, Number(f.points_per_visit) || 0), Math.max(0, Number(f.welcome_bonus) || 0), Math.max(1, Number(f.points_for_voucher) || 100), Math.max(1, Number(f.voucher_value_rand) || 50), Math.max(1, Number(f.voucher_valid_days) || 90), mem.workspace_id]);
+        return redirect("/loyalty?msg=" + encodeURIComponent("Rules saved."));
+      }
+      if (path === "/loyalty/vouchers/new" && req.method === "POST") {
+        const f = await formData(req);
+        try {
+          const v = await issueVoucher(db, mem.workspace_id, String(f.contact_id || ""));
+          return redirect("/loyalty?msg=" + encodeURIComponent(`Voucher ${v.code} issued - R${v.amount_rand}.`));
+        } catch (e: any) { return redirect("/loyalty?msg=" + encodeURIComponent(String(e?.message || e))); }
+      }
+      const vred = /^\/loyalty\/vouchers\/([0-9a-f-]{36})\/redeem$/.exec(path);
+      if (vred && req.method === "POST") {
+        const okd = await redeemVoucher(db, mem.workspace_id, vred[1]);
+        return redirect("/loyalty?msg=" + encodeURIComponent(okd ? "Voucher redeemed." : "That voucher is not usable."));
+      }
+
+      if (path === "/quotes") {
+        if (req.method === "POST") {
+          const f = await formData(req);
+          if (!String(f.customer_name || "").trim()) return redirect("/quotes");
+          await quoteCreate(db, mem.workspace_id, String(f.customer_name).trim(), /^[0-9a-f-]{36}$/.test(f.contact_id || "") ? f.contact_id : null, String(f.title || "").trim(), Number(f.amount) || 0, String(f.follow_up_on || ""));
+          return redirect("/quotes?msg=" + encodeURIComponent("Quote saved."));
+        }
+        return html(await quotesPage(db, user, mem, url.searchParams.get("msg") || ""));
+      }
+      const qact = /^\/quotes\/([0-9a-f-]{36})\/(sent|won|lost)$/.exec(path);
+      if (qact && req.method === "POST") {
+        const out = await quoteAction(db, env, mem.workspace_id, qact[1], qact[2]);
+        return redirect("/quotes?msg=" + encodeURIComponent(out === "marked sent" ? "Marked sent (WhatsApp too, when the customer is linked and reachable)." : out === "no change" ? "That change does not apply to this quote." : `Quote ${out}.`));
       }
 
       if (path === "/reviews") return html(await reviewsPage(db, user, mem, base, url.searchParams.get("msg") || ""));
