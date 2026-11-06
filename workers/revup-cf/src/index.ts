@@ -697,7 +697,7 @@ async function handle(req: Request, env: Env): Promise<Response> {
       } catch { await db.end().catch(() => {}); return redirect("/"); }
     }
 
-    if (path === "/webhooks/zernio" && req.method === "POST") {
+    if ((path === "/webhooks/zernio" || path === "/webhooks/zernio/") && req.method === "POST") {
       const raw = await req.text();
       const sig = req.headers.get("x-zernio-signature") || req.headers.get("x-late-signature") || "";
       let payload: any = {};
