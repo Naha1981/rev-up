@@ -7,9 +7,14 @@ function esc(s: any): string {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
 }
 
-export function wifiCardPage(opts: { businessName: string; enquiryUrl: string }): string {
+export function wifiCardPage(opts: { businessName: string; enquiryUrl: string; prefill?: { ssid: string; pass: string }; sample?: boolean }): string {
   const biz = esc(opts.businessName || "Your business");
   const enquiryUrl = esc(opts.enquiryUrl);
+  const preSsid = esc(opts.prefill?.ssid || "");
+  const prePass = esc(opts.prefill?.pass || "");
+  const sampleBanner = opts.sample ? `<div class="card" style="border:2px dashed #F97316;background:#FFF7ED"><h2 style="margin-top:0">Sample preview</h2>
+<p>This is the exact card your customers would see in your waiting room. Guests scan one code to join your guest WiFi and the other to send you an enquiry - it lands straight in your RevUp inbox. The sample below is filled in with demo details; your own card uses your business name and your real enquiry form.</p>
+<p style="margin-bottom:0"><a class="btn btn-primary" href="/signup">Get your own card - start free</a></p></div>` : "";
   return `<style>
 .wc-grid{display:grid;grid-template-columns:minmax(280px,380px) 1fr;gap:22px;align-items:start}
 @media(max-width:860px){.wc-grid{grid-template-columns:1fr}}
@@ -35,6 +40,7 @@ export function wifiCardPage(opts: { businessName: string; enquiryUrl: string })
   @page{size:148mm 105mm;margin:0}
 }
 </style>
+${sampleBanner}
 <div class="card"><h2 style="margin-top:0">Waiting-room WiFi card</h2>
 <p>One printable card for your waiting room, with two separate codes: guests scan one to join your WiFi, and scan the other to ask for a quote or book - that lands straight in your RevUp inbox. Fill in your WiFi details below; the card is made right here in your browser and your WiFi password never leaves this page.</p></div>
 <div class="wc-grid">
@@ -43,9 +49,9 @@ export function wifiCardPage(opts: { businessName: string; enquiryUrl: string })
 <label for="wc-biz">Business name on the card</label>
 <input id="wc-biz" maxlength="48" value="${biz}">
 <label for="wc-ssid">WiFi network name (SSID)</label>
-<input id="wc-ssid" maxlength="32" placeholder="e.g. DemoDental-Guest" autocomplete="off">
+<input id="wc-ssid" maxlength="32" value="${preSsid}" placeholder="e.g. DemoDental-Guest" autocomplete="off">
 <label for="wc-pass">WiFi password</label>
-<input id="wc-pass" maxlength="63" placeholder="Your guest WiFi password" autocomplete="off">
+<input id="wc-pass" maxlength="63" value="${prePass}" placeholder="Your guest WiFi password" autocomplete="off">
 <label for="wc-sec">Security</label>
 <select id="wc-sec"><option value="WPA" selected>WPA / WPA2 / WPA3</option><option value="WEP">WEP</option><option value="nopass">Open (no password)</option></select>
 <label style="display:flex;align-items:center;gap:8px;font-weight:500"><input type="checkbox" id="wc-showpass" checked style="width:auto;margin:0"> Print the password as text on the card</label>

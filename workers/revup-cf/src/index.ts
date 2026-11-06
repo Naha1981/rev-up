@@ -1118,6 +1118,13 @@ async function handle(req: Request, env: Env): Promise<Response> {
       finally { await pgdb.end().catch(() => {}); }
     }
 
+    // Public WiFi card sample (no login, demo data only): prospects can preview
+    // the waiting-room card before signing up. Enquiry QR points at the Demo
+    // Dental QA workspace form so the full scan loop can be tried live.
+    if (path === "/wifi-card/sample") {
+      return html(layout("Sample WiFi Card", wifiCardPage({ businessName: "Sample Dental Studio", enquiryUrl: `${base}/f/c72ce206-854d-48bc-bd56-726f53f23293`, prefill: { ssid: "SampleDental-Guest", pass: "Smile2026Guest" }, sample: true })));
+    }
+
     // everything below needs auth
     const db = pool(env);
     try {
