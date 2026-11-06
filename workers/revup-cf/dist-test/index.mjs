@@ -1402,7 +1402,8 @@ async function fetchForMirror(url) {
 var COPY_RULES = `You write landing page copy for South African small businesses.
 Rules: plain warm SA English, short sentences, no hype words (no "revolutionary", "game-changing", "unlock"), prices in rand (R) if any, mobile-first so keep headings under 9 words, body text under 60 words per section, bullets under 12 words each.
 The page speaks to ONE customer pain only - every section must tie back to that pain.
-NEVER invent facts: no phone numbers, no prices, no guarantees, no qualifications, no years of experience, no claims the business did not state. Only use details given in this brief. For contact, always point to the button (e.g. "tap the button below"), never write a phone number or email in the copy.`;
+NEVER invent facts: no phone numbers, no prices, no guarantees, no qualifications, no years of experience, no claims the business did not state. Only use details given in this brief. For contact, always point to the button (e.g. "tap the button below"), never write a phone number or email in the copy.
+If the brief gives no testimonials, do NOT write fake quotes or claims about what customers say. In a proof section, state plainly how the product works and what the business itself commits to.`;
 async function generateSections(env, brief, skeleton) {
   const preset = getPreset(brief.industry);
   const skel = skeleton.map((s, i) => `${i + 1}. ${s.type}`).join(", ");

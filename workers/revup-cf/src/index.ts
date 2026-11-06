@@ -1160,7 +1160,7 @@ async function handle(req: Request, env: Env): Promise<Response> {
         const pageId = crypto.randomUUID();
         const slug = makeSlug(brief.business || "page");
         const title = (gen.seo_title || `${brief.business} - ${brief.angle}`).slice(0, 200);
-        const brand = { business: brief.business, whatsapp: brief.whatsapp, cta_label: brief.cta_label, color: (f.color || "#F97316").slice(0, 7), area: brief.area, link: "" };
+        const brand = { business: brief.business, whatsapp: brief.whatsapp, cta_label: brief.cta_label, color: (f.color || "#F97316").slice(0, 7), area: brief.area, offer: brief.offer, link: "" };
         await db.query(
           `INSERT INTO cf_page(id,workspace_id,title,slug,angle,industry,status,brand,sections,source_url) VALUES($1,$2,$3,$4,$5,$6,'draft',$7,$8,$9)`,
           [pageId, mem.workspace_id, title, slug, brief.angle, brief.industry, JSON.stringify(brand), JSON.stringify(gen.sections), sourceUrl]);
