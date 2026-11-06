@@ -295,7 +295,7 @@ export async function competitorAdd(db: Pool, ws: string, name: string, area: st
 }
 
 export async function dishAdd(db: Pool, ws: string, competitorId: string, name: string, price: number, ownItemId: string): Promise<void> {
-  const own = await db.query(`SELECT 1 FROM receptionist_competitor WHERE id=$1 AND workspace_id=$2`, [competitorId]);
+  const own = await db.query(`SELECT 1 FROM receptionist_competitor WHERE id=$1 AND workspace_id=$2`, [competitorId, ws]);
   if (!own.rows.length) throw new Error("Competitor not found.");
   if (!name.trim() || !(price >= 0)) throw new Error("Dish needs a name and a price.");
   const ownId = /^[0-9a-f-]{36}$/.test(ownItemId) ? ownItemId : null;
@@ -309,7 +309,7 @@ export async function dishAdd(db: Pool, ws: string, competitorId: string, name: 
 }
 
 export async function promoAdd(db: Pool, ws: string, competitorId: string, text: string, validUntil: string): Promise<void> {
-  const own = await db.query(`SELECT 1 FROM receptionist_competitor WHERE id=$1 AND workspace_id=$2`, [competitorId]);
+  const own = await db.query(`SELECT 1 FROM receptionist_competitor WHERE id=$1 AND workspace_id=$2`, [competitorId, ws]);
   if (!own.rows.length) throw new Error("Competitor not found.");
   if (!text.trim()) throw new Error("Say what the promotion is.");
   await db.query(
