@@ -3,6 +3,7 @@
 // Free CPU limits. No vendor names surface in any HTML.
 import { Client, Pool } from "pg";
 import { LOGO_B64, landingPage } from "./landing";
+export { landingPage } from "./landing";
 import { INDUSTRIES, getPreset, industryLabel } from "./presets";
 import { handleZernioWebhook, verifyZernioSignature } from "./receptionist";
 
@@ -39,7 +40,7 @@ export function md5(input: string): string { return SparkMD5.hash(input); }
 function esc(s: any): string {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
 }
-function navLinks(user: any): string {
+export function navLinks(user: any): string {
   const g: string[] = Array.isArray(user._goals) ? user._goals : [];
   const show = (...need: string[]) => !g.length || need.some((n) => g.includes(n));
   let h = `<a href="/">Dashboard</a>`;
@@ -157,7 +158,7 @@ async function formData(req: Request): Promise<Record<string, string>> {
 }
 
 // ---------- payfast ----------
-function pfUrl(env: Env, base: string, plan: string, org: any): string {
+export function pfUrl(env: Env, base: string, plan: string, org: any): string {
   const prices: Record<string, number> = { starter: 499, growth: 999, "business-pro": 1999 };
   const amount = prices[plan];
   const params: [string, string][] = [
@@ -335,7 +336,7 @@ const PLAN_CARDS: { slug: string; name: string; price: number; feat: string }[] 
   { slug: "growth", name: "Growth", price: 999, feat: "Everything in Starter + social posting with approvals" },
   { slug: "business-pro", name: "Business Pro", price: 1999, feat: "Everything in Growth + FrontDesk lead pipeline and follow-ups" },
 ];
-function recommendPlan(goals: string[]): string {
+export function recommendPlan(goals: string[]): string {
   if (goals.includes("leads")) return "business-pro";
   if (goals.includes("social")) return "growth";
   return "starter";

@@ -43,7 +43,7 @@ export async function verifyZernioSignature(secret: string, body: string, signat
   return diff === 0;
 }
 
-function industryBrief(industry: string): string {
+export function industryBrief(industry: string): string {
   const p: any = getPreset(industry || "general");
   const label = p.label || "local service";
   let s = `You are the WhatsApp receptionist for a ${label} business in South Africa. Tone: ${p.responder_tone || "warm and professional"}.`;
@@ -54,7 +54,7 @@ function industryBrief(industry: string): string {
   return s;
 }
 
-function profileBlock(p: any): string {
+export function profileBlock(p: any): string {
   const lines = [`Business: ${p.business_name || ""}`];
   if (p.operating_hours && Object.keys(p.operating_hours).length) lines.push(`Operating hours: ${JSON.stringify(p.operating_hours)}`);
   if (p.pricing_data && Object.keys(p.pricing_data).length) lines.push(`Price list (ZAR): ${JSON.stringify(p.pricing_data)}`);
@@ -64,7 +64,7 @@ function profileBlock(p: any): string {
   return lines.join("\n");
 }
 
-function customerBlock(c: any): string {
+export function customerBlock(c: any): string {
   if (!c) return "";
   const lines: string[] = [];
   if (c.name) lines.push(`Customer name: ${c.name}`);
