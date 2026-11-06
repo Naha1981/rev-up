@@ -1488,8 +1488,10 @@ header{padding:22px 20px;font-weight:700;font-size:1.05rem;max-width:680px;margi
 .hero{padding:56px 0 32px}
 .hero h1{font-size:2rem;line-height:1.2;letter-spacing:-0.02em;margin-bottom:14px}
 .lede{font-size:1.1rem;color:#44403C;margin-bottom:22px}
-.btn{display:inline-block;background:var(--b);color:#fff;padding:14px 28px;border-radius:12px;font-weight:700;text-decoration:none;font-size:1.05rem}
-.btn:hover{filter:brightness(0.92);text-decoration:none}
+/* CTA button adapted from Uiverse.io by Gautammsharma (https://uiverse.io/Gautammsharma/wicked-cobra-3) - MIT License, (c) 2023 Uiverse.io */
+.btn{display:inline-block;background:var(--b);color:#fff;padding:14px 28px;border-radius:10px;font-weight:700;text-decoration:none;font-size:1.05rem;border:2px solid #1C1917;box-shadow:5px 5px 0 #1C1917;transition:all .2s ease}
+.btn:hover{background:#fff;color:var(--b);border-color:var(--b);box-shadow:5px 5px 0 var(--b);text-decoration:none}
+.btn:active{box-shadow:none;transform:translateY(4px)}
 section{margin:34px 0}
 h2{font-size:1.35rem;letter-spacing:-0.01em;margin-bottom:10px}
 ul{margin:10px 0 0 0;list-style:none}
@@ -1499,7 +1501,8 @@ blockquote{border-left:3px solid var(--b);padding:6px 14px;margin:10px 0;color:#
 details{border:1px solid #E7E5E4;border-radius:10px;padding:10px 14px;margin:8px 0}
 summary{font-weight:600;cursor:pointer}
 .cta{background:var(--b);color:#fff;border-radius:16px;padding:30px 22px;text-align:center}
-.cta .btn{background:#fff;color:var(--b)}
+.cta .btn{background:#fff;color:var(--b);border-color:#1C1917;box-shadow:5px 5px 0 #1C1917}
+.cta .btn:hover{background:#1C1917;color:#fff;border-color:#1C1917;box-shadow:5px 5px 0 rgba(0,0,0,.35)}
 footer{margin-top:44px;padding-top:18px;border-top:1px solid #E7E5E4;font-size:.82rem;color:#A8A29E}
 .bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #E7E5E4;padding:10px 20px;display:flex;justify-content:center}
 .bar .btn{width:100%;max-width:640px;text-align:center;padding:13px}
@@ -1546,23 +1549,79 @@ function makeSlug(title) {
   const rand = Array.from(crypto.getRandomValues(new Uint8Array(3))).map((b) => b.toString(36).padStart(2, "0")).join("").replace(/[^a-z0-9]/g, "").slice(0, 4);
   return `${baseSlug}-${rand || "0000"}`;
 }
+function pagesAdminAssets() {
+  return `<style>
+/* Search input adapted from Uiverse.io by ErzenXz (https://uiverse.io/ErzenXz/horrible-rattlesnake-14) - MIT */
+.uipill{width:100%;max-width:260px;height:45px;padding:12px;border-radius:12px;border:1.5px solid #D6D3D1;outline:none;transition:all .3s cubic-bezier(.19,1,.22,1);box-shadow:0 0 20px -18px;font-size:.95rem}
+.uipill:hover{border:2px solid #D6D3D1}
+.uipill:focus{border:2px solid #78716C}
+/* Tooltip adapted from Uiverse.io by sahilxkhadka (https://uiverse.io/sahilxkhadka/modern-snail-66) - MIT */
+.uitip{position:relative;display:inline-block;cursor:help;border-bottom:1px dotted #A8A29E}
+.uitip .uitip-b{visibility:hidden;opacity:0;position:absolute;bottom:130%;left:50%;transform:translateX(-50%);background:#1C1917;color:#FAFAF9;font-size:.78rem;font-weight:400;padding:6px 10px;border-radius:6px;white-space:nowrap;transition:opacity .15s;z-index:50;pointer-events:none}
+.uitip .uitip-b:after{content:"";position:absolute;top:100%;left:50%;margin-left:-6px;border:6px solid transparent;border-top-color:#1C1917}
+.uitip:hover .uitip-b{visibility:visible;opacity:1}
+/* Toggle switch adapted from Uiverse.io by gharsh11032000 (https://uiverse.io/gharsh11032000/brave-pug-20) - MIT */
+.ruiswitch{font-size:15px;position:relative;display:inline-block;width:3.5em;height:2em;vertical-align:middle}
+.ruiswitch input{opacity:0;width:0;height:0}
+.ruiswitch .slider{position:absolute;cursor:pointer;inset:0;border:2px solid #414141;border-radius:50px;transition:all .4s cubic-bezier(.175,.885,.32,1.275)}
+.ruiswitch .slider:before{position:absolute;content:"";height:1.4em;width:1.4em;left:.2em;bottom:.14em;background-color:#fff;border-radius:inherit;transition:all .4s cubic-bezier(.23,1,.320,1)}
+.ruiswitch input:checked + .slider{box-shadow:0 0 20px rgba(249,115,22,.55);border:2px solid #F97316;background:#F97316}
+.ruiswitch input:checked + .slider:before{transform:translateX(1.5em)}
+.ruiswitch input:disabled + .slider{opacity:.5;cursor:wait}
+/* Stat card adapted from Uiverse.io by jubayer-10 (https://uiverse.io/jubayer-10/white-catfish-8) - MIT */
+.uicard{width:150px;background:#fff;box-shadow:0 0 15px rgba(0,0,0,.09);border-radius:12px;padding:22px 18px;position:relative;overflow:hidden;display:inline-block;margin:4px 12px 4px 0;vertical-align:top}
+.uicard .n{position:absolute;right:-16px;top:-20px;width:64px;height:64px;background:#F97316;border-radius:50%}
+.uicard .n span{position:absolute;bottom:16px;left:20px;color:#fff;font-size:1.05rem;font-weight:700}
+.uicard h4{margin:0 0 4px;font-size:.85rem;color:#78716C;font-weight:600}
+.uicard p{margin:0;font-size:1.35rem;font-weight:700}
+/* Gauge loader adapted from Uiverse.io by Nawsome (https://uiverse.io/Nawsome/ancient-yak-42) - MIT */
+.uiload-overlay{position:fixed;inset:0;background:rgba(250,250,249,.92);display:none;align-items:center;justify-content:center;flex-direction:column;z-index:100;text-align:center}
+.uiload-overlay.on{display:flex}
+.uiload-overlay p{font-weight:600;color:#44403C;margin-top:14px}
+.uigauge{display:block;width:9.375em;height:9.375em;font-size:14px}
+.uigauge .ring-rotate{animation:uirr 2s linear infinite;transform-origin:80px 80px}
+.uigauge .ring-stroke{animation:uirs 2s cubic-bezier(.65,0,.35,1) infinite;transform-origin:80px 80px}
+.uigauge .tick{animation:uitk 2s cubic-bezier(.32,2,.5,1) infinite}
+@keyframes uirr{to{transform:rotate(360deg)}}
+@keyframes uirs{0%{stroke-dashoffset:452}50%{stroke-dashoffset:113}100%{stroke-dashoffset:452}}
+@keyframes uitk{0%,10%{stroke-dashoffset:12}45%{stroke-dashoffset:0}60%,100%{stroke-dashoffset:-12}}
+</style>
+<div class="uiload-overlay" id="uiload">
+<svg class="uigauge" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
+<g class="ring-rotate"><circle class="ring-stroke" cx="80" cy="80" r="72" fill="none" stroke="#F97316" stroke-width="16" stroke-dasharray="452.39 452.39" stroke-dashoffset="452" stroke-linecap="round" transform="rotate(-45,80,80)"/></g>
+<g stroke-width="4" stroke-dasharray="12 12" stroke-dashoffset="12" stroke-linecap="round" transform="translate(80,80)">
+<polyline class="tick" stroke="#FDBA74" points="0,2 0,14" transform="rotate(-135,0,0) translate(0,40)"/>
+<polyline class="tick" stroke="#FDBA74" points="0,2 0,14" transform="rotate(-90,0,0) translate(0,40)"/>
+<polyline class="tick" stroke="#FDBA74" points="0,2 0,14" transform="rotate(-45,0,0) translate(0,40)"/>
+<polyline class="tick" stroke="#FDBA74" points="0,2 0,14" transform="rotate(0,0,0) translate(0,40)"/>
+<polyline class="tick" stroke="#FDBA74" points="0,2 0,14" transform="rotate(45,0,0) translate(0,40)"/>
+<polyline class="tick" stroke="#FDBA74" points="0,2 0,14" transform="rotate(90,0,0) translate(0,40)"/>
+<polyline class="tick" stroke="#FDBA74" points="0,2 0,14" transform="rotate(135,0,0) translate(0,40)"/>
+<polyline class="tick" stroke="#FDBA74" points="0,2 0,14" transform="rotate(180,0,0) translate(0,40)"/>
+</g></svg>
+<p id="uiload-msg">Working...</p></div>
+<script>
+function uiloadShow(msg){var o=document.getElementById('uiload');if(msg)document.getElementById('uiload-msg').textContent=msg;o.classList.add('on')}
+</script>`;
+}
 async function pagesListBody(db, mem, base, msg = "") {
   await ensurePageTables(db);
   const r = await db.query(`SELECT * FROM cf_page WHERE workspace_id=$1 AND status!='archived' ORDER BY created_at DESC LIMIT 100`, [mem.workspace_id]);
-  const rows = r.rows.map((p) => `<tr>
+  const rows = r.rows.map((p) => `<tr class="pg-row">
 <td><b>${pesc(p.title)}</b><br><span class="mut">${pesc(p.angle || p.industry)}</span></td>
 <td>${p.status === "published" ? `<span class="ok">Live</span> <a href="${base}/p/${pesc(p.slug)}" target="_blank" rel="noopener">/p/${pesc(p.slug)}</a>` : `<span class="mut">${pesc(p.status)}</span>`}</td>
 <td>${p.views} view${p.views === 1 ? "" : "s"} \xB7 ${p.cta_clicks} tap${p.cta_clicks === 1 ? "" : "s"}</td>
 <td><a href="/pages/${p.id}">Open</a></td></tr>`).join("");
-  return `${msg ? `<p class="ok">${pesc(msg)}</p>` : ""}
+  return `${pagesAdminAssets()}${msg ? `<p class="ok">${pesc(msg)}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">Landing pages <a class="btn btn-primary" style="float:right" href="/pages/new">New page</a></h2>
 <p class="mut">One page per customer problem. Send each advert or campaign to the page that speaks to that exact problem - it converts far better than one general page.</p>
-<table><tr><th>Page</th><th>Status &amp; link</th><th>Results</th><th></th></tr>${rows || '<tr><td colspan="4" class="mut">No pages yet. Create your first one.</td></tr>'}</table></div>`;
+<p><input class="uipill" id="pageFilter" placeholder="Search pages..." oninput="(function(v){document.querySelectorAll('#pageTable tr.pg-row').forEach(function(tr){tr.style.display=tr.textContent.toLowerCase().indexOf(v.toLowerCase())===-1?'none':''})})(this.value)"></p>
+<table id="pageTable"><tr><th>Page</th><th>Status &amp; link</th><th><span class="uitip">Results<span class="uitip-b">Views = page opens \xB7 Taps = button taps to your WhatsApp</span></span></th><th></th></tr>${rows || '<tr><td colspan="4" class="mut">No pages yet. Create your first one.</td></tr>'}</table></div>`;
 }
 function newPageBody(err = "") {
-  return `<div class="card"><h2 style="margin-top:0">New landing page</h2>
+  return `${pagesAdminAssets()}<div class="card"><h2 style="margin-top:0">New landing page</h2>
 ${err ? `<p class="bad">${pesc(err)}</p>` : ""}
-<form method="post" action="/pages/new">
+<form method="post" action="/pages/new" onsubmit="uiloadShow('Building your page - about 30 seconds...')">
 <label>Page is for (business name)<input name="business" maxlength="200" placeholder="Your business name as customers know it"></label>
 <label>Industry
 <select name="industry">
@@ -1606,15 +1665,22 @@ async function pageDetailBody(db, page, base, msg = "") {
 <label>Text<textarea name="b_${i}" rows="3" maxlength="800">${pesc(s.body)}</textarea></label>
 <label>Bullets (one per line)<textarea name="i_${i}" rows="3">${pesc((s.items || []).join("\n"))}</textarea></label>
 </div>`).join("");
-  return `${msg ? `<p class="ok">${pesc(msg)}</p>` : ""}
+  const published = page.status === "published";
+  return `${pagesAdminAssets()}${msg ? `<p class="ok">${pesc(msg)}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">${pesc(page.title)}</h2>
-<p class="mut">Pain: ${pesc(page.angle)} \xB7 Status: ${pesc(page.status)}${page.status === "published" ? ` \xB7 Live at <a href="${base}/p/${pesc(page.slug)}" target="_blank" rel="noopener">${base}/p/${pesc(page.slug)}</a>` : ""}${page.source_url ? ` \xB7 Structure mirrored from ${pesc(page.source_url)}` : ""}</p>
-<p>${page.views} views \xB7 ${page.cta_clicks} button taps</p>
-<form method="post" action="/pages/${page.id}/publish" style="display:inline">${page.status === "published" ? "" : "<button>Publish</button>"}</form>
-<form method="post" action="/pages/${page.id}/unpublish" style="display:inline">${page.status === "published" ? '<button class="link">Unpublish</button>' : ""}</form>
+<p class="mut">Pain: ${pesc(page.angle)} \xB7 Status: ${pesc(page.status)}${published ? ` \xB7 Live at <a href="${base}/p/${pesc(page.slug)}" target="_blank" rel="noopener">${base}/p/${pesc(page.slug)}</a>` : ""}${page.source_url ? ` \xB7 Structure mirrored from ${pesc(page.source_url)}` : ""}</p>
+<div>
+<span class="uicard"><span class="n"><span>&#128065;</span></span><h4><span class="uitip">Views<span class="uitip-b">How many times the public page was opened</span></span></h4><p>${page.views}</p></span>
+<span class="uicard"><span class="n"><span>&#10148;</span></span><h4><span class="uitip">Taps<span class="uitip-b">Button taps through to your WhatsApp</span></span></h4><p>${page.cta_clicks}</p></span>
+</div>
+<p><label class="ruiswitch"><input type="checkbox" id="pubToggle"${published ? " checked" : ""}><span class="slider"></span></label> <b id="pubLabel">${published ? "Live" : "Offline"}</b> <span class="mut">- flip to ${published ? "unpublish" : "publish"}</span></p>
+<noscript><form method="post" action="/pages/${page.id}/${published ? "unpublish" : "publish"}" style="display:inline"><button>${published ? "Unpublish" : "Publish"}</button></form></noscript>
 <form method="post" action="/pages/${page.id}/delete" style="display:inline" onsubmit="return confirm('Delete this page?')"><button class="link" style="color:#B91C1C">Delete</button></form>
 </div>
-<form method="post" action="/pages/${page.id}">
+<script>
+(function(){var t=document.getElementById('pubToggle');if(!t)return;t.onchange=async function(){t.disabled=true;uiloadShow(t.checked?'Publishing...':'Unpublishing...');try{var r=await fetch('/pages/${page.id}/'+(t.checked?'publish':'unpublish'),{method:'POST'});if(!r.ok)throw 0;location.reload()}catch(e){document.getElementById('uiload').classList.remove('on');t.checked=!t.checked;t.disabled=false;alert('Could not change status - please try again.')}}})();
+</script>
+<form method="post" action="/pages/${page.id}" onsubmit="uiloadShow('Saving changes...')">
 ${sectionForms}
 <div class="card"><h3 style="margin-top:0">Settings</h3>
 <label>Button text<input name="cta_label" value="${pesc(brand.cta_label || "WhatsApp us")}" maxlength="40"></label>
@@ -3444,7 +3510,7 @@ async function handle(req, env) {
       const pageId = crypto.randomUUID();
       const slug = makeSlug(brief.business || "page");
       const title = (gen.seo_title || `${brief.business} - ${brief.angle}`).slice(0, 200);
-      const brand = { business: brief.business, whatsapp: brief.whatsapp, cta_label: brief.cta_label, color: (f.color || "#F97316").slice(0, 7), area: brief.area, link: "" };
+      const brand = { business: brief.business, whatsapp: brief.whatsapp, cta_label: brief.cta_label, color: (f.color || "#F97316").slice(0, 7), area: brief.area, offer: brief.offer, link: "" };
       await db.query(
         `INSERT INTO cf_page(id,workspace_id,title,slug,angle,industry,status,brand,sections,source_url) VALUES($1,$2,$3,$4,$5,$6,'draft',$7,$8,$9)`,
         [pageId, mem.workspace_id, title, slug, brief.angle, brief.industry, JSON.stringify(brand), JSON.stringify(gen.sections), sourceUrl]

@@ -1,0 +1,2 @@
+{# RevUp UI kit: CTA button. Usage: {% include "components/ui/button.html" with label="Save" href="/x" %} #}
+{% if href %}<a class="ruk-btn" href="{{ href }}">{{ label|default:"Continue" }}</a>{% else %}<button class="ruk-btn" type="{{ type|default:"submit" }}">{{ label|default:"Save" }}</button>{% endif %}

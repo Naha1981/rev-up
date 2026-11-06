@@ -168,3 +168,28 @@ test('ctaTarget: falls back to link then signup', () => {
   assert.equal(ctaTarget({ ...demoPage, brand: { link: 'https://x.co.za/book' } }), 'https://x.co.za/book');
   assert.equal(ctaTarget({ ...demoPage, brand: {} }), 'https://revup.nahalabs.co.za/signup');
 });
+
+// --- RevUp Pages UI kit (uiverse picks, MIT) ---
+import { pagesAdminAssets, newPageBody, pageDetailBody } from '../dist-test/pages.mjs';
+
+test('public page CTA uses comic-button style with attribution', () => {
+  const h = renderPublicPage({ id: 1, slug: 'x', title: 'T', angle: 'a', industry: 'general', status: 'published', views: 0, cta_clicks: 0, brand: { business: 'B' }, sections: [{ type: 'cta', heading: 'H', body: 'B', items: [] }] }, 'https://example.com');
+  assert.ok(h.includes('box-shadow:5px 5px 0 #1C1917'), 'comic shadow');
+  assert.ok(h.includes('uiverse.io/Gautammsharma/wicked-cobra-3'), 'attribution');
+});
+test('admin assets include all six element classes with attribution', () => {
+  const a = pagesAdminAssets();
+  for (const cls of ['uipill', 'uitip', 'ruiswitch', 'uicard', 'uiload-overlay', 'uigauge']) assert.ok(a.includes(cls), cls);
+  for (const who of ['ErzenXz', 'sahilxkhadka', 'gharsh11032000', 'jubayer-10', 'Nawsome']) assert.ok(a.includes(who), who);
+});
+test('new page form shows gauge loader on submit', () => {
+  const b = newPageBody();
+  assert.ok(b.includes('uiloadShow(') && b.includes('uiload-overlay'));
+});
+test('page detail has publish toggle, stat cards, tooltips', async () => {
+  const b = await pageDetailBody(null, { id: 7, slug: 's', title: 'T', angle: 'a', status: 'draft', views: 3, cta_clicks: 1, brand: {}, sections: [], source_url: null }, 'https://example.com');
+  assert.ok(b.includes('id="pubToggle"'), 'toggle');
+  assert.ok((b.match(/uicard/g) || []).length >= 2, 'stat cards');
+  assert.ok(b.includes('uitip-b'), 'tooltips');
+  assert.equal((b.match(/publish" style="display:inline"/g) || []).length, 1, 'only the noscript fallback form remains');
+});

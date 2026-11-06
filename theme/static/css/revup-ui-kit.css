@@ -1,0 +1,56 @@
+/* ==========================================================================
+   RevUp UI kit - v1 (Go 5, 6 Nov 2026)
+   Components adapted from Uiverse.io (https://uiverse.io) open-source elements.
+   All source elements are published under the MIT License, (c) 2023 Uiverse.io.
+   MIT license text: theme/static/css/revup-ui-kit.LICENSE.txt
+   Standing rule (Thabiso, 6 Nov 2026): consult uiverse.io before designing UI;
+   headers/footers/sections from HyperUI (https://www.hyperui.dev).
+   Namespace: .ruk-* so nothing collides with existing styles.
+   ========================================================================== */
+
+/* CTA button - adapted from Uiverse.io by Gautammsharma
+   https://uiverse.io/Gautammsharma/wicked-cobra-3 (MIT) */
+.ruk-btn{display:inline-block;padding:10px 20px;font-size:1.05rem;font-weight:700;text-align:center;text-decoration:none;color:#fff;background-color:var(--brand,#F97316);border:2px solid #1C1917;border-radius:10px;box-shadow:5px 5px 0 #1C1917;transition:all .2s ease;cursor:pointer}
+.ruk-btn:hover{background-color:#fff;color:var(--brand,#F97316);border-color:var(--brand,#F97316);box-shadow:5px 5px 0 var(--brand,#F97316)}
+.ruk-btn:active{box-shadow:none;transform:translateY(4px)}
+
+/* Search input - adapted from Uiverse.io by ErzenXz
+   https://uiverse.io/ErzenXz/horrible-rattlesnake-14 (MIT) */
+.ruk-input{width:100%;max-width:260px;height:45px;padding:12px;border-radius:12px;border:1.5px solid #D6D3D1;outline:none;transition:all .3s cubic-bezier(.19,1,.22,1);box-shadow:0 0 20px -18px;font-size:.95rem}
+.ruk-input:hover{border:2px solid #D6D3D1}
+.ruk-input:focus{border:2px solid #78716C}
+
+/* Toggle switch - adapted from Uiverse.io by gharsh11032000
+   https://uiverse.io/gharsh11032000/brave-pug-20 (MIT) */
+.ruk-switch{font-size:15px;position:relative;display:inline-block;width:3.5em;height:2em;vertical-align:middle}
+.ruk-switch input{opacity:0;width:0;height:0}
+.ruk-switch .ruk-slider{position:absolute;cursor:pointer;inset:0;border:2px solid #414141;border-radius:50px;transition:all .4s cubic-bezier(.175,.885,.32,1.275)}
+.ruk-switch .ruk-slider:before{position:absolute;content:"";height:1.4em;width:1.4em;left:.2em;bottom:.14em;background-color:#fff;border-radius:inherit;transition:all .4s cubic-bezier(.23,1,.320,1)}
+.ruk-switch input:checked + .ruk-slider{box-shadow:0 0 20px rgba(249,115,22,.55);border:2px solid #F97316;background:#F97316}
+.ruk-switch input:checked + .ruk-slider:before{transform:translateX(1.5em)}
+.ruk-switch input:disabled + .ruk-slider{opacity:.5;cursor:wait}
+
+/* Tooltip - adapted from Uiverse.io by sahilxkhadka
+   https://uiverse.io/sahilxkhadka/modern-snail-66 (MIT) */
+.ruk-tip{position:relative;display:inline-block;cursor:help;border-bottom:1px dotted #A8A29E}
+.ruk-tip .ruk-tip-b{visibility:hidden;opacity:0;position:absolute;bottom:130%;left:50%;transform:translateX(-50%);background:#1C1917;color:#FAFAF9;font-size:.78rem;font-weight:400;padding:6px 10px;border-radius:6px;white-space:nowrap;transition:opacity .15s;z-index:50;pointer-events:none}
+.ruk-tip .ruk-tip-b:after{content:"";position:absolute;top:100%;left:50%;margin-left:-6px;border:6px solid transparent;border-top-color:#1C1917}
+.ruk-tip:hover .ruk-tip-b{visibility:visible;opacity:1}
+
+/* Stat card - adapted from Uiverse.io by jubayer-10
+   https://uiverse.io/jubayer-10/white-catfish-8 (MIT) */
+.ruk-card{width:150px;background:#fff;box-shadow:0 0 15px rgba(0,0,0,.09);border-radius:12px;padding:22px 18px;position:relative;overflow:hidden;display:inline-block;margin:4px 12px 4px 0;vertical-align:top}
+.ruk-card .ruk-card-badge{position:absolute;right:-16px;top:-20px;width:64px;height:64px;background:#F97316;border-radius:50%}
+.ruk-card .ruk-card-badge span{position:absolute;bottom:16px;left:20px;color:#fff;font-size:1.05rem;font-weight:700}
+.ruk-card h4{margin:0 0 4px;font-size:.85rem;color:#78716C;font-weight:600}
+.ruk-card p{margin:0;font-size:1.35rem;font-weight:700}
+
+/* Gauge loader - adapted from Uiverse.io by Nawsome
+   https://uiverse.io/Nawsome/ancient-yak-42 (MIT) */
+.ruk-gauge{display:block;width:9.375em;height:9.375em;font-size:14px}
+.ruk-gauge .ruk-ring-rotate{animation:ruk-rr 2s linear infinite;transform-origin:80px 80px}
+.ruk-gauge .ruk-ring-stroke{animation:ruk-rs 2s cubic-bezier(.65,0,.35,1) infinite;transform-origin:80px 80px}
+.ruk-gauge .ruk-tick{animation:ruk-tk 2s cubic-bezier(.32,2,.5,1) infinite}
+@keyframes ruk-rr{to{transform:rotate(360deg)}}
+@keyframes ruk-rs{0%{stroke-dashoffset:452}50%{stroke-dashoffset:113}100%{stroke-dashoffset:452}}
+@keyframes ruk-tk{0%,10%{stroke-dashoffset:12}45%{stroke-dashoffset:0}60%,100%{stroke-dashoffset:-12}}

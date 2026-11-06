@@ -1,0 +1,2 @@
+{# RevUp UI kit: stat card. Pass icon (emoji/entity), title, value, tip. #}
+<span class="ruk-card"><span class="ruk-card-badge"><span>{{ icon|default:"★" }}</span></span><h4>{% if tip %}{% include "components/ui/tooltip.html" with text=title %}{% else %}{{ title }}{% endif %}</h4><p>{{ value }}</p></span>
