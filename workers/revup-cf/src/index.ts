@@ -5,7 +5,7 @@ import { Client, Pool } from "pg";
 import { LOGO_B64, landingPage } from "./landing";
 export { landingPage } from "./landing";
 import { INDUSTRIES, getPreset, industryLabel } from "./presets";
-import { handleZernioWebhook, verifyZernioSignature } from "./receptionist";
+import { handleZernioWebhook, verifyZernioSignature, validateTenantKey, tenantConnectUrl, tenantConfirmAndBind, tenantWebhookSecret } from "./receptionist";
 
 interface Env {
   DATABASE_URL: string;
@@ -632,10 +632,16 @@ async function handle(req: Request, env: Env): Promise<Response> {
     if (path === "/webhooks/zernio" && req.method === "POST") {
       const raw = await req.text();
       const sig = req.headers.get("x-zernio-signature") || req.headers.get("x-late-signature") || "";
-      if (!(await verifyZernioSignature(env.ZERNIO_WEBHOOK_SECRET || "", raw, sig.toLowerCase())))
-        return json({ ok: false }, 403);
       let payload: any = {};
       try { payload = JSON.parse(raw); } catch { return json({ ok: false }, 400); }
+      if (!(await verifyZernioSignature(env.ZERNIO_WEBHOOK_SECRET || "", raw, sig.toLowerCase()))) {
+        // maybe a tenant's own connection, signed with their per-tenant secret
+        const tdb = pool(env);
+        let tenantSecret = "";
+        try { tenantSecret = await tenantWebhookSecret(tdb, payload); } finally { await tdb.end().catch(() => {}); }
+        if (!tenantSecret || !(await verifyZernioSignature(tenantSecret, raw, sig.toLowerCase())))
+          return json({ ok: false }, 403);
+      }
       const eventId = String(payload.id || req.headers.get("x-zernio-event-id") || "");
       const db = pool(env);
       try {
@@ -842,6 +848,72 @@ async function handle(req: Request, env: Env): Promise<Response> {
 <div class="card"><table><tr><th>Prospect</th><th>Link</th><th>Clicks</th></tr>${rows || '<tr><td colspan="3" class="mut">No links yet.</td></tr>'}</table></div>`, user));
       }
 
+      if (path === "/receptionist/connect") {
+        const connQ = await db.query(`SELECT * FROM receptionist_tenantmessagingconnection WHERE workspace_id=$1 LIMIT 1`, [mem.workspace_id]);
+        const conn = connQ.rows[0];
+        const msg = url.searchParams.get("msg") || "", err = url.searchParams.get("err") || "";
+        if (req.method === "POST") {
+          const f = await formData(req);
+          if (f.action === "save_key") {
+            const key = (f.api_key || "").trim();
+            if (!key) return redirect("/receptionist/connect?err=" + encodeURIComponent("Paste the key from your messaging account first."));
+            const v = await validateTenantKey(key, mem.workspace_id, mem.workspace_name);
+            if (v.error) return redirect("/receptionist/connect?err=" + encodeURIComponent(v.error));
+            await db.query(
+              `INSERT INTO receptionist_tenantmessagingconnection(id,workspace_id,api_key,profile_id,status,last_error,created_at,updated_at)
+               VALUES($1,$2,$3,$4,'key_valid','',now(),now())
+               ON CONFLICT (workspace_id) DO UPDATE SET api_key=EXCLUDED.api_key, profile_id=EXCLUDED.profile_id, status='key_valid', last_error='', updated_at=now()`,
+              [crypto.randomUUID(), mem.workspace_id, key, v.profileId]);
+            return redirect("/receptionist/connect?msg=" + encodeURIComponent("Key saved. Now connect your WhatsApp."));
+          }
+          if (f.action === "start") {
+            if (!conn || !conn.profile_id) return redirect("/receptionist/connect?err=" + encodeURIComponent("Save your API key first."));
+            const cb = `${base}/receptionist/connect/callback?ws=${mem.workspace_id}&u=${user.id}&p=${conn.profile_id}`;
+            let authUrl = "";
+            try { authUrl = await tenantConnectUrl(conn.api_key, conn.profile_id, cb); }
+            catch (e: any) { return redirect("/receptionist/connect?err=" + encodeURIComponent(e.status === 402 ? "Your messaging plan covers 2 numbers. Add a card in your messaging account to connect more." : "Could not start the connection. Please try again.")); }
+            await db.query(`UPDATE receptionist_tenantmessagingconnection SET status='connecting', updated_at=now() WHERE workspace_id=$1`, [mem.workspace_id]);
+            return new Response(null, { status: 303, headers: { location: authUrl } });
+          }
+          return redirect("/receptionist/connect");
+        }
+        const step = conn ? (conn.status === "connected" ? 3 : 2) : 1;
+        return html(layout("Connect WhatsApp", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}</p>` : ""}
+<div class="card"><h2 style="margin-top:0">Connect your own WhatsApp number</h2>
+<p class="mut">Three one-time steps. Your customers then chat with YOUR number, and the receptionist answers them with your business details.</p>
+<h3>1. Create your messaging account ${step > 1 ? '<span class="ok">&#10003;</span>' : ""}</h3>
+<p class="mut">Open a free account with our messaging partner, then copy your API key from its settings.</p>
+<h3>2. Paste your API key ${step > 2 ? '<span class="ok">&#10003;</span>' : ""}</h3>
+${conn && conn.status === "connected" ? `<p class="ok">Number connected: +${esc(conn.phone_number || "")}</p>` : `<form method="post"><input type="hidden" name="action" value="save_key"><label>API key<input name="api_key" required maxlength="200" autocomplete="off"></label><button>Save key</button></form>`}
+${conn && conn.status !== "connected" ? `<h3>3. Connect WhatsApp</h3><form method="post"><input type="hidden" name="action" value="start"><button class="btn btn-primary">Connect WhatsApp</button><p class="mut">You will scan a QR code with the WhatsApp app on your phone - the same way WhatsApp Web pairs.</p></form>` : ""}
+${conn && conn.status === "connected" && conn.last_error ? `<p class="warn">${esc(conn.last_error)}</p>` : ""}
+</div>`, user));
+      }
+
+      if (path === "/receptionist/connect/callback") {
+        const ws = url.searchParams.get("ws") || "", u = url.searchParams.get("u") || "", p = url.searchParams.get("p") || "";
+        if (ws !== mem.workspace_id || u !== user.id) return html(layout("Connect WhatsApp", `<p class="bad">The connection did not match this business. Please try again.</p>`), 400);
+        const connQ = await db.query(`SELECT * FROM receptionist_tenantmessagingconnection WHERE workspace_id=$1 LIMIT 1`, [ws]);
+        const conn = connQ.rows[0];
+        if (!conn || p !== conn.profile_id) return redirect("/receptionist/connect?err=" + encodeURIComponent("Your connection session expired. Please try again."));
+        const error = url.searchParams.get("error") || "";
+        if (error) {
+          await db.query(`UPDATE receptionist_tenantmessagingconnection SET status='key_valid', updated_at=now() WHERE workspace_id=$1`, [ws]);
+          const msg = /already/i.test(error) ? "This number is connected somewhere else. Disconnect it there first, then try again." : "The connection was cancelled before it finished. Nothing was connected.";
+          return redirect("/receptionist/connect?err=" + encodeURIComponent(msg));
+        }
+        const connected = url.searchParams.get("connected") || "", profileId = url.searchParams.get("profileId") || "", accountId = url.searchParams.get("accountId") || "";
+        if (connected !== "whatsapp" || !profileId || !accountId || profileId !== conn.profile_id)
+          return redirect("/receptionist/connect?err=" + encodeURIComponent("The connection came back incomplete. Please try again."));
+        try {
+          const r = await tenantConfirmAndBind(db, conn, profileId, accountId, `${base}/webhooks/zernio`);
+          return redirect("/receptionist/connect?" + (r.ok ? "msg" : "err") + "=" + encodeURIComponent(r.msg));
+        } catch (e: any) {
+          return redirect("/receptionist/connect?err=" + encodeURIComponent("Your number connected, but we could not confirm it yet. Refresh in a moment."));
+        }
+      }
+
       if (path === "/receptionist") {
         const [ch, prof, usedM, planRow] = await Promise.all([
           db.query(`SELECT phone_number, label, is_sandbox, connected_at FROM receptionist_zerniochannel WHERE workspace_id=$1`, [mem.workspace_id]),
@@ -855,7 +927,7 @@ async function handle(req: Request, env: Env): Promise<Response> {
         const chan = ch.rows.map((c: any) => `<tr><td>+${esc(c.phone_number || "")}</td><td>${esc(c.label || "")}</td><td>${c.is_sandbox ? "demo line" : "live"}</td></tr>`).join("");
         const p = prof.rows[0];
         return html(layout("Receptionist", `
-${!ch.rows.length ? `<div class="card" style="border-color:var(--brand)"><h2 style="margin-top:0">Connect your WhatsApp</h2><p>Your receptionist answers customers on your own business WhatsApp number. Contact NahaLabs to connect your number - it takes a few minutes.</p></div>` : ""}
+${!ch.rows.length ? `<div class="card" style="border-color:var(--brand)"><h2 style="margin-top:0">Connect your WhatsApp</h2><p>Your receptionist answers customers on your own business WhatsApp number. <a href="/receptionist/connect">Connect it yourself in three steps</a> - it takes a few minutes.</p></div>` : ""}
 <div class="card"><h2 style="margin-top:0">Your receptionist</h2>
 <p>${p ? `${esc(p.business_name || mem.org_name)} · ${esc(p.industry || "general")} · ${p.is_active ? '<span class="ok">answering</span>' : '<span class="warn">paused</span>'}` : "Tell RevUp about your business in onboarding so the receptionist knows what to say."}</p>
 <p class="mut">Business details, hours and prices come from <a href="/onboarding">onboarding</a>. Conversations live in your <a href="/inbox">inbox</a> - step in any time.</p></div>

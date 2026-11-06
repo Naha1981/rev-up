@@ -218,14 +218,111 @@ export async function handleZernioWebhook(db: Pool, env: any, payload: any): Pro
   if (Number(sentHour.rows[0].c) >= MAX_SENDS_HOUR || Number(sentDay.rows[0].c) >= MAX_SENDS_DAY) return;
   if (!contact.zernio_conversation_id) return;
 
+  // a workspace with its own messaging account sends on ITS key and plan
+  const connQ = await db.query(`SELECT api_key, status FROM receptionist_tenantmessagingconnection WHERE workspace_id=$1 LIMIT 1`, [channel.workspace_id]);
+  const conn = connQ.rows[0];
+  if (conn && conn.status === "needs_attention") return; // hold drafts until they reconnect
+  const sendKey = conn && conn.status === "connected" && conn.api_key ? conn.api_key : env.ZERNIO_API_KEY;
+
   const base = env.ZERNIO_BASE_URL || "https://zernio.com/api/v1";
   const resp = await fetch(`${base}/inbox/conversations/${contact.zernio_conversation_id}/messages`, {
     method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${env.ZERNIO_API_KEY}` },
+    headers: { "content-type": "application/json", authorization: `Bearer ${sendKey}` },
     body: JSON.stringify({ accountId: channel.zernio_account_id, message: reply }),
   });
   if (!resp.ok) return; // draft stays for retry/inbox
   const data: any = await resp.json().catch(() => ({}));
   const sentId = String(data?.message?.id || data?.messageId || data?.id || "");
   await db.query(`UPDATE receptionist_message SET is_draft=false, zernio_message_id=$1 WHERE id=$2`, [sentId, outId]);
+}
+
+// ---------- tenant self-serve WhatsApp connect (their own messaging account) ----------
+
+const ZBASE = "https://zernio.com/api/v1";
+
+async function zget(apiKey: string, path: string): Promise<any> {
+  const resp = await fetch(ZBASE + path, { headers: { authorization: `Bearer ${apiKey}` } });
+  if (!resp.ok) { const e: any = new Error("zernio " + resp.status); e.status = resp.status; throw e; }
+  return resp.json();
+}
+async function zpost(apiKey: string, path: string, body: any): Promise<any> {
+  const resp = await fetch(ZBASE + path, { method: "POST", headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (!resp.ok) { const e: any = new Error("zernio " + resp.status); e.status = resp.status; throw e; }
+  return resp.json();
+}
+
+export async function validateTenantKey(apiKey: string, workspaceId: string, workspaceName: string): Promise<{ profileId: string; error: string }> {
+  try {
+    await zget(apiKey, "/accounts");
+    const byExt = await zget(apiKey, `/profiles?externalId=${encodeURIComponent(workspaceId)}`).catch(() => ({}));
+    let profile = (byExt.profiles || [])[0] || byExt.profile;
+    if (!profile) {
+      const all = await zget(apiKey, "/profiles");
+      const profiles = all.profiles || [];
+      if (profiles.length === 1) profile = profiles[0];
+    }
+    if (!profile) {
+      const made = await zpost(apiKey, "/profiles", { name: workspaceName.slice(0, 80), externalId: workspaceId });
+      profile = made.profile;
+    }
+    return { profileId: String(profile?._id || profile?.id || ""), error: "" };
+  } catch (e: any) {
+    if (e.status === 401 || e.status === 403) return { profileId: "", error: "That key was not accepted. Copy the full key from your messaging account and paste it again." };
+    if (e.status === 402) return { profileId: "", error: "Your messaging plan covers 2 numbers. Add a card in your messaging account to connect more." };
+    return { profileId: "", error: "Could not reach the messaging service. Please try again." };
+  }
+}
+
+export async function tenantConnectUrl(apiKey: string, profileId: string, redirectUrl: string): Promise<string> {
+  const data = await zget(apiKey, `/connect/whatsapp?profileId=${encodeURIComponent(profileId)}&redirect_url=${encodeURIComponent(redirectUrl)}`);
+  const url = data.authUrl || data.data?.authUrl;
+  if (!url) throw new Error("no authUrl");
+  return url;
+}
+
+export async function tenantConfirmAndBind(db: any, conn: any, profileId: string, accountId: string, webhookUrl: string): Promise<{ ok: boolean; msg: string }> {
+  const accounts = await zget(conn.api_key, `/accounts?profileId=${encodeURIComponent(profileId)}&platform=whatsapp`);
+  const list = accounts.accounts || [];
+  const match = list.find((a: any) => String(a._id || a.id) === accountId);
+  if (!match) return { ok: false, msg: "That number was not found on your messaging account. Please try again." };
+  const secret = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  let webhookId = "", webhookOk = false;
+  try {
+    const hook = await zpost(conn.api_key, "/webhooks/settings", {
+      name: "revup-" + conn.workspace_id, url: webhookUrl, secret,
+      events: ["message.received", "message.delivered", "message.read", "account.disconnected"], profileIds: [profileId],
+    });
+    webhookId = String(hook.webhook?._id || hook.webhook?.id || "");
+    if (webhookId) { const t = await zpost(conn.api_key, "/webhooks/test", { webhookId }); webhookOk = !!t.success; }
+  } catch { /* registration failed: still bind, note in last_error */ }
+  const phone = String(match.username || match.phoneNumber || "").replace(/^\+/, "");
+  await db.query(
+    `UPDATE receptionist_tenantmessagingconnection SET account_id=$1, phone_number=$2, webhook_id=$3, webhook_secret=$4, status='connected', last_error=$5, updated_at=now() WHERE workspace_id=$6`,
+    [accountId, phone, webhookId, webhookId ? secret : "", webhookOk ? "" : "Webhook check did not pass yet - replies may be delayed.", conn.workspace_id]);
+  const ex = await db.query(`SELECT id FROM receptionist_zerniochannel WHERE workspace_id=$1`, [conn.workspace_id]);
+  if (ex.rows[0]) {
+    await db.query(`UPDATE receptionist_zerniochannel SET zernio_account_id=$1, zernio_profile_id=$2, phone_number=$3, label=$4, is_sandbox=false WHERE workspace_id=$5`,
+      [accountId, profileId, phone, match.name || "WhatsApp", conn.workspace_id]);
+  } else {
+    await db.query(
+      `INSERT INTO receptionist_zerniochannel(id,workspace_id,zernio_account_id,zernio_profile_id,phone_number,label,is_sandbox,connected_at)
+       VALUES($1,$2,$3,$4,$5,$6,false,now())`,
+      [crypto.randomUUID(), conn.workspace_id, accountId, profileId, phone, match.name || "WhatsApp"]);
+  }
+  return { ok: true, msg: webhookOk ? "WhatsApp connected. Your receptionist is live on your number." : "Connected, but the delivery check did not pass yet - replies may be delayed." };
+}
+
+export async function tenantWebhookSecret(db: any, payload: any): Promise<string> {
+  const account = payload?.message?.account || payload?.account || {};
+  const accountId = account.accountId || account._id || payload?.accountId || "";
+  const profileId = account.profileId || payload?.profileId || "";
+  if (accountId) {
+    const r = await db.query(`SELECT webhook_secret FROM receptionist_tenantmessagingconnection WHERE account_id=$1 AND webhook_secret<>'' LIMIT 1`, [accountId]);
+    if (r.rows[0]) return r.rows[0].webhook_secret;
+  }
+  if (profileId) {
+    const r = await db.query(`SELECT webhook_secret FROM receptionist_tenantmessagingconnection WHERE profile_id=$1 AND webhook_secret<>'' LIMIT 1`, [profileId]);
+    if (r.rows[0]) return r.rows[0].webhook_secret;
+  }
+  return "";
 }
