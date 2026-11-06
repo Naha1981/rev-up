@@ -302,7 +302,7 @@ ${err ? `<p class="bad">${esc(err)}</p>` : ""}
 <button>Log in</button>
 </form></div>`);
 
-async function dashboardPage(db: Pool, user: any, mem: any): Promise<string> {
+async function dashboardPage(db: Pool, user: any, mem: any, msg = ""): Promise<string> {
   const [pending, links, clicks, posts] = await Promise.all([
     db.query(`SELECT count(*) c FROM composer_platform_post pp JOIN composer_post p ON p.id=pp.post_id WHERE p.workspace_id=$1 AND pp.status='pending_review'`, [mem.workspace_id]),
     db.query(`SELECT count(*) c FROM receptionist_reviewlink WHERE workspace_id=$1`, [mem.workspace_id]),
@@ -310,6 +310,7 @@ async function dashboardPage(db: Pool, user: any, mem: any): Promise<string> {
     db.query(`SELECT count(*) c FROM composer_post WHERE workspace_id=$1`, [mem.workspace_id]),
   ]);
   return layout("Dashboard", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <p class="mut">${esc(mem.org_name)} · ${esc(mem.workspace_name)} · <span class="pill">${esc(mem.plan)}</span> <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc(mem.subscription_status)}</span></p>
 <div class="grid">
 <div class="card"><h2>Posts</h2><p class="stat">${posts.rows[0].c}</p><p class="mut">total in this workspace</p></div>
@@ -357,8 +358,27 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 ${GOALS.map(([v, l]) => `<label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" name="goal_${v}"${savedGoals.includes(v) ? " checked" : ""} style="width:auto"> ${l}</label>`).join("")}
 <h2>Choose your plan</h2>
 ${PLAN_CARDS.map((p) => `<label style="display:block;border:1px solid ${cur === p.slug ? "var(--brand)" : "var(--line)"};border-radius:12px;padding:12px 14px;margin:8px 0;cursor:pointer;font-weight:400">
-<input type="radio" name="plan" value="${p.slug}"${cur === p.slug ? " checked" : ""} style="width:auto"> <b>${p.name} - R${p.price.toLocaleString("en-ZA")}/month</b>${rec === p.slug ? ` <span class="pill ok">Recommended for you</span>` : ""}<br>
+<input type="radio" name="plan" value="${p.slug}"${cur === p.slug ? " checked" : ""} style="width:auto"> <b>${p.name} - R${p.price.toLocaleString("en-ZA")}/month</b>${rec === p.slug ? ` <span class="pill ok recpill">Recommended for you</span>` : ""}<br>
 <span class="mut">${p.feat}</span></label>`).join("")}
+<script>
+(function(){
+  var boxes=document.querySelectorAll('input[name^="goal_"]');
+  function recalc(){
+    var g=[];boxes.forEach(function(b){if(b.checked)g.push(b.name.slice(5));});
+    var r=g.indexOf('leads')>=0?'business-pro':(g.indexOf('social')>=0?'growth':'starter');
+    document.querySelectorAll('input[name="plan"]').forEach(function(p){
+      var card=p.closest('label');
+      var old=card.querySelector('.recpill');if(old)old.remove();
+      if(p.value===r){var sp=document.createElement('span');sp.className='pill ok recpill';sp.textContent='Recommended for you';card.querySelector('b').after(sp);}
+      if(!p.dataset.touched)p.checked=(p.value===r);
+      card.style.borderColor=p.checked?'var(--brand)':'var(--line)';
+    });
+  }
+  document.querySelectorAll('input[name="plan"]').forEach(function(p){p.addEventListener('change',function(){p.dataset.touched='1';document.querySelectorAll('input[name="plan"]').forEach(function(q){q.closest('label').style.borderColor=q.checked?'var(--brand)':'var(--line)';});});});
+  boxes.forEach(function(b){b.addEventListener('change',recalc);});
+  recalc();
+})();
+</script>
 <p class="mut">Your trial starts now - no payment today. You can change plans any time on the billing page.</p>
 <button>Save and continue</button>
 </form></div>`, user);
@@ -725,7 +745,7 @@ export default {
 <p class="mut">Each business has its own posts, inbox, reviews and billing.</p></div>`, user));
       }
 
-      if (path === "/") return html(await dashboardPage(db, user, mem));
+      if (path === "/") return html(await dashboardPage(db, user, mem, url.searchParams.get("msg") || ""));
       if (path === "/static/brand/revup-light.png") return new Response(Uint8Array.from(atob(LOGO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
 
       if (path === "/onboarding") {
