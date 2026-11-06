@@ -70,8 +70,8 @@ const LANDING_BODY = `
 
   <header class="hero">
     <span class="eyebrow">Built for South African small businesses</span>
-    <h1>Your WhatsApp employee by NahaLabs</h1>
-    <p class="sub">RevUp answers your business WhatsApp like a friendly receptionist, day and night, turns your happy customers into 5-star Google reviews, and keeps your social pages posting. You stay in control of every word.</p>
+    <h1>RevUp by NahaLabs</h1>
+    <p class="sub">RevUp turns your happy customers into 5-star Google reviews, keeps your social pages posting, and captures every website enquiry into one pipeline. You stay in control of every word.</p>
     <div class="hero-cta">
       <a class="btn btn-primary" href="/signup">Get started</a>
       <a class="btn btn-ghost" href="/login">Log in</a>
@@ -99,11 +99,11 @@ const LANDING_BODY = `
   <h2 class="section-title">Simple monthly pricing</h2>
   <p class="section-sub" style="margin-bottom:34px">No contract, cancel anytime. Pick the plan that fits.</p>
   <div class="grid">
-    <div class="card"><h3 style="margin-top:0">Starter</h3><p class="plan-price">R499 <span>a month</span></p><p>Your WhatsApp receptionist answering enquiries and booking appointments, plus the Google review booster and social posting. Up to 500 replies a month, 1 connected channel.</p></div>
-    <div class="card" style="border-color:var(--brand);box-shadow:0 8px 24px rgba(249,115,22,.12)"><h3 style="margin-top:0">Growth</h3><p class="plan-price">R999 <span>a month</span></p><p>Everything in Starter, with room to grow: more social posting, up to 1,000 replies a month and 2 connected channels.</p></div>
-    <div class="card"><h3 style="margin-top:0">Business Pro</h3><p class="plan-price">R1,999 <span>a month</span></p><p>Everything in Growth, plus FrontDesk: a public enquiry form for your website, a shared lead pipeline and AI-drafted follow-ups you approve. Up to 2,500 replies a month and 3 connected channels.</p></div>
+    <div class="card"><h3 style="margin-top:0">Starter</h3><p class="plan-price">R499 <span>a month</span></p><p>The Google review booster, social posting with your approval on every word, and your enquiry inbox. Up to 500 AI-drafted replies a month, 1 connected channel.</p></div>
+    <div class="card" style="border-color:var(--brand);box-shadow:0 8px 24px rgba(249,115,22,.12)"><h3 style="margin-top:0">Growth</h3><p class="plan-price">R999 <span>a month</span></p><p>Everything in Starter, with room to grow: more social posting, up to 1,000 AI-drafted replies a month and 2 connected channels.</p></div>
+    <div class="card"><h3 style="margin-top:0">Business Pro</h3><p class="plan-price">R1,999 <span>a month</span></p><p>Everything in Growth, plus FrontDesk: a public enquiry form for your website, a shared lead pipeline and AI-drafted follow-ups you approve. Up to 2,500 AI-drafted replies a month and 3 connected channels.</p></div>
   </div>
-  <p class="section-sub" style="font-size:14px;opacity:.7;margin-top:26px;margin-bottom:0">Plans include a monthly WhatsApp messaging volume. Additional messaging may carry usage charges; any extra usage and its rates are agreed with you before it is activated.</p>
+  <p class="section-sub" style="font-size:14px;opacity:.7;margin-top:26px;margin-bottom:0">Plans include a monthly AI reply volume. Additional usage may carry charges; any extra usage and its rates are agreed with you before it is activated.</p>
   <div style="text-align:center;margin-top:30px"><a class="btn btn-primary" href="/signup">Get started</a></div>
 </section>
 
@@ -112,14 +112,14 @@ const LANDING_BODY = `
   <p class="section-sub">From R499 a month, cancel anytime.</p>
   <div class="steps">
     <div class="step"><div class="step-num"></div><div><h3>Create your account</h3><p>Sign up with your email and choose your plan.</p></div></div>
-    <div class="step"><div class="step-num"></div><div><h3>Pair your WhatsApp</h3><p>Connect your business WhatsApp with a code and link your Google Calendar. That is all the receptionist needs.</p></div></div>
-    <div class="step"><div class="step-num"></div><div><h3>Stay in control</h3><p>Watch every conversation as it happens. Step in whenever you like - the receptionist only says what you would.</p></div></div>
+    <div class="step"><div class="step-num"></div><div><h3>Set up in minutes</h3><p>Tell RevUp about your business and paste your Google review link. That is all it needs.</p></div></div>
+    <div class="step"><div class="step-num"></div><div><h3>Stay in control</h3><p>Watch every enquiry and draft as it happens. Step in whenever you like - nothing goes out without your approval.</p></div></div>
   </div>
 </section>
 
 <div class="wrap">
   <div class="cta-band">
-    <h2>Your next customer is messaging you right now.</h2>
+    <h2>Your next customer is looking for you right now.</h2>
     <p>Get started and never miss another enquiry.</p>
     <a class="btn btn-primary" href="/signup">Get started</a>
   </div>
@@ -141,5 +141,5 @@ const LANDING_BODY = `
 `;
 
 export function landingPage(): string {
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RevUp - Your WhatsApp employee</title><style>${LANDING_STYLE}</style></head><body>${LANDING_BODY}</body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RevUp by NahaLabs</title><style>${LANDING_STYLE}</style></head><body>${LANDING_BODY}</body></html>`;
 }

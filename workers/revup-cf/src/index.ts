@@ -327,7 +327,7 @@ const GOALS: [string, string][] = [
   ["leads", "Capture website enquiries and follow them up (FrontDesk)"],
 ];
 const PLAN_CARDS: { slug: string; name: string; price: number; feat: string }[] = [
-  { slug: "starter", name: "Starter", price: 499, feat: "WhatsApp receptionist + Google review booster" },
+  { slug: "starter", name: "Starter", price: 499, feat: "Google review booster + enquiry inbox" },
   { slug: "growth", name: "Growth", price: 999, feat: "Everything in Starter + social posting with approvals" },
   { slug: "business-pro", name: "Business Pro", price: 1999, feat: "Everything in Growth + FrontDesk lead pipeline and follow-ups" },
 ];
