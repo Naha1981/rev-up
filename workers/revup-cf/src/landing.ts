@@ -82,13 +82,12 @@ const LANDING_BODY = `
 
 <div class="alt">
 <section class="wrap">
-  <h2 class="section-title">Working for you from day one</h2>
-  <p class="section-sub">No agency, no retainer, no waiting on anyone. These parts are live today.</p>
+  <h2 class="section-title">What RevUp does for you</h2>
+  <p class="section-sub">No agency, no retainer, no waiting on anyone.</p>
   <div class="grid">
-    <div class="card"><div class="icon">💬</div><h3>WhatsApp receptionist</h3><p>Answers customer enquiries on your business WhatsApp, day and night. It books appointments into your calendar and hands over to you when a person should step in.</p></div>
     <div class="card"><div class="icon">⭐</div><h3>Google review booster</h3><p>Spots your happiest customers and asks for a Google review at the right moment. More 5-star reviews, without the awkward asking.</p></div>
-    <div class="card"><div class="icon">📅</div><h3>Calendar bookings</h3><p>Appointments land on your Google Calendar at the right time, South African time zone. Double-bookings are blocked for you.</p></div>
-    <div class="card"><div class="icon">📈</div><h3>Your numbers, in plain language</h3><p>See enquiries answered, bookings made and reviews gained. No spreadsheets, no jargon.</p></div>
+    <div class="card"><div class="icon">🗂️</div><h3>FrontDesk lead capture</h3><p>A simple enquiry form for your website. Every enquiry lands in one pipeline, with a considered follow-up drafted for your approval.</p></div>
+    <div class="card"><div class="icon">📈</div><h3>Your numbers, in plain language</h3><p>See reviews requested, links clicked, posts drafted and enquiries captured. No spreadsheets, no jargon.</p></div>
     <div class="card"><div class="icon">✍️</div><h3>Social posting</h3><p>Posts in your voice, tuned to your trade and your town, drafted and scheduled to your social pages. You approve every word before anything goes out.</p></div>
   </div>
 </section>
