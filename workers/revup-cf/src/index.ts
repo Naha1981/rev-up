@@ -592,6 +592,17 @@ export default {
     const base = url.origin;
     const path = url.pathname;
 
+    if (path.startsWith("/t/")) {
+      const slug = path.slice(3).replace(/[^a-z0-9]/gi, "").slice(0, 24);
+      const db = pool(env);
+      try {
+        const r = await db.query(`UPDATE cf_prospect_link SET click_count=click_count+1, first_clicked_at=COALESCE(first_clicked_at,now()), last_clicked_at=now() WHERE lower(slug)=lower($1) RETURNING target_url`, [slug]);
+        await db.end().catch(() => {});
+        const dest = r.rows[0]?.target_url || "https://revup.nahalabs.co.za/?ref=" + slug;
+        return new Response(null, { status: 302, headers: { location: dest } });
+      } catch { await db.end().catch(() => {}); return redirect("/"); }
+    }
+
     if (path === "/webhooks/zernio" && req.method === "POST") {
       const raw = await req.text();
       const sig = req.headers.get("x-zernio-signature") || req.headers.get("x-late-signature") || "";
@@ -770,6 +781,32 @@ export default {
         return html(layout("Switch business", `
 <div class="card"><table><tr><th>Business</th><th>Plan</th><th></th></tr>${rows}</table>
 <p class="mut">Each business has its own posts, inbox, reviews and billing.</p></div>`, user));
+      }
+
+      if (path === "/prospects") {
+        if (req.method === "POST") {
+          const f = await formData(req);
+          const name = (f.prospect || "").trim().slice(0, 200);
+          const target = (f.target_url || "").trim().slice(0, 500);
+          if (name) {
+            const slug = Array.from(crypto.getRandomValues(new Uint8Array(6))).map((b) => b.toString(36).padStart(2, "0")).join("").replace(/[^a-z0-9]/gi, "").slice(0, 10) || Math.random().toString(36).slice(2, 12);
+            await db.query(`INSERT INTO cf_prospect_link(id,workspace_id,slug,prospect_name,target_url) VALUES($1,$2,$3,$4,$5)`,
+              [crypto.randomUUID(), mem.workspace_id, slug, name, target || ("https://revup.nahalabs.co.za/?ref=" + slug)]);
+          }
+          return redirect("/prospects");
+        }
+        const links = await db.query(`SELECT * FROM cf_prospect_link WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 100`, [mem.workspace_id]);
+        const rows = links.rows.map((l: any) => `<tr>
+<td><b>${esc(l.prospect_name)}</b></td>
+<td><a href="${base}/t/${esc(l.slug)}" target="_blank" rel="noopener">/t/${esc(l.slug)}</a></td>
+<td>${l.click_count > 0 ? `<span class="ok">${l.click_count} click${l.click_count === 1 ? "" : "s"}</span> <span class="mut">${l.last_clicked_at ? "last " + new Date(l.last_clicked_at).toLocaleString("en-ZA") : ""}</span>` : `<span class="mut">no clicks yet</span>`}</td></tr>`).join("");
+        return html(layout("Prospect links", `
+<div class="card"><h2 style="margin-top:0">New tracked link</h2>
+<p class="mut">One unique link per prospect. When they open it, the click is recorded here and they land on your page.</p>
+<form method="post"><label>Prospect name<input name="prospect" required maxlength="200" placeholder="e.g. Sipho's Plumbing"></label>
+<label>Send them to (optional)<input name="target_url" maxlength="500" placeholder="https://revup.nahalabs.co.za/"></label>
+<button>Create link</button></form></div>
+<div class="card"><table><tr><th>Prospect</th><th>Link</th><th>Clicks</th></tr>${rows || '<tr><td colspan="3" class="mut">No links yet.</td></tr>'}</table></div>`, user));
       }
 
       if (path === "/receptionist") {
