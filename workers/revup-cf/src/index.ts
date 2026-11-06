@@ -37,6 +37,8 @@ async function sha256hex(s: string): Promise<string> {
 
 // md5 via spark-md5 — PayFast signatures only; WebCrypto has no md5.
 import SparkMD5 from "spark-md5";
+import { wifiCardPage } from "./wificard";
+import { QRCODE_LIB } from "./qrcodejs";
 export function md5(input: string): string { return SparkMD5.hash(input); }
 
 // ---------- html ----------
@@ -62,6 +64,7 @@ export function navLinks(user: any): string {
   if (show("receptionist", "social", "leads")) h += `<a href="/pages">Pages</a>`;
   if (show("receptionist")) h += `<a href="/competitors">Competitors</a>`;
   if (show("receptionist")) h += `<a href="/support">Support</a>`;
+  if (show("receptionist")) h += `<a href="/wifi-card">WiFi Card</a>`;
   if (show("leads", "receptionist")) h += `<a href="/inbox">Inbox</a>`;
   if (show("leads")) h += `<a href="/frontdesk">Leads</a>`;
   if (show("reviews", "leads", "receptionist")) h += `<a href="/approvals">Approvals</a>`;
@@ -1119,6 +1122,7 @@ async function handle(req: Request, env: Env): Promise<Response> {
     const db = pool(env);
     try {
       if (path === "/static/brand/revup-light.png") return new Response(Uint8Array.from(atob(LOGO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
+      if (path === "/static/qrcode.js") return new Response(QRCODE_LIB, { headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "public, max-age=86400" } });
       const user = await getUser(req, db);
       if (!user && path === "/") return html(landingPage());
       if (!user) return redirect("/login");
@@ -1756,6 +1760,10 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
           return redirect("/support");
         }
         return html(await supportPage(db, user, mem));
+      }
+      if (path === "/wifi-card") {
+        const bp = await db.query(`SELECT business_name FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [mem.workspace_id]);
+        return html(layout("WiFi Card", wifiCardPage({ businessName: bp.rows[0]?.business_name || user._cur_ws || "", enquiryUrl: `${base}/f/${mem.workspace_id}` }), user));
       }
       if (path === "/revenue-mode" && req.method === "POST") {
         const f = await formData(req);
