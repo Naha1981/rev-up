@@ -7,6 +7,7 @@ export { landingPage } from "./landing";
 import { INDUSTRIES, getPreset, industryLabel } from "./presets";
 import { handleZernioWebhook, verifyZernioSignature, validateTenantKey, tenantConnectUrl, tenantConfirmAndBind, tenantWebhookSecret } from "./receptionist";
 import { startPipeline, cancelPending, runDueReviewEvents, resolveIssue, scheduleServiceReminder, runDueServiceReminders } from "./reviews";
+import { ensurePageTables, fetchForMirror, mirrorStructure, generateSections, servePublic, makeSlug, pagesListBody, newPageBody, pageDetailBody, type PageRow, type PageSection } from "./pages";
 import { waitlistAdd, waitlistExpire, waitlistAction, loyaltySettings, loyaltyAccount, awardForBooking, issueVoucher, redeemVoucher, expireVouchers, quoteCreate, quoteAction, segmentContacts, campaignCreate, campaignApprove, campaignCancel, runDueCampaigns, attributeBookingToCampaign, campaignStats, competitorAdd, dishAdd, promoAdd, refreshOpportunities, opportunityAction, opportunityDraftCampaign, supportHandle, autoDraftOpportunities } from "./features";
 
 interface Env {
@@ -58,6 +59,7 @@ export function navLinks(user: any): string {
   if (show("receptionist")) h += `<a href="/loyalty">Loyalty</a>`;
   if (show("receptionist")) h += `<a href="/quotes">Quotes</a>`;
   if (show("receptionist")) h += `<a href="/campaigns">Campaigns</a>`;
+  if (show("receptionist", "social", "leads")) h += `<a href="/pages">Pages</a>`;
   if (show("receptionist")) h += `<a href="/competitors">Competitors</a>`;
   if (show("receptionist")) h += `<a href="/support">Support</a>`;
   if (show("leads", "receptionist")) h += `<a href="/inbox">Inbox</a>`;
@@ -1100,6 +1102,14 @@ async function handle(req: Request, env: Env): Promise<Response> {
       } finally { await pdb.end().catch(() => {}); }
     }
 
+    // RevUp Pages - public landing pages (no login)
+    const pm = /^\/p\/([a-z0-9-]{4,64})(\/go)?$/.exec(path);
+    if (pm) {
+      const pgdb = pool(env);
+      try { return await servePublic(pgdb, pm[1], !!pm[2], req); }
+      finally { await pgdb.end().catch(() => {}); }
+    }
+
     // everything below needs auth
     const db = pool(env);
     try {
@@ -1110,6 +1120,91 @@ async function handle(req: Request, env: Env): Promise<Response> {
       const mem = await membership(db, user.id, req);
       if (!mem) return html(layout("No workspace", `<p>Your account has no workspace yet. <a href="/signup">Create one</a>.</p>`, user), 403);
       user._cur_ws = mem.workspace_name; user._ws_count = (mem.workspaces || []).length; user._goals = Array.isArray(mem.goals) ? mem.goals : [];
+
+      if (path === "/pages") {
+        await ensurePageTables(db);
+        const msg = url.searchParams.get("msg") || "";
+        return html(layout("Landing pages", await pagesListBody(db, mem, base, msg), user));
+      }
+
+      if (path === "/pages/new") {
+        await ensurePageTables(db);
+        if (req.method === "GET") return html(layout("New landing page", newPageBody(), user));
+        const f = await formData(req);
+        if (!(f.angle || "").trim()) return html(layout("New landing page", newPageBody("Tell us the one customer pain this page answers."), user), 400);
+        if (await rateLimited(db, "pages", req, 40)) return html(layout("New landing page", newPageBody("Too many pages built today - please try again tomorrow."), user), 429);
+        let skeleton = [{ type: "hero", words: 90 }, { type: "pains", words: 120 }, { type: "benefits", words: 160 }, { type: "how", words: 120 }, { type: "proof", words: 100 }, { type: "faq", words: 120 }, { type: "cta", words: 60 }];
+        let sourceUrl = "";
+        const mirrorUrl = (f.mirror_url || "").trim();
+        if (mirrorUrl) {
+          try {
+            const src = await fetchForMirror(mirrorUrl);
+            skeleton = mirrorStructure(src);
+            sourceUrl = mirrorUrl.slice(0, 500);
+          } catch (e: any) {
+            return html(layout("New landing page", newPageBody("Could not read that page: " + String(e?.message || e).slice(0, 150)), user), 400);
+          }
+        }
+        const brief = {
+          business: (f.business || mem.workspace_name || "").trim().slice(0, 200),
+          industry: (f.industry || "general").trim().slice(0, 40),
+          angle: (f.angle || "").trim().slice(0, 200),
+          offer: (f.offer || "").trim().slice(0, 300),
+          area: (f.area || "").trim().slice(0, 120),
+          whatsapp: (f.whatsapp || "").trim().slice(0, 20),
+          cta_label: (f.cta_label || "WhatsApp us").trim().slice(0, 40),
+        };
+        let gen;
+        try { gen = await generateSections(env, brief, skeleton); }
+        catch { return html(layout("New landing page", newPageBody("The copywriter is busy right now - please try again in a minute."), user), 502); }
+        const pageId = crypto.randomUUID();
+        const slug = makeSlug(brief.business || "page");
+        const title = (gen.seo_title || `${brief.business} - ${brief.angle}`).slice(0, 200);
+        const brand = { business: brief.business, whatsapp: brief.whatsapp, cta_label: brief.cta_label, color: (f.color || "#F97316").slice(0, 7), area: brief.area, link: "" };
+        await db.query(
+          `INSERT INTO cf_page(id,workspace_id,title,slug,angle,industry,status,brand,sections,source_url) VALUES($1,$2,$3,$4,$5,$6,'draft',$7,$8,$9)`,
+          [pageId, mem.workspace_id, title, slug, brief.angle, brief.industry, JSON.stringify(brand), JSON.stringify(gen.sections), sourceUrl]);
+        return redirect("/pages/" + pageId);
+      }
+
+      const pam = /^\/pages\/([0-9a-f-]{36})(?:\/(publish|unpublish|delete))?$/.exec(path);
+      if (pam) {
+        await ensurePageTables(db);
+        const pr = await db.query(`SELECT * FROM cf_page WHERE id=$1 AND workspace_id=$2`, [pam[1], mem.workspace_id]);
+        const page: PageRow | undefined = pr.rows[0];
+        if (!page) return html(layout("Page not found", `<p class="bad">That page does not exist.</p>`, user), 404);
+        const action = pam[2] || "";
+        if (req.method === "POST" && action === "publish") {
+          await db.query(`UPDATE cf_page SET status='published', published_at=COALESCE(published_at,now()), updated_at=now() WHERE id=$1`, [page.id]);
+          return redirect("/pages/" + page.id);
+        }
+        if (req.method === "POST" && action === "unpublish") {
+          await db.query(`UPDATE cf_page SET status='draft', updated_at=now() WHERE id=$1`, [page.id]);
+          return redirect("/pages/" + page.id);
+        }
+        if (req.method === "POST" && action === "delete") {
+          await db.query(`UPDATE cf_page SET status='archived', updated_at=now() WHERE id=$1`, [page.id]);
+          return redirect("/pages?msg=Page deleted");
+        }
+        if (req.method === "POST") {
+          const f = await formData(req);
+          const sections: PageSection[] = (page.sections || []).map((s, i) => ({
+            type: s.type,
+            heading: (f["h_" + i] ?? s.heading).slice(0, 140),
+            body: (f["b_" + i] ?? s.body).slice(0, 800),
+            items: String(f["i_" + i] ?? (s.items || []).join("\n")).split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 8).map((x) => x.slice(0, 140)),
+          }));
+          const brand = Object.assign({}, page.brand || {}, {
+            cta_label: (f.cta_label || "WhatsApp us").slice(0, 40),
+            whatsapp: (f.whatsapp || "").slice(0, 20),
+            link: (f.link || "").slice(0, 500),
+            color: (f.color || "#F97316").slice(0, 7),
+          });
+          await db.query(`UPDATE cf_page SET sections=$1, brand=$2, updated_at=now() WHERE id=$3`, [JSON.stringify(sections), JSON.stringify(brand), page.id]);
+          return redirect("/pages/" + page.id);
+        }
+        return html(layout(page.title, await pageDetailBody(db, page, base, url.searchParams.get("msg") || ""), user));
+      }
 
       if (path === "/switch") {
         if (req.method === "POST") {

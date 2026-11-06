@@ -108,3 +108,63 @@ test('live: tracked link redirects and counts', async () => {
   assert.equal(r.status, 302);
   assert.ok(r.headers.get('location').includes('ref=demolink01'));
 });
+
+// --- RevUp Pages ---
+import { mirrorStructure, makeSlug, renderPublicPage, ctaTarget } from '../dist-test/pages.mjs';
+
+test('mirror: hero first, cta last, structure only', () => {
+  const html = `<html><body><script>evil()</script>
+  <h1>Best Dentist in Town</h1><p>welcome friend</p>
+  <h2>Our Services</h2><p>we do teeth and more teeth here</p>
+  <h2>Pricing</h2><p>from R500</p>
+  <h2>What Patients Say</h2><blockquote>great</blockquote>
+  <h2>Contact Us</h2><p>book now</p></body></html>`;
+  const sk = mirrorStructure(html);
+  assert.equal(sk[0].type, 'hero');
+  assert.equal(sk[sk.length-1].type, 'cta');
+  assert.ok(sk.some(s => s.type === 'offer'), 'pricing classified as offer');
+  assert.ok(sk.some(s => s.type === 'proof'), 'testimonials classified as proof');
+  // structure only: no source copy survives in the skeleton
+  assert.ok(!JSON.stringify(sk).includes('Best Dentist'));
+  assert.ok(!JSON.stringify(sk).includes('teeth'));
+});
+
+test('mirror: empty page still yields hero+cta skeleton', () => {
+  const sk = mirrorStructure('<html><body><p>no headings</p></body></html>');
+  assert.equal(sk[0].type, 'hero');
+  assert.equal(sk[sk.length-1].type, 'cta');
+});
+
+test('makeSlug: kebab plus suffix, url-safe', () => {
+  const s = makeSlug("Sipho's Panel Beaters!");
+  assert.match(s, /^sipho-s-panel-beaters-[a-z0-9]{4}$/);
+});
+
+const demoPage = {
+  id: 'x', workspace_id: 'w', title: 'Demo Dental - sore tooth', slug: 'demo-dental-ab12',
+  angle: 'sore tooth', industry: 'dental', status: 'published', source_url: '',
+  brand: { business: 'Demo Dental', color: '#0ea5e9', whatsapp: '082 555 1234', cta_label: 'WhatsApp us', area: 'Sandton' },
+  sections: [
+    { type: 'hero', heading: 'Toothache? Seen today.', body: 'Same-day appointments in Sandton.', items: [] },
+    { type: 'cta', heading: 'Ready', body: 'Message now.', items: [] },
+  ],
+};
+test('renderPublicPage: escapes html, shows brand, sticky CTA, no RevUp logo in header', () => {
+  const evil = { ...demoPage, sections: [{ type: 'hero', heading: '<script>alert(1)</script>Hi', body: 'x', items: [] }] };
+  const out = renderPublicPage(evil, 'https://revup.test');
+  assert.ok(!out.includes('<script>alert(1)</script>Hi'));
+  assert.ok(out.includes('&lt;script&gt;'));
+  const good = renderPublicPage(demoPage, 'https://revup.test');
+  assert.ok(good.includes('Demo Dental'));
+  assert.ok(good.includes('/p/demo-dental-ab12/go'));
+  assert.ok(good.includes('#0ea5e9'));
+  assert.ok(good.includes('class="bar"'), 'mobile sticky CTA bar');
+});
+test('ctaTarget: wa.me with 27 prefix and prefilled message', () => {
+  const t = ctaTarget(demoPage);
+  assert.ok(t.startsWith('https://wa.me/27825551234?text='), t);
+});
+test('ctaTarget: falls back to link then signup', () => {
+  assert.equal(ctaTarget({ ...demoPage, brand: { link: 'https://x.co.za/book' } }), 'https://x.co.za/book');
+  assert.equal(ctaTarget({ ...demoPage, brand: {} }), 'https://revup.nahalabs.co.za/signup');
+});

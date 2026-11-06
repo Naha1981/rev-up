@@ -22,6 +22,7 @@ __export(reviews_exports, {
   REVIEW_REQUEST_DELAY_H: () => REVIEW_REQUEST_DELAY_H,
   cancelPending: () => cancelPending,
   checkInMessage: () => checkInMessage,
+  deliver: () => deliver,
   flagIssue: () => flagIssue,
   looksNegative: () => looksNegative,
   reminderMessage: () => reminderMessage,
@@ -92,8 +93,8 @@ async function flagIssue(db, workspaceId, contactId, note) {
   await db.query(`UPDATE receptionist_contact SET review_status='issue_flagged', issue_note=$1, needs_human=true, updated_at=now() WHERE id=$2`, [note.slice(0, 500), contactId]);
   try {
     await db.query(
-      `INSERT INTO receptionist_complaint(id,text,source,status,created_at,contact_id,workspace_id)
-       VALUES($1,$2,'check_in','new',now(),$3,$4)`,
+      `INSERT INTO receptionist_complaint(id,text,source,status,apology_text,resolution_note,created_at,contact_id,workspace_id)
+       VALUES($1,$2,'check_in','new','','',now(),$3,$4)`,
       [crypto.randomUUID(), note.slice(0, 2e3), contactId, workspaceId]
     );
   } catch {
@@ -151,6 +152,7 @@ async function deliver(db, env, workspaceId, contact, body) {
   const data = await resp.json().catch(() => ({}));
   const sentId = String(data?.message?.id || data?.messageId || data?.id || "");
   await db.query(`UPDATE receptionist_message SET is_draft=false, zernio_message_id=$1 WHERE id=$2`, [sentId, outId]);
+  return outId;
 }
 async function sendEvent(db, env, appUrl, event) {
   const claim = await db.query(
@@ -239,8 +241,8 @@ async function scheduleServiceReminder(db, workspaceId, bookingId, contactId, se
   if (!c.rows[0] || c.rows[0].opted_out) return null;
   const id = crypto.randomUUID();
   await db.query(
-    `INSERT INTO receptionist_servicereminder(id,service,due_on,status,created_at,booking_id,contact_id,workspace_id)
-     VALUES($1,$2,(now() AT TIME ZONE 'Africa/Johannesburg')::date + $3,'scheduled',now(),$4,$5,$6)`,
+    `INSERT INTO receptionist_servicereminder(id,service,due_on,status,error,created_at,booking_id,contact_id,workspace_id)
+     VALUES($1,$2,(now() AT TIME ZONE 'Africa/Johannesburg')::date + ($3)::int,'scheduled','',now(),$4,$5,$6)`,
     [id, (service || "").slice(0, 200), days, bookingId, contactId, workspaceId]
   );
   return id;

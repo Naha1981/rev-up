@@ -49,6 +49,7 @@ __export(reviews_exports, {
   REVIEW_REQUEST_DELAY_H: () => REVIEW_REQUEST_DELAY_H,
   cancelPending: () => cancelPending,
   checkInMessage: () => checkInMessage,
+  deliver: () => deliver,
   flagIssue: () => flagIssue,
   looksNegative: () => looksNegative,
   reminderMessage: () => reminderMessage,
@@ -119,8 +120,8 @@ async function flagIssue(db, workspaceId, contactId, note) {
   await db.query(`UPDATE receptionist_contact SET review_status='issue_flagged', issue_note=$1, needs_human=true, updated_at=now() WHERE id=$2`, [note.slice(0, 500), contactId]);
   try {
     await db.query(
-      `INSERT INTO receptionist_complaint(id,text,source,status,created_at,contact_id,workspace_id)
-       VALUES($1,$2,'check_in','new',now(),$3,$4)`,
+      `INSERT INTO receptionist_complaint(id,text,source,status,apology_text,resolution_note,created_at,contact_id,workspace_id)
+       VALUES($1,$2,'check_in','new','','',now(),$3,$4)`,
       [crypto.randomUUID(), note.slice(0, 2e3), contactId, workspaceId]
     );
   } catch {
@@ -178,6 +179,7 @@ async function deliver(db, env, workspaceId, contact, body) {
   const data = await resp.json().catch(() => ({}));
   const sentId = String(data?.message?.id || data?.messageId || data?.id || "");
   await db.query(`UPDATE receptionist_message SET is_draft=false, zernio_message_id=$1 WHERE id=$2`, [sentId, outId]);
+  return outId;
 }
 async function sendEvent(db, env, appUrl, event) {
   const claim = await db.query(
@@ -266,8 +268,8 @@ async function scheduleServiceReminder(db, workspaceId, bookingId, contactId, se
   if (!c.rows[0] || c.rows[0].opted_out) return null;
   const id = crypto.randomUUID();
   await db.query(
-    `INSERT INTO receptionist_servicereminder(id,service,due_on,status,created_at,booking_id,contact_id,workspace_id)
-     VALUES($1,$2,(now() AT TIME ZONE 'Africa/Johannesburg')::date + $3,'scheduled',now(),$4,$5,$6)`,
+    `INSERT INTO receptionist_servicereminder(id,service,due_on,status,error,created_at,booking_id,contact_id,workspace_id)
+     VALUES($1,$2,(now() AT TIME ZONE 'Africa/Johannesburg')::date + ($3)::int,'scheduled','',now(),$4,$5,$6)`,
     [id, (service || "").slice(0, 200), days, bookingId, contactId, workspaceId]
   );
   return id;
@@ -360,7 +362,7 @@ var require_spark_md5 = __commonJS({
         }
         glob.SparkMD5 = factory();
       }
-    })(function(undefined) {
+    })(function(undefined2) {
       "use strict";
       var add32 = function(a, b) {
         return a + b & 4294967295;
@@ -603,7 +605,7 @@ var require_spark_md5 = __commonJS({
           }
           ArrayBuffer.prototype.slice = function(from, to) {
             var length = this.byteLength, begin = clamp(from, length), end = length, num, target, targetArray, sourceArray;
-            if (to !== undefined) {
+            if (to !== undefined2) {
               end = clamp(to, length);
             }
             if (begin > end) {
@@ -1312,6 +1314,936 @@ async function tenantWebhookSecret(db, payload) {
 
 // src/index.ts
 init_reviews();
+
+// src/pages.ts
+var ensured = null;
+function ensurePageTables(db) {
+  if (!ensured) ensured = (async () => {
+    await db.query(`CREATE TABLE IF NOT EXISTS cf_page(
+      id uuid PRIMARY KEY, workspace_id uuid NOT NULL,
+      title text NOT NULL, slug text NOT NULL,
+      angle text NOT NULL DEFAULT '', industry text NOT NULL DEFAULT '',
+      status text NOT NULL DEFAULT 'draft',
+      brand jsonb NOT NULL DEFAULT '{}'::jsonb,
+      sections jsonb NOT NULL DEFAULT '[]'::jsonb,
+      source_url text NOT NULL DEFAULT '',
+      views integer NOT NULL DEFAULT 0, cta_clicks integer NOT NULL DEFAULT 0,
+      last_viewed_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      published_at timestamptz,
+      UNIQUE(workspace_id, slug))`);
+    await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS cf_page_slug ON cf_page(slug)`);
+    await db.query(`CREATE TABLE IF NOT EXISTS cf_page_event(
+      id bigserial PRIMARY KEY, page_id uuid NOT NULL,
+      kind text NOT NULL, meta text NOT NULL DEFAULT '',
+      created_at timestamptz NOT NULL DEFAULT now())`);
+    await db.query(`CREATE INDEX IF NOT EXISTS cf_page_event_page ON cf_page_event(page_id, kind)`);
+  })().catch((e) => {
+    ensured = null;
+    throw e;
+  });
+  return ensured;
+}
+var SECTION_PATTERNS = [
+  [/price|pricing|cost|plan|package/i, "offer"],
+  [/faq|question|ask/i, "faq"],
+  [/review|testimonial|customer|client|stories|proof|patient|guest|say|feedback/i, "proof"],
+  [/how it works|how we|process|step/i, "how"],
+  [/feature|benefit|why|what you get|service/i, "benefits"],
+  [/contact|sign up|get started|start|book|buy|order|shop/i, "cta"],
+  [/problem|pain|struggle|tired|stop/i, "pains"]
+];
+function mirrorStructure(src) {
+  let h = src.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<svg[\s\S]*?<\/svg>|<noscript[\s\S]*?<\/noscript>|<!--[\s\S]*?-->/gis, " ");
+  const out = [];
+  const tagRe = /<h([1-3])[^>]*>([\s\S]*?)<\/h\1>/gi;
+  let m, last = 0, first = true;
+  const wordCount = (t) => t.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean).length;
+  while (m = tagRe.exec(h)) {
+    const chunk = h.slice(last, tagRe.lastIndex);
+    const words = wordCount(chunk);
+    const headingText = m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    let type = "benefits";
+    if (first && m[1] === "1") type = "hero";
+    else {
+      for (const [re, t] of SECTION_PATTERNS) if (re.test(headingText)) {
+        type = t;
+        break;
+      }
+    }
+    out.push({ type, words: Math.min(words, 400) });
+    first = false;
+    last = tagRe.lastIndex;
+    if (out.length >= 14) break;
+  }
+  if (!out.length || out[0].type !== "hero") out.unshift({ type: "hero", words: 80 });
+  if (!out.some((s) => s.type === "cta")) out.push({ type: "cta", words: 60 });
+  return out.slice(0, 14);
+}
+async function fetchForMirror(url) {
+  const u = new URL(url);
+  if (!/^https?:$/.test(u.protocol)) throw new Error("Only http(s) pages can be mirrored");
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 12e3);
+  try {
+    const resp = await fetch(u.toString(), {
+      signal: ctl.signal,
+      redirect: "follow",
+      headers: { "user-agent": "Mozilla/5.0 (compatible; RevUpPages/1.0)", accept: "text/html" }
+    });
+    if (!resp.ok) throw new Error(`That page answered ${resp.status} - try another URL`);
+    const text = await resp.text();
+    return text.slice(0, 15e5);
+  } finally {
+    clearTimeout(t);
+  }
+}
+var COPY_RULES = `You write landing page copy for South African small businesses.
+Rules: plain warm SA English, short sentences, no hype words (no "revolutionary", "game-changing", "unlock"), prices in rand (R) if any, mobile-first so keep headings under 9 words, body text under 60 words per section, bullets under 12 words each.
+The page speaks to ONE customer pain only - every section must tie back to that pain.
+NEVER invent facts: no phone numbers, no prices, no guarantees, no qualifications, no years of experience, no claims the business did not state. Only use details given in this brief. For contact, always point to the button (e.g. "tap the button below"), never write a phone number or email in the copy.`;
+async function generateSections(env, brief, skeleton) {
+  const preset = getPreset(brief.industry);
+  const skel = skeleton.map((s, i) => `${i + 1}. ${s.type}`).join(", ");
+  const prompt = `${COPY_RULES}
+Business: ${brief.business} (${industryLabel(brief.industry)})${brief.area ? ` in ${brief.area}` : ""}.
+Customer pain this page answers: ${brief.angle}.
+What the business offers: ${brief.offer || "their services"}.
+Tone: ${preset.responder_tone || "warm and professional"}.
+Common customer questions to weave into a faq section if present: ${(preset.responder_faqs || []).join(" | ") || "n/a"}.
+Write copy for a landing page with these sections in this order: ${skel}.
+Reply with JSON only:
+{"seo_title":"...","sections":[{"type":"hero","heading":"...","body":"...","items":["...","..."]},...]}
+Every section in the list must appear, same order, same type. items may be [] for hero/cta.`;
+  const models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
+  let lastErr = "no model replied";
+  for (const model of models) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${env.GROQ_API_KEY}` },
+          body: JSON.stringify({ model, temperature: 0.4, max_tokens: 3e3, reasoning_effort: "low", messages: [{ role: "user", content: prompt }] })
+        });
+        if (!resp.ok) {
+          lastErr = `groq ${resp.status}`;
+          continue;
+        }
+        const data = await resp.json();
+        const text = data?.choices?.[0]?.message?.content || "";
+        const m = /\{[\s\S]*\}/.exec(text);
+        if (!m) {
+          lastErr = "no JSON in reply";
+          continue;
+        }
+        const parsed = JSON.parse(m[0]);
+        const raw = Array.isArray(parsed.sections) ? parsed.sections : [];
+        const sections = raw.slice(0, 14).map((s) => ({
+          type: String(s.type || "benefits").slice(0, 20),
+          heading: String(s.heading || "").slice(0, 140),
+          body: String(s.body || "").slice(0, 800),
+          items: Array.isArray(s.items) ? s.items.slice(0, 8).map((x) => String(x).slice(0, 140)) : []
+        })).filter((s) => s.heading || s.body);
+        if (!sections.length) {
+          lastErr = "empty sections";
+          continue;
+        }
+        if (!sections.some((s) => s.type === "cta")) sections.push({ type: "cta", heading: "Ready when you are", body: "Send a message now and get a straight answer.", items: [] });
+        return { seo_title: String(parsed.seo_title || brief.business).slice(0, 120), sections };
+      } catch (e) {
+        lastErr = String(e?.message || e);
+      }
+    }
+  }
+  throw new Error(lastErr);
+}
+function pesc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+function renderPublicPage(page, base) {
+  const brand = page.brand || {};
+  const color = /^#[0-9a-fA-F]{6}$/.test(brand.color || "") ? brand.color : "#F97316";
+  const biz = pesc(brand.business || page.title);
+  const ctaLabel = pesc(brand.cta_label || "WhatsApp us");
+  const goUrl = `${base}/p/${pesc(page.slug)}/go`;
+  const blocks = (page.sections || []).map((s) => {
+    const items = (s.items || []).filter(Boolean);
+    const list = items.length ? `<ul>${items.map((i) => `<li>${pesc(i)}</li>`).join("")}</ul>` : "";
+    if (s.type === "hero") return `<section class="hero"><h1>${pesc(s.heading)}</h1><p class="lede">${pesc(s.body)}</p>${list}<p><a class="btn" href="${goUrl}">${ctaLabel}</a></p></section>`;
+    if (s.type === "cta") return `<section class="cta"><h2>${pesc(s.heading)}</h2><p>${pesc(s.body)}</p><p><a class="btn" href="${goUrl}">${ctaLabel}</a></p></section>`;
+    if (s.type === "faq") return `<section><h2>${pesc(s.heading)}</h2>${items.map((i) => `<details><summary>${pesc(i)}</summary></details>`).join("")}${s.body ? `<p>${pesc(s.body)}</p>` : ""}</section>`;
+    if (s.type === "proof") return `<section class="proof"><h2>${pesc(s.heading)}</h2>${items.map((i) => `<blockquote>${pesc(i)}</blockquote>`).join("")}${s.body ? `<p>${pesc(s.body)}</p>` : ""}</section>`;
+    return `<section><h2>${pesc(s.heading)}</h2>${s.body ? `<p>${pesc(s.body)}</p>` : ""}${list}</section>`;
+  }).join("\n");
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${pesc(page.title)}</title><meta name="description" content="${pesc((page.sections[0]?.body || page.title).slice(0, 155))}">
+<style>
+:root{--b:${color}}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#1C1917;background:#FAFAF9;line-height:1.65}
+.wrap{max-width:680px;margin:0 auto;padding:0 20px 96px}
+header{padding:22px 20px;font-weight:700;font-size:1.05rem;max-width:680px;margin:0 auto}
+.hero{padding:56px 0 32px}
+.hero h1{font-size:2rem;line-height:1.2;letter-spacing:-0.02em;margin-bottom:14px}
+.lede{font-size:1.1rem;color:#44403C;margin-bottom:22px}
+.btn{display:inline-block;background:var(--b);color:#fff;padding:14px 28px;border-radius:12px;font-weight:700;text-decoration:none;font-size:1.05rem}
+.btn:hover{filter:brightness(0.92);text-decoration:none}
+section{margin:34px 0}
+h2{font-size:1.35rem;letter-spacing:-0.01em;margin-bottom:10px}
+ul{margin:10px 0 0 0;list-style:none}
+li{padding:7px 0 7px 26px;position:relative}
+li:before{content:"\\2713";position:absolute;left:0;color:var(--b);font-weight:700}
+blockquote{border-left:3px solid var(--b);padding:6px 14px;margin:10px 0;color:#44403C;font-style:italic}
+details{border:1px solid #E7E5E4;border-radius:10px;padding:10px 14px;margin:8px 0}
+summary{font-weight:600;cursor:pointer}
+.cta{background:var(--b);color:#fff;border-radius:16px;padding:30px 22px;text-align:center}
+.cta .btn{background:#fff;color:var(--b)}
+footer{margin-top:44px;padding-top:18px;border-top:1px solid #E7E5E4;font-size:.82rem;color:#A8A29E}
+.bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #E7E5E4;padding:10px 20px;display:flex;justify-content:center}
+.bar .btn{width:100%;max-width:640px;text-align:center;padding:13px}
+@media(min-width:700px){.bar{display:none}}
+</style></head><body>
+<header>${biz}</header>
+<div class="wrap">
+${blocks}
+<footer>${biz}${brand.area ? ` \xB7 ${pesc(brand.area)}` : ""}<br>Page by <a href="https://revup.nahalabs.co.za/signup" rel="noopener">RevUp</a> - one page per customer problem.</footer>
+</div>
+<div class="bar"><a class="btn" href="${goUrl}">${ctaLabel}</a></div>
+</body></html>`;
+}
+function ctaTarget(page) {
+  const b = page.brand || {};
+  if (b.whatsapp && /^[+0-9][0-9 ]{7,18}$/.test(b.whatsapp)) {
+    const num = b.whatsapp.replace(/[^0-9]/g, "").replace(/^0/, "27");
+    const msg = encodeURIComponent(`Hi ${b.business || ""}, I saw your page about ${page.angle || "your services"}.`);
+    return `https://wa.me/${num}?text=${msg}`;
+  }
+  if (b.link && /^https?:\/\//.test(b.link)) return b.link;
+  return "https://revup.nahalabs.co.za/signup";
+}
+async function servePublic(db, slug, isGo, req) {
+  await ensurePageTables(db);
+  const r = await db.query(`SELECT * FROM cf_page WHERE slug=$1 AND status='published'`, [slug]);
+  const page = r.rows[0];
+  if (!page) return new Response(notFoundPage(), { status: 404, headers: { "content-type": "text/html; charset=utf-8" } });
+  const base = new URL(req.url).origin;
+  if (isGo) {
+    await db.query(`UPDATE cf_page SET cta_clicks=cta_clicks+1 WHERE id=$1`, [page.id]);
+    await db.query(`INSERT INTO cf_page_event(page_id,kind,meta) VALUES($1,'cta','')`, [page.id]);
+    return new Response(null, { status: 302, headers: { location: ctaTarget(page) } });
+  }
+  await db.query(`UPDATE cf_page SET views=views+1, last_viewed_at=now() WHERE id=$1`, [page.id]);
+  await db.query(`INSERT INTO cf_page_event(page_id,kind,meta) VALUES($1,'view',$2)`, [page.id, (req.headers.get("user-agent") || "").slice(0, 120)]);
+  return new Response(renderPublicPage(page, base), { headers: { "content-type": "text/html; charset=utf-8" } });
+}
+function notFoundPage() {
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found</title></head><body style="font-family:system-ui;max-width:600px;margin:60px auto;padding:0 20px"><h1>This page isn't available</h1><p>The link may be old, or the page was unpublished.</p></body></html>`;
+}
+function makeSlug(title) {
+  const baseSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 44) || "page";
+  const rand = Array.from(crypto.getRandomValues(new Uint8Array(3))).map((b) => b.toString(36).padStart(2, "0")).join("").replace(/[^a-z0-9]/g, "").slice(0, 4);
+  return `${baseSlug}-${rand || "0000"}`;
+}
+async function pagesListBody(db, mem, base, msg = "") {
+  await ensurePageTables(db);
+  const r = await db.query(`SELECT * FROM cf_page WHERE workspace_id=$1 AND status!='archived' ORDER BY created_at DESC LIMIT 100`, [mem.workspace_id]);
+  const rows = r.rows.map((p) => `<tr>
+<td><b>${pesc(p.title)}</b><br><span class="mut">${pesc(p.angle || p.industry)}</span></td>
+<td>${p.status === "published" ? `<span class="ok">Live</span> <a href="${base}/p/${pesc(p.slug)}" target="_blank" rel="noopener">/p/${pesc(p.slug)}</a>` : `<span class="mut">${pesc(p.status)}</span>`}</td>
+<td>${p.views} view${p.views === 1 ? "" : "s"} \xB7 ${p.cta_clicks} tap${p.cta_clicks === 1 ? "" : "s"}</td>
+<td><a href="/pages/${p.id}">Open</a></td></tr>`).join("");
+  return `${msg ? `<p class="ok">${pesc(msg)}</p>` : ""}
+<div class="card"><h2 style="margin-top:0">Landing pages <a class="btn btn-primary" style="float:right" href="/pages/new">New page</a></h2>
+<p class="mut">One page per customer problem. Send each advert or campaign to the page that speaks to that exact problem - it converts far better than one general page.</p>
+<table><tr><th>Page</th><th>Status &amp; link</th><th>Results</th><th></th></tr>${rows || '<tr><td colspan="4" class="mut">No pages yet. Create your first one.</td></tr>'}</table></div>`;
+}
+function newPageBody(err = "") {
+  return `<div class="card"><h2 style="margin-top:0">New landing page</h2>
+${err ? `<p class="bad">${pesc(err)}</p>` : ""}
+<form method="post" action="/pages/new">
+<label>Page is for (business name)<input name="business" maxlength="200" placeholder="Your business name as customers know it"></label>
+<label>Industry
+<select name="industry">
+<option value="general">General local service</option>
+<option value="restaurant">Restaurant / cafe / takeaway</option>
+<option value="dental">Dental practice</option>
+<option value="funeral">Funeral services</option>
+<option value="panel-beater">Panel beater / body shop</option>
+<option value="auto-workshop">Auto workshop</option>
+<option value="real-estate">Real estate</option>
+<option value="plumber">Plumbing</option>
+<option value="electrician">Electrical</option>
+<option value="solar">Solar / inverters</option>
+<option value="security">Security</option>
+<option value="aesthetics">Aesthetics / cosmetic clinic</option>
+<option value="legal">Law firm</option>
+<option value="financial-broker">Financial / insurance broker</option>
+<option value="towing">Towing / roadside</option>
+<option value="hvac">Aircon / refrigeration</option>
+<option value="roofing">Roofing / waterproofing</option>
+<option value="pest-control">Pest control</option>
+<option value="pool">Pool services</option>
+<option value="catering">Catering / food truck</option>
+<option value="trades">Trades (general)</option>
+</select></label>
+<label>The ONE customer pain this page answers<input name="angle" required maxlength="200" placeholder="e.g. Car dented and insurance is dragging their feet"></label>
+<label>What you offer that fixes it<input name="offer" maxlength="300" placeholder="e.g. Fast approved repairs, we handle the claim, free courtesy car"></label>
+<label>Area (optional)<input name="area" maxlength="120" placeholder="e.g. Sandton"></label>
+<label>WhatsApp number for enquiries (optional)<input name="whatsapp" maxlength="20" placeholder="e.g. 082 555 1234"></label>
+<label>Button text<input name="cta_label" maxlength="40" placeholder="WhatsApp us" value="WhatsApp us"></label>
+<label>Brand colour<input name="color" type="color" value="#F97316" style="width:60px;height:34px;padding:2px"></label>
+<label>Like a page's layout? Paste its URL - we copy the structure only, never its words or pictures<input name="mirror_url" maxlength="500" placeholder="https://..."></label>
+<button>Build my page</button>
+<p class="mut">Takes about 30 seconds. You review everything before it goes live.</p></form></div>`;
+}
+async function pageDetailBody(db, page, base, msg = "") {
+  const brand = page.brand || {};
+  const sectionForms = (page.sections || []).map((s, i) => `
+<div class="card"><h3 style="margin-top:0">${pesc(s.type)}</h3>
+<label>Heading<input name="h_${i}" value="${pesc(s.heading)}" maxlength="140"></label>
+<label>Text<textarea name="b_${i}" rows="3" maxlength="800">${pesc(s.body)}</textarea></label>
+<label>Bullets (one per line)<textarea name="i_${i}" rows="3">${pesc((s.items || []).join("\n"))}</textarea></label>
+</div>`).join("");
+  return `${msg ? `<p class="ok">${pesc(msg)}</p>` : ""}
+<div class="card"><h2 style="margin-top:0">${pesc(page.title)}</h2>
+<p class="mut">Pain: ${pesc(page.angle)} \xB7 Status: ${pesc(page.status)}${page.status === "published" ? ` \xB7 Live at <a href="${base}/p/${pesc(page.slug)}" target="_blank" rel="noopener">${base}/p/${pesc(page.slug)}</a>` : ""}${page.source_url ? ` \xB7 Structure mirrored from ${pesc(page.source_url)}` : ""}</p>
+<p>${page.views} views \xB7 ${page.cta_clicks} button taps</p>
+<form method="post" action="/pages/${page.id}/publish" style="display:inline">${page.status === "published" ? "" : "<button>Publish</button>"}</form>
+<form method="post" action="/pages/${page.id}/unpublish" style="display:inline">${page.status === "published" ? '<button class="link">Unpublish</button>' : ""}</form>
+<form method="post" action="/pages/${page.id}/delete" style="display:inline" onsubmit="return confirm('Delete this page?')"><button class="link" style="color:#B91C1C">Delete</button></form>
+</div>
+<form method="post" action="/pages/${page.id}">
+${sectionForms}
+<div class="card"><h3 style="margin-top:0">Settings</h3>
+<label>Button text<input name="cta_label" value="${pesc(brand.cta_label || "WhatsApp us")}" maxlength="40"></label>
+<label>WhatsApp number<input name="whatsapp" value="${pesc(brand.whatsapp || "")}" maxlength="20"></label>
+<label>Or link the button to a website instead<input name="link" value="${pesc(brand.link || "")}" maxlength="500" placeholder="https://..."></label>
+<label>Brand colour<input name="color" type="color" value="${pesc(brand.color || "#F97316")}" style="width:60px;height:34px;padding:2px"></label>
+</div>
+<button>Save changes</button></form>
+<p class="mut"><a href="/pages">&#8592; All pages</a></p>`;
+}
+
+// src/features.ts
+init_reviews();
+async function waitlistAdd(db, ws, waId, name, partySize, wantedTime) {
+  const c = await db.query(
+    `INSERT INTO receptionist_contact(id,workspace_id,wa_id,name,tags,needs_human,opted_out,zernio_conversation_id,issue_note,review_status,dietary_notes,is_vip,notes,total_spend,visit_count,created_at,updated_at)
+     VALUES($1,$2,$3,$4,'[]'::jsonb,false,false,'','','new','',false,'',0,0,now(),now())
+     ON CONFLICT (workspace_id, wa_id) DO UPDATE SET name=COALESCE(NULLIF(EXCLUDED.name,''), receptionist_contact.name), updated_at=now()
+     RETURNING id`,
+    [crypto.randomUUID(), ws, waId, name]
+  );
+  await db.query(
+    `INSERT INTO receptionist_waitlistentry(id,workspace_id,contact_id,party_size,wanted_time,status,offer_minutes,notes,created_at)
+     VALUES($1,$2,$3,$4,$5,'waiting',15,'',now())`,
+    [crypto.randomUUID(), ws, c.rows[0].id, partySize || 2, wantedTime.slice(0, 200)]
+  );
+}
+async function waitlistExpire(db, ws) {
+  await db.query(
+    `UPDATE receptionist_waitlistentry SET status='expired'
+     WHERE workspace_id=$1 AND status='offered' AND offered_at < now() - (offer_minutes || ' minutes')::interval`,
+    [ws]
+  );
+}
+async function waitlistAction(db, ws, id, action) {
+  if (action === "offer")
+    return !!(await db.query(`UPDATE receptionist_waitlistentry SET status='offered', offered_at=now() WHERE id=$1 AND workspace_id=$2 AND status='waiting'`, [id, ws])).rowCount;
+  if (action === "accept")
+    return !!(await db.query(`UPDATE receptionist_waitlistentry SET status='accepted' WHERE id=$1 AND workspace_id=$2 AND status='offered'`, [id, ws])).rowCount;
+  if (action === "cancel")
+    return !!(await db.query(`UPDATE receptionist_waitlistentry SET status='cancelled' WHERE id=$1 AND workspace_id=$2 AND status IN ('waiting','offered')`, [id, ws])).rowCount;
+  return false;
+}
+async function loyaltySettings(db, ws) {
+  const ex = await db.query(`SELECT * FROM receptionist_loyaltysettings WHERE workspace_id=$1`, [ws]);
+  if (ex.rows[0]) return ex.rows[0];
+  const id = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO receptionist_loyaltysettings(id,workspace_id,enabled,points_per_visit,welcome_bonus,points_for_voucher,voucher_value_rand,voucher_valid_days)
+     VALUES($1,$2,true,10,25,100,50,90)`,
+    [id, ws]
+  );
+  return (await db.query(`SELECT * FROM receptionist_loyaltysettings WHERE id=$1`, [id])).rows[0];
+}
+async function loyaltyApply(db, accountId, kind, points, note, bookingId = null) {
+  await db.query(
+    `INSERT INTO receptionist_loyaltytransaction(id,account_id,kind,points,note,booking_id,created_at)
+     VALUES($1,$2,$3,$4,$5,$6,now())`,
+    [crypto.randomUUID(), accountId, kind, points, note.slice(0, 200), bookingId]
+  );
+  await db.query(
+    `UPDATE receptionist_loyaltyaccount SET balance=GREATEST(0,balance+$2), lifetime_points=lifetime_points+GREATEST(0,$2),
+       welcomed=welcomed OR $3='welcome', updated_at=now() WHERE id=$1`,
+    [accountId, points, kind]
+  );
+}
+async function loyaltyAccount(db, ws, contactId) {
+  const s = await loyaltySettings(db, ws);
+  const ex = await db.query(`SELECT * FROM receptionist_loyaltyaccount WHERE workspace_id=$1 AND contact_id=$2`, [ws, contactId]);
+  if (ex.rows[0]) return ex.rows[0];
+  const id = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO receptionist_loyaltyaccount(id,workspace_id,contact_id,balance,lifetime_points,welcomed,created_at,updated_at)
+     VALUES($1,$2,$3,0,0,false,now(),now())`,
+    [id, ws, contactId]
+  );
+  if (s.welcome_bonus > 0) await loyaltyApply(db, id, "welcome", s.welcome_bonus, "Welcome bonus");
+  return (await db.query(`SELECT * FROM receptionist_loyaltyaccount WHERE id=$1`, [id])).rows[0];
+}
+async function awardForBooking(db, ws, bookingId, contactId) {
+  const s = await loyaltySettings(db, ws);
+  if (!s.enabled) return null;
+  const account = await loyaltyAccount(db, ws, contactId);
+  const already = await db.query(`SELECT 1 FROM receptionist_loyaltytransaction WHERE account_id=$1 AND kind='earn' AND booking_id=$2`, [account.id, bookingId]);
+  if (already.rows[0]) return account;
+  const vc = await db.query(`SELECT visit_count FROM receptionist_contact WHERE id=$1`, [contactId]);
+  await loyaltyApply(db, account.id, "earn", s.points_per_visit, `Visit #${vc.rows[0]?.visit_count || 1}`, bookingId);
+  return (await db.query(`SELECT * FROM receptionist_loyaltyaccount WHERE id=$1`, [account.id])).rows[0];
+}
+async function issueVoucher(db, ws, contactId, kind = "loyalty", note = "") {
+  const s = await loyaltySettings(db, ws);
+  if (kind === "loyalty") {
+    const account = await loyaltyAccount(db, ws, contactId);
+    if (account.balance < s.points_for_voucher) throw new Error(`${account.balance} points - ${s.points_for_voucher} needed for a voucher.`);
+    await loyaltyApply(db, account.id, "redeem", -s.points_for_voucher, "Reward voucher issued");
+  }
+  let code = "";
+  for (let i = 0; i < 8; i++) {
+    code = [...crypto.getRandomValues(new Uint8Array(4))].map((b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+    const dup = await db.query(`SELECT 1 FROM receptionist_voucher WHERE code=$1`, [code]);
+    if (!dup.rows[0]) break;
+  }
+  const id = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO receptionist_voucher(id,workspace_id,contact_id,kind,code,amount_rand,status,note,expires_at,created_at)
+     VALUES($1,$2,$3,$4,$5,$6,'active',$7,now() + ($8 || ' days')::interval,now())`,
+    [id, ws, contactId, kind, code, s.voucher_value_rand, note.slice(0, 200), String(s.voucher_valid_days)]
+  );
+  return (await db.query(`SELECT * FROM receptionist_voucher WHERE id=$1`, [id])).rows[0];
+}
+async function redeemVoucher(db, ws, id) {
+  const v = await db.query(`SELECT * FROM receptionist_voucher WHERE id=$1 AND workspace_id=$2`, [id, ws]);
+  if (!v.rows[0]) return false;
+  if (v.rows[0].status === "active" && new Date(v.rows[0].expires_at) < /* @__PURE__ */ new Date()) {
+    await db.query(`UPDATE receptionist_voucher SET status='expired' WHERE id=$1`, [id]);
+    return false;
+  }
+  if (v.rows[0].status !== "active") return false;
+  await db.query(`UPDATE receptionist_voucher SET status='redeemed', redeemed_at=now() WHERE id=$1`, [id]);
+  return true;
+}
+async function expireVouchers(db) {
+  const r = await db.query(`UPDATE receptionist_voucher SET status='expired' WHERE status='active' AND expires_at < now()`);
+  return r.rowCount || 0;
+}
+async function quoteCreate(db, ws, customerName, contactId, title, amountRand, followUpOn) {
+  await db.query(
+    `INSERT INTO receptionist_quote(id,workspace_id,contact_id,customer_name,title,amount_cents,status,created_at,follow_up_on)
+     VALUES($1,$2,$3,$4,$5,$6,'draft',now(),$7)`,
+    [crypto.randomUUID(), ws, contactId, customerName.slice(0, 200), title.slice(0, 200), Math.round(amountRand * 100), followUpOn || null]
+  );
+}
+async function quoteAction(db, env, ws, id, action) {
+  const q = await db.query(`SELECT * FROM receptionist_quote WHERE id=$1 AND workspace_id=$2`, [id, ws]);
+  if (!q.rows[0]) return "not found";
+  const quote = q.rows[0];
+  if (action === "sent" && quote.status === "draft") {
+    await db.query(`UPDATE receptionist_quote SET status='sent', sent_on=(now() AT TIME ZONE 'Africa/Johannesburg')::date WHERE id=$1`, [id]);
+    if (quote.contact_id) {
+      const c = await db.query(`SELECT * FROM receptionist_contact WHERE id=$1`, [quote.contact_id]);
+      if (c.rows[0] && !c.rows[0].opted_out && c.rows[0].zernio_conversation_id) {
+        const wname = await db.query(`SELECT name FROM workspaces_workspace WHERE id=$1`, [ws]);
+        try {
+          await deliver(
+            db,
+            env,
+            ws,
+            c.rows[0],
+            `Hi ${(c.rows[0].name || "").trim().split(" ")[0] || "there"}, ${wname.rows[0]?.name || "we"} here with your quote${quote.title ? ` for ${quote.title}` : ""}: R${(quote.amount_cents / 100).toFixed(2)}. Any questions, just reply here.`
+          );
+        } catch {
+        }
+      }
+    }
+    return "marked sent";
+  }
+  if (action === "won" && ["draft", "sent"].includes(quote.status)) {
+    await db.query(`UPDATE receptionist_quote SET status='won' WHERE id=$1`, [id]);
+    return "won";
+  }
+  if (action === "lost" && ["draft", "sent"].includes(quote.status)) {
+    await db.query(`UPDATE receptionist_quote SET status='lost' WHERE id=$1`, [id]);
+    return "lost";
+  }
+  return "no change";
+}
+async function segmentContacts(db, ws, segment) {
+  let q = `SELECT * FROM receptionist_contact WHERE workspace_id=$1 AND opted_out=false`;
+  if (segment === "dormant") q += ` AND (last_visit_at IS NULL OR last_visit_at < now() - interval '30 days')`;
+  else if (segment === "vip") q += ` AND is_vip=true`;
+  return (await db.query(q + ` ORDER BY created_at`, [ws])).rows;
+}
+async function campaignCreate(db, ws, name, segment, bodyA, bodyB) {
+  if (!name.trim()) throw new Error("Give the campaign a name.");
+  if (!["all", "dormant", "vip"].includes(segment)) throw new Error("Unknown segment.");
+  if (!bodyA.trim()) throw new Error("Write the message first.");
+  await db.query(
+    `INSERT INTO receptionist_campaign(id,workspace_id,name,segment,body_a,body_b,status,created_at)
+     VALUES($1,$2,$3,$4,$5,$6,'draft',now())`,
+    [crypto.randomUUID(), ws, name.trim().slice(0, 120), segment, bodyA.trim(), bodyB.trim()]
+  );
+}
+async function campaignApprove(db, ws, id, when) {
+  const c = await db.query(`SELECT * FROM receptionist_campaign WHERE id=$1 AND workspace_id=$2`, [id, ws]);
+  const camp = c.rows[0];
+  if (!camp || camp.status !== "draft") throw new Error("Only a draft can be approved.");
+  const contacts = await segmentContacts(db, ws, camp.segment);
+  if (!contacts.length) throw new Error("No customers in this segment yet.");
+  const useB = !!camp.body_b;
+  for (let i = 0; i < contacts.length; i++) {
+    await db.query(
+      `INSERT INTO receptionist_campaignrecipient(id,campaign_id,contact_id,variant,status,error,attributed_amount)
+       VALUES($1,$2,$3,$4,'pending','',0) ON CONFLICT (campaign_id, contact_id) DO NOTHING`,
+      [crypto.randomUUID(), id, contacts[i].id, useB && i % 2 ? "b" : "a"]
+    );
+  }
+  const whenTs = when ? new Date(when) : /* @__PURE__ */ new Date();
+  const sched = isNaN(whenTs.getTime()) ? /* @__PURE__ */ new Date() : whenTs;
+  await db.query(
+    `UPDATE receptionist_campaign SET approved_at=now(), scheduled_at=$1, status=$2 WHERE id=$3`,
+    [sched, sched > /* @__PURE__ */ new Date() ? "scheduled" : "sending", id]
+  );
+}
+async function campaignCancel(db, ws, id) {
+  return !!(await db.query(
+    `UPDATE receptionist_campaign SET status='cancelled' WHERE id=$1 AND workspace_id=$2 AND status IN ('draft','scheduled')`,
+    [id, ws]
+  )).rowCount;
+}
+async function runDueCampaigns(db, env) {
+  const due = await db.query(
+    `SELECT * FROM receptionist_campaign WHERE status IN ('scheduled','sending') AND (scheduled_at IS NULL OR scheduled_at <= now()) ORDER BY scheduled_at NULLS FIRST LIMIT 3`
+  );
+  for (const camp of due.rows) await sendCampaign(db, env, camp);
+}
+async function sendCampaign(db, env, camp) {
+  const claim = await db.query(
+    `UPDATE receptionist_campaign SET status='sending' WHERE id=$1 AND status IN ('scheduled','sending')`,
+    [camp.id]
+  );
+  if (!claim.rowCount) return;
+  const ch = await db.query(`SELECT 1 FROM receptionist_zerniochannel WHERE workspace_id=$1 LIMIT 1`, [camp.workspace_id]);
+  const budget = await db.query(
+    `SELECT count(*) FILTER (WHERE created_at >= now() - interval '1 hour') h,
+            count(*) FILTER (WHERE created_at >= now() - interval '1 day') d
+     FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND is_draft=false`,
+    [camp.workspace_id]
+  );
+  if (!ch.rows.length || Number(budget.rows[0].h) >= 20 || Number(budget.rows[0].d) >= 100) {
+    await db.query(`UPDATE receptionist_campaign SET status='scheduled', scheduled_at=now() + interval '15 minutes' WHERE id=$1`, [camp.id]);
+    return;
+  }
+  const pend = await db.query(
+    `SELECT r.*, c.name, c.opted_out, c.zernio_conversation_id, c.wa_id
+     FROM receptionist_campaignrecipient r JOIN receptionist_contact c ON c.id=r.contact_id
+     WHERE r.campaign_id=$1 AND r.status='pending' ORDER BY c.created_at LIMIT 50`,
+    [camp.id]
+  );
+  for (const r of pend.rows) {
+    if (r.opted_out) {
+      await db.query(`UPDATE receptionist_campaignrecipient SET status='skipped', error='opted out' WHERE id=$1`, [r.id]);
+      continue;
+    }
+    if (!r.zernio_conversation_id) {
+      await db.query(`UPDATE receptionist_campaignrecipient SET status='skipped', error='no active WhatsApp conversation' WHERE id=$1`, [r.id]);
+      continue;
+    }
+    const first = (r.name || "").trim().split(" ")[0] || "there";
+    const body = (r.variant === "b" ? camp.body_b : camp.body_a).replace("{first name}", first) + OPT_OUT_FOOTER;
+    try {
+      const contact = { id: r.contact_id, name: r.name, wa_id: r.wa_id, zernio_conversation_id: r.zernio_conversation_id };
+      const msgId = await deliver(db, env, camp.workspace_id, contact, body);
+      await db.query(`UPDATE receptionist_campaignrecipient SET status='sent', sent_at=now(), message_id=$1 WHERE id=$2`, [msgId, r.id]);
+    } catch (e) {
+      const msg = String(e?.message || e);
+      const skip = msg.includes("no active WhatsApp conversation") || msg.includes("allowlisted");
+      await db.query(
+        `UPDATE receptionist_campaignrecipient SET status=$1, error=$2 WHERE id=$3`,
+        [skip ? "skipped" : "failed", msg.slice(0, 300), r.id]
+      );
+    }
+  }
+  const left = await db.query(`SELECT 1 FROM receptionist_campaignrecipient WHERE campaign_id=$1 AND status='pending' LIMIT 1`, [camp.id]);
+  await db.query(`UPDATE receptionist_campaign SET status=$1 WHERE id=$2`, [left.rows.length ? "scheduled" : "sent", camp.id]);
+  if (left.rows.length) await db.query(`UPDATE receptionist_campaign SET scheduled_at=now() + interval '15 minutes' WHERE id=$1`, [camp.id]);
+}
+async function attributeBookingToCampaign(db, ws, booking) {
+  const r = await db.query(
+    `SELECT r.id FROM receptionist_campaignrecipient r JOIN receptionist_campaign c ON c.id=r.campaign_id
+     WHERE c.workspace_id=$1 AND r.contact_id=$2 AND r.status='sent' AND r.sent_at >= now() - interval '30 days' AND r.attributed_booking_id IS NULL
+     ORDER BY r.sent_at DESC LIMIT 1`,
+    [ws, booking.contact_id]
+  );
+  if (!r.rows[0]) return;
+  await db.query(
+    `UPDATE receptionist_campaignrecipient SET attributed_booking_id=$1, attributed_amount=$2 WHERE id=$3`,
+    [booking.id, Number(booking.value) || 0, r.rows[0].id]
+  );
+}
+async function campaignStats(db, campaignId) {
+  const r = await db.query(
+    `SELECT variant,
+            count(*) total,
+            count(*) FILTER (WHERE status='sent') sent,
+            count(*) FILTER (WHERE status='failed') failed,
+            count(*) FILTER (WHERE status='skipped') skipped,
+            count(*) FILTER (WHERE attributed_booking_id IS NOT NULL) bookings,
+            COALESCE(sum(attributed_amount),0) revenue
+     FROM receptionist_campaignrecipient WHERE campaign_id=$1 GROUP BY variant`,
+    [campaignId]
+  );
+  const out = {};
+  for (const row of r.rows) out[row.variant] = row;
+  return out;
+}
+var PRICE_GAP_RAND = 10;
+var DRAFT_BODIES = {
+  price_gap: "Hi {first name}, this week only: come in for your favourite and mention this message - we will make it worth your while. Book on WhatsApp.",
+  price_advantage: "Hi {first name}, did you know our best dish also beats the neighbours on price? Come taste it this week - book on WhatsApp.",
+  rating_gap: "Hi {first name}, thank you for rating us the area's favourite! Bring a friend this week and show them why - book on WhatsApp.",
+  promo: "Hi {first name}, we would rather spoil YOU than watch you try the neighbour's special. This week, your usual comes with something extra - book on WhatsApp.",
+  demand: "Hi {first name}, weekends are filling up fast. Book a midweek table this week and skip the wait entirely - reply here and we will sort it."
+};
+async function competitorAdd(db, ws, name, area, website, rating, notes) {
+  if (!name.trim()) throw new Error("Give the competitor a name.");
+  const r = rating ? Number(rating) : null;
+  if (r !== null && (isNaN(r) || r < 0 || r > 5)) throw new Error("Rating is 0 to 5.");
+  await db.query(
+    `INSERT INTO receptionist_competitor(id,workspace_id,name,area,website,rating,notes,created_at)
+     VALUES($1,$2,$3,$4,$5,$6,$7,now())
+     ON CONFLICT (workspace_id, name) DO UPDATE SET area=$4, website=$5, rating=$6, notes=$7`,
+    [crypto.randomUUID(), ws, name.trim().slice(0, 120), area.trim().slice(0, 120), website.trim().slice(0, 200), r, notes.trim()]
+  );
+}
+async function dishAdd(db, ws, competitorId, name, price, ownItemId) {
+  const own = await db.query(`SELECT 1 FROM receptionist_competitor WHERE id=$1 AND workspace_id=$2`, [competitorId, ws]);
+  if (!own.rows.length) throw new Error("Competitor not found.");
+  if (!name.trim() || !(price >= 0)) throw new Error("Dish needs a name and a price.");
+  const ownId = /^[0-9a-f-]{36}$/.test(ownItemId) ? ownItemId : null;
+  if (ownId) {
+    const ok = await db.query(`SELECT 1 FROM menus_item WHERE id=$1 AND workspace_id=$2`, [ownId, ws]);
+    if (!ok.rows.length) throw new Error("That menu item is not yours.");
+  }
+  await db.query(
+    `INSERT INTO receptionist_competitordish(id,competitor_id,name,price,own_item_id,created_at) VALUES($1,$2,$3,$4,$5,now())`,
+    [crypto.randomUUID(), competitorId, name.trim().slice(0, 120), price, ownId]
+  );
+}
+async function promoAdd(db, ws, competitorId, text, validUntil) {
+  const own = await db.query(`SELECT 1 FROM receptionist_competitor WHERE id=$1 AND workspace_id=$2`, [competitorId, ws]);
+  if (!own.rows.length) throw new Error("Competitor not found.");
+  if (!text.trim()) throw new Error("Say what the promotion is.");
+  await db.query(
+    `INSERT INTO receptionist_competitorpromo(id,competitor_id,text,valid_until,created_at) VALUES($1,$2,$3,$4,now())`,
+    [crypto.randomUUID(), competitorId, text.trim().slice(0, 200), /^\d{4}-\d{2}-\d{2}$/.test(validUntil) ? validUntil : null]
+  );
+}
+async function oppUpsert(db, ws, key, kind, title, detail, competitorId, confidence, impact, evidence) {
+  await db.query(
+    `INSERT INTO receptionist_marketopportunity(id,workspace_id,competitor_id,kind,title,detail,status,dedupe_key,confidence,impact_rand,evidence,created_at,updated_at)
+     VALUES($1,$2,$3,$4,$5,$6,'new',$7,$8,$9,$10::jsonb,now(),now())
+     ON CONFLICT (workspace_id, dedupe_key) DO UPDATE SET kind=$4, title=$5, detail=$6, competitor_id=$3, confidence=$8, impact_rand=$9, evidence=$10::jsonb, updated_at=now()`,
+    [crypto.randomUUID(), ws, competitorId, kind, title.slice(0, 160), detail, key.slice(0, 120), confidence, impact, JSON.stringify(evidence)]
+  );
+}
+async function refreshOpportunities(db, ws) {
+  const bp = await db.query(`SELECT google_rating FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [ws]);
+  const ownRating = bp.rows[0]?.google_rating !== null && bp.rows[0]?.google_rating !== void 0 ? Number(bp.rows[0].google_rating) : null;
+  const seen = [];
+  const comps = await db.query(`SELECT * FROM receptionist_competitor WHERE workspace_id=$1 ORDER BY name`, [ws]);
+  for (const comp of comps.rows) {
+    const dishes = await db.query(
+      `SELECT d.*, m.name AS own_name, m.price AS own_price FROM receptionist_competitordish d
+       LEFT JOIN menus_item m ON m.id=d.own_item_id WHERE d.competitor_id=$1 ORDER BY d.name`,
+      [comp.id]
+    );
+    for (const dish of dishes.rows) {
+      if (!dish.own_item_id || dish.own_price === null) continue;
+      const gap = Number(dish.own_price) - Number(dish.price);
+      const u = await db.query(
+        `SELECT COALESCE(sum(quantity),0) q FROM menus_dishsale WHERE workspace_id=$1 AND item_id=$2 AND sold_on >= (now() AT TIME ZONE 'Africa/Johannesburg')::date - 30`,
+        [ws, dish.own_item_id]
+      );
+      const units = Number(u.rows[0].q) || 0;
+      const impact = units ? Math.abs(gap) * units : null;
+      if (gap > PRICE_GAP_RAND) {
+        const key = `price_gap:${dish.id}`;
+        seen.push(key);
+        await oppUpsert(
+          db,
+          ws,
+          key,
+          "price_gap",
+          `${comp.name} undercuts your ${dish.own_name}`,
+          `Their ${dish.name} is R${Number(dish.price).toFixed(2)}; yours is R${Number(dish.own_price).toFixed(2)} - R${gap.toFixed(2)} more. Match it, beat it on portion or quality, or let the dish compete on something else.`,
+          comp.id,
+          90,
+          impact,
+          [
+            `Their menu: ${dish.name} R${Number(dish.price).toFixed(2)} (logged on the Competitors screen)`,
+            `Your menu: ${dish.own_name} R${Number(dish.own_price).toFixed(2)}`,
+            units ? `Your sales: ${units} sold in the last 30 days` : "No sales logged yet, so no rand impact estimate"
+          ]
+        );
+      } else if (gap < -PRICE_GAP_RAND) {
+        const key = `price_advantage:${dish.id}`;
+        seen.push(key);
+        await oppUpsert(
+          db,
+          ws,
+          key,
+          "price_advantage",
+          `Your ${dish.own_name} beats ${comp.name} on price`,
+          `Their ${dish.name} is R${Number(dish.price).toFixed(2)}; yours is R${Number(dish.own_price).toFixed(2)} - R${(-gap).toFixed(2)} less. Worth saying out loud: feature it on the public menu and in campaigns.`,
+          comp.id,
+          80,
+          impact,
+          [
+            `Their menu: ${dish.name} R${Number(dish.price).toFixed(2)} (logged on the Competitors screen)`,
+            `Your menu: ${dish.own_name} R${Number(dish.own_price).toFixed(2)}`
+          ]
+        );
+      }
+    }
+    if (comp.rating !== null && ownRating !== null && ownRating > Number(comp.rating)) {
+      const key = `rating:${comp.id}`;
+      seen.push(key);
+      await oppUpsert(
+        db,
+        ws,
+        key,
+        "rating_gap",
+        `You outrate ${comp.name}`,
+        `Google: you ${ownRating}, them ${comp.rating}. Ask happy customers for reviews while the gap is in your favour.`,
+        comp.id,
+        70,
+        null,
+        [`Your Google rating: ${ownRating} (Competitors screen)`, `Their Google rating: ${comp.rating} (Competitors screen)`]
+      );
+    }
+    const promo = await db.query(
+      `SELECT * FROM receptionist_competitorpromo WHERE competitor_id=$1 AND created_at >= now() - interval '7 days' ORDER BY created_at DESC LIMIT 1`,
+      [comp.id]
+    );
+    if (promo.rows[0]) {
+      const p = promo.rows[0];
+      const key = `promo:${p.id}`;
+      seen.push(key);
+      await oppUpsert(
+        db,
+        ws,
+        key,
+        "promo",
+        `${comp.name} is running a promotion`,
+        `Spotted: "${p.text}". Answer with your own campaign to regulars before they drift - the Campaigns screen drafts it in minutes.`,
+        comp.id,
+        60,
+        null,
+        [`Promotion logged: "${p.text}" (Competitors screen)`]
+      );
+    }
+  }
+  const wl = await db.query(
+    `SELECT count(*) c FROM receptionist_waitlistentry WHERE workspace_id=$1 AND created_at >= now() - interval '7 days'`,
+    [ws]
+  );
+  const recent = Number(wl.rows[0].c);
+  if (recent >= 5) {
+    const key = "demand:waitlist";
+    seen.push(key);
+    const avg = await db.query(
+      `SELECT avg(value) v FROM (SELECT value FROM receptionist_booking WHERE workspace_id=$1 AND status='done' AND value IS NOT NULL LIMIT 50) t`,
+      [ws]
+    );
+    const avgValue = avg.rows[0].v !== null ? Number(avg.rows[0].v) : null;
+    await oppUpsert(
+      db,
+      ws,
+      key,
+      "demand",
+      "Demand is outgrowing your tables",
+      `${recent} parties joined the waitlist in the last 7 days. Consider longer hours on the busy nights or an off-peak campaign to spread the load.`,
+      null,
+      65,
+      avgValue ? avgValue * recent : null,
+      [
+        `${recent} waitlist entries in the last 7 days (Waitlist screen)`,
+        avgValue ? `Average booking value: R${avgValue.toFixed(2)}` : "No booking values captured yet"
+      ]
+    );
+  }
+  if (seen.length) {
+    await db.query(
+      `DELETE FROM receptionist_marketopportunity WHERE workspace_id=$1 AND status='new' AND NOT (dedupe_key = ANY($2))`,
+      [ws, seen]
+    );
+  } else {
+    await db.query(`DELETE FROM receptionist_marketopportunity WHERE workspace_id=$1 AND status='new'`, [ws]);
+  }
+}
+async function opportunityAction(db, ws, id, action) {
+  if (!["acted", "dismissed"].includes(action)) return false;
+  return !!(await db.query(
+    `UPDATE receptionist_marketopportunity SET status=$1, updated_at=now() WHERE id=$2 AND workspace_id=$3 AND status='new'`,
+    [action, id, ws]
+  )).rowCount;
+}
+async function opportunityDraftCampaign(db, ws, id) {
+  const o = await db.query(`SELECT * FROM receptionist_marketopportunity WHERE id=$1 AND workspace_id=$2`, [id, ws]);
+  const opp = o.rows[0];
+  if (!opp) throw new Error("Opportunity not found.");
+  if (opp.campaign_id) throw new Error("A draft already exists for this one.");
+  const body = DRAFT_BODIES[opp.kind];
+  if (!body) throw new Error("No draft available for this opportunity.");
+  const segment = ["promo", "demand"].includes(opp.kind) ? "dormant" : "all";
+  const campId = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO receptionist_campaign(id,workspace_id,name,segment,body_a,body_b,status,created_at)
+     VALUES($1,$2,$3,$4,$5,'','draft',now())`,
+    [campId, ws, `Revenue: ${opp.title}`.slice(0, 120), segment, body]
+  );
+  await db.query(
+    `UPDATE receptionist_marketopportunity SET campaign_id=$1, status='acted', updated_at=now() WHERE id=$2`,
+    [campId, id]
+  );
+}
+async function supportAnswer(db, ws, question) {
+  const q = question.toLowerCase();
+  if (["booking", "table", "reservation", "tonight", "today"].some((w) => q.includes(w))) {
+    const today = await db.query(
+      `SELECT status, count(*) c FROM receptionist_booking
+       WHERE workspace_id=$1 AND status<>'cancelled'
+         AND (COALESCE(scheduled_start, created_at) AT TIME ZONE 'Africa/Johannesburg')::date = (now() AT TIME ZONE 'Africa/Johannesburg')::date
+       GROUP BY status`,
+      [ws]
+    );
+    const week = await db.query(
+      `SELECT count(*) c FROM receptionist_booking
+       WHERE workspace_id=$1 AND status<>'cancelled'
+         AND (COALESCE(scheduled_start, created_at) AT TIME ZONE 'Africa/Johannesburg')::date >= (now() AT TIME ZONE 'Africa/Johannesburg')::date - 7`,
+      [ws]
+    );
+    const confirmed = Number(today.rows.find((r) => r.status === "confirmed")?.c || 0);
+    const done = Number(today.rows.find((r) => r.status === "done")?.c || 0);
+    const wk = Number(week.rows[0].c);
+    if (!today.rows.length && !wk)
+      return { text: "You have no bookings logged yet. Once bookings come in I can answer questions about them.", confidence: 40, sources: ["0 bookings in the last 7 days"], escalate: false };
+    return {
+      text: `Today: ${confirmed} confirmed booking${confirmed === 1 ? "" : "s"}${done ? `, ${done} already done` : ""}. This week so far: ${wk} bookings. Open the Bookings screen for the full board.`,
+      confidence: 95,
+      sources: [`${confirmed} confirmed bookings today`, `${wk} bookings in the last 7 days`],
+      escalate: false
+    };
+  }
+  if (["waitlist", "waiting", "queue"].some((w) => q.includes(w))) {
+    const r = await db.query(`SELECT count(*) c FROM receptionist_waitlistentry WHERE workspace_id=$1 AND status='waiting'`, [ws]);
+    const n = Number(r.rows[0].c);
+    return {
+      text: n ? `${n} partie${n === 1 ? " is" : "s are"} on the waitlist right now. Manage them on the Waitlist screen.` : "The waitlist is empty right now.",
+      confidence: 95,
+      sources: [`${n} waiting on the waitlist`],
+      escalate: false
+    };
+  }
+  if (["complaint", "unhappy", "angry", "review", "reputation"].some((w) => q.includes(w))) {
+    const r = await db.query(`SELECT count(*) c FROM receptionist_complaint WHERE workspace_id=$1 AND status='open'`, [ws]);
+    const n = Number(r.rows[0].c);
+    return {
+      text: `You have ${n} open complaint${n === 1 ? "" : "s"}.` + (n ? " Answer them from the Inbox - quick replies protect your rating." : " Nothing needs attention."),
+      confidence: 95,
+      sources: [`${n} open complaints`],
+      escalate: false
+    };
+  }
+  if (["campaign", "revenue", "sales", "money", "attribut", "marketing"].some((w) => q.includes(w))) {
+    const running = await db.query(`SELECT count(*) c FROM receptionist_campaign WHERE workspace_id=$1 AND status IN ('scheduled','sending')`, [ws]);
+    const attr = await db.query(
+      `SELECT count(*) c, COALESCE(sum(r.attributed_amount),0) t
+       FROM receptionist_campaignrecipient r
+       JOIN receptionist_campaign c ON c.id=r.campaign_id
+       JOIN receptionist_booking b ON b.id=r.attributed_booking_id
+       WHERE c.workspace_id=$1 AND b.created_at >= date_trunc('month', now())`,
+      [ws]
+    );
+    const total = Number(attr.rows[0].t), n = Number(attr.rows[0].c), run = Number(running.rows[0].c);
+    return {
+      text: `This month your campaigns are linked to R${total.toLocaleString("en-ZA")} across ${n} attributed booking${n === 1 ? "" : "s"}. ${run} campaign${run === 1 ? " is" : "s are"} running. The Campaigns screen has the full picture.`,
+      confidence: 90,
+      sources: [`R${total} attributed this month`, `${n} attributed bookings`],
+      escalate: false
+    };
+  }
+  if (["competitor", "rival", "opportunit", "market"].some((w) => q.includes(w))) {
+    const r = await db.query(`SELECT title FROM receptionist_marketopportunity WHERE workspace_id=$1 AND status='new' ORDER BY confidence DESC`, [ws]);
+    if (r.rows.length)
+      return {
+        text: `${r.rows.length} open opportunit${r.rows.length === 1 ? "y" : "ies"}. Top one: ${r.rows[0].title}. See them all on the Competitors screen.`,
+        confidence: 90,
+        sources: [`${r.rows.length} open opportunities`],
+        escalate: false
+      };
+    return { text: "No open opportunities right now - the Competitors screen is where new ones appear.", confidence: 85, sources: ["0 open opportunities"], escalate: false };
+  }
+  if (["menu", "dish", "food", "sell", "popular", "star"].some((w) => q.includes(w))) {
+    const r = await db.query(`SELECT count(DISTINCT item_id) c FROM menus_dishsale WHERE workspace_id=$1 AND sold_on >= (now() AT TIME ZONE 'Africa/Johannesburg')::date - 30`, [ws]);
+    const n = Number(r.rows[0].c);
+    if (n)
+      return { text: `${n} dishes have sales logged in the last 30 days. Those sales feed the rand-impact estimates on the Competitors screen.`, confidence: 70, sources: [`${n} dishes with sales logged in 30 days`], escalate: false };
+    return { text: "No dish sales logged yet. Once sales are logged I can talk about what is working.", confidence: 50, sources: ["0 dishes with sales logged in 30 days"], escalate: false };
+  }
+  if (["human", "person", "help me", "someone", "call me", "escalat"].some((w) => q.includes(w)))
+    return { text: "Understood - I have flagged this for a human to follow up. Anything else I can answer from your numbers in the meantime?", confidence: 100, sources: ["Owner asked for a human"], escalate: true };
+  return {
+    text: "I do not have enough in your data to answer that confidently. I can answer about bookings, the waitlist, complaints, campaigns and attributed revenue, competitors and your menu. Want me to flag this for a human?",
+    confidence: 20,
+    sources: [],
+    escalate: true
+  };
+}
+async function supportHandle(db, ws, question) {
+  await db.query(
+    `INSERT INTO receptionist_supportmessage(id,workspace_id,role,text,sources,escalated,created_at) VALUES($1,$2,'owner',$3,'[]'::jsonb,false,now())`,
+    [crypto.randomUUID(), ws, question]
+  );
+  const a = await supportAnswer(db, ws, question);
+  await db.query(
+    `INSERT INTO receptionist_supportmessage(id,workspace_id,role,text,confidence,sources,escalated,created_at) VALUES($1,$2,'assistant',$3,$4,$5::jsonb,$6,now())`,
+    [crypto.randomUUID(), ws, a.text, a.confidence, JSON.stringify(a.sources), a.escalate]
+  );
+}
+async function autoDraftOpportunities(db) {
+  const wss = await db.query(`SELECT workspace_id FROM receptionist_businessprofile WHERE revenue_mode='draft' AND is_active`);
+  let made = 0;
+  for (const w of wss.rows) {
+    const opps = await db.query(
+      `SELECT id FROM receptionist_marketopportunity WHERE workspace_id=$1 AND status='new' AND campaign_id IS NULL AND confidence >= 75`,
+      [w.workspace_id]
+    );
+    for (const o of opps.rows) {
+      try {
+        await opportunityDraftCampaign(db, w.workspace_id, o.id);
+        made++;
+      } catch {
+      }
+    }
+  }
+  return made;
+}
+
+// src/index.ts
 var import_spark_md5 = __toESM(require_spark_md5(), 1);
 function pool(env) {
   return new Pool({ connectionString: env.DATABASE_URL, max: 3, connectionTimeoutMillis: 15e3, idleTimeoutMillis: 0 });
@@ -1338,6 +2270,13 @@ function navLinks(user) {
   if (show("reviews")) h += `<a href="/reviews">Reviews</a>`;
   if (show("receptionist")) h += `<a href="/receptionist">Receptionist</a>`;
   if (show("receptionist")) h += `<a href="/bookings">Bookings</a>`;
+  if (show("receptionist")) h += `<a href="/waitlist">Waitlist</a>`;
+  if (show("receptionist")) h += `<a href="/loyalty">Loyalty</a>`;
+  if (show("receptionist")) h += `<a href="/quotes">Quotes</a>`;
+  if (show("receptionist")) h += `<a href="/campaigns">Campaigns</a>`;
+  if (show("receptionist", "social", "leads")) h += `<a href="/pages">Pages</a>`;
+  if (show("receptionist")) h += `<a href="/competitors">Competitors</a>`;
+  if (show("receptionist")) h += `<a href="/support">Support</a>`;
   if (show("leads", "receptionist")) h += `<a href="/inbox">Inbox</a>`;
   if (show("leads")) h += `<a href="/frontdesk">Leads</a>`;
   if (show("reviews", "leads", "receptionist")) h += `<a href="/approvals">Approvals</a>`;
@@ -1684,6 +2623,221 @@ ${PLAN_CARDS.map((p) => `<label style="display:block;border:1px solid ${cur === 
 <button>Save and continue</button>
 </form></div>`, user);
 }
+async function waitlistPage(db, user, mem, msg = "") {
+  await waitlistExpire(db, mem.workspace_id);
+  const r = await db.query(
+    `SELECT w.*, c.name AS contact_name, c.wa_id FROM receptionist_waitlistentry w
+     JOIN receptionist_contact c ON c.id=w.contact_id
+     WHERE w.workspace_id=$1 ORDER BY CASE WHEN w.status IN ('waiting','offered') THEN 0 ELSE 1 END, w.created_at LIMIT 40`,
+    [mem.workspace_id]
+  );
+  const badge = { waiting: "<b>waiting</b>", offered: '<span class="pill warn">offered</span>', accepted: '<span class="ok">accepted</span>', cancelled: '<span class="mut">cancelled</span>', expired: '<span class="mut">expired</span>' };
+  const rows = r.rows.map((w) => `<tr>
+<td><b>${esc(w.contact_name || w.wa_id)}</b><br><span class="mut">party of ${w.party_size}${w.wanted_time ? " \xB7 " + esc(w.wanted_time) : ""}</span></td>
+<td>${badge[w.status] || esc(w.status)}${w.status === "offered" ? `<br><span class="mut">${w.offer_minutes} min to answer</span>` : ""}</td>
+<td>${w.status === "waiting" ? `<form class="inline" method="post" action="/waitlist/${w.id}/offer"><button>Offer a table</button></form>` : ""}
+${w.status === "offered" ? `<form class="inline" method="post" action="/waitlist/${w.id}/accept"><button>They accepted</button></form>` : ""}
+${["waiting", "offered"].includes(w.status) ? `<form class="inline" method="post" action="/waitlist/${w.id}/cancel"><button class="link">Remove</button></form>` : ""}</td></tr>`).join("");
+  return layout("Waitlist", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+<div class="card"><h2 style="margin-top:0">Add a waiting party</h2>
+<form method="post" action="/waitlist">
+<label>Name<input name="name" maxlength="120"></label>
+<label>WhatsApp / phone<input name="wa_id" required maxlength="32" placeholder="27\u2026"></label>
+<label>Party size<input name="party_size" type="number" min="1" max="30" value="2" style="width:90px"></label>
+<label>They hoped for<input name="wanted_time" maxlength="200" placeholder="tonight around 7"></label>
+<button>Add to the waitlist</button></form></div>
+<div class="card">${r.rows.length ? `<table><tr><th>Party</th><th>Status</th><th></th></tr>${rows}</table>` : `<p class="mut">Nobody waiting. When the restaurant is full, add parties here and offer tables as they open up.</p>`}</div>`, user);
+}
+async function loyaltyPage(db, user, mem, msg = "") {
+  const s = await loyaltySettings(db, mem.workspace_id);
+  const accounts = await db.query(
+    `SELECT a.*, c.name AS contact_name, c.wa_id FROM receptionist_loyaltyaccount a
+     JOIN receptionist_contact c ON c.id=a.contact_id WHERE a.workspace_id=$1 ORDER BY a.balance DESC LIMIT 50`,
+    [mem.workspace_id]
+  );
+  const vouchers = await db.query(
+    `SELECT v.*, c.name AS contact_name FROM receptionist_voucher v
+     JOIN receptionist_contact c ON c.id=v.contact_id WHERE v.workspace_id=$1 ORDER BY v.created_at DESC LIMIT 30`,
+    [mem.workspace_id]
+  );
+  const aRows = accounts.rows.map((a) => `<tr><td><b>${esc(a.contact_name || a.wa_id)}</b></td><td>${a.balance} pts</td><td class="mut">${a.lifetime_points} lifetime</td>
+<td>${a.balance >= s.points_for_voucher ? `<form class="inline" method="post" action="/loyalty/vouchers/new"><input type="hidden" name="contact_id" value="${a.contact_id}"><button>Issue R${s.voucher_value_rand} voucher</button></form>` : `<span class="mut">${s.points_for_voucher - a.balance} to go</span>`}</td></tr>`).join("");
+  const vRows = vouchers.rows.map((v) => `<tr><td><b>${esc(v.code)}</b></td><td>${esc(v.contact_name)}</td><td>R${v.amount_rand}</td>
+<td>${v.status === "active" ? '<span class="ok">active</span>' : esc(v.status)}</td>
+<td class="mut">to ${new Date(v.expires_at).toLocaleDateString("en-ZA")}</td>
+<td>${v.status === "active" ? `<form class="inline" method="post" action="/loyalty/vouchers/${v.id}/redeem"><button class="link">Redeem</button></form>` : ""}</td></tr>`).join("");
+  return layout("Loyalty", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+<div class="card"><h2 style="margin-top:0">Rules</h2>
+<form method="post" action="/loyalty/settings">
+<label>Programme <select name="enabled"><option value="on" ${s.enabled ? "selected" : ""}>on</option><option value="off" ${!s.enabled ? "selected" : ""}>off</option></select></label>
+<label>Points per visit<input name="points_per_visit" type="number" min="0" value="${s.points_per_visit}" style="width:100px"></label>
+<label>Welcome bonus<input name="welcome_bonus" type="number" min="0" value="${s.welcome_bonus}" style="width:100px"></label>
+<label>Points for a voucher<input name="points_for_voucher" type="number" min="1" value="${s.points_for_voucher}" style="width:100px"></label>
+<label>Voucher value (R)<input name="voucher_value_rand" type="number" min="1" value="${s.voucher_value_rand}" style="width:100px"></label>
+<label>Valid days<input name="voucher_valid_days" type="number" min="1" value="${s.voucher_valid_days}" style="width:100px"></label>
+<button>Save rules</button></form>
+<p class="mut">Customers earn points automatically when you mark a booking done. First visit earns the welcome bonus.</p></div>
+<h2>Customers</h2>
+<div class="card">${accounts.rows.length ? `<table><tr><th>Customer</th><th>Balance</th><th>Lifetime</th><th></th></tr>${aRows}</table>` : `<p class="mut">No points yet. Mark a booking done and the customer starts earning.</p>`}</div>
+<h2>Vouchers</h2>
+<div class="card">${vouchers.rows.length ? `<table><tr><th>Code</th><th>Customer</th><th>Value</th><th>Status</th><th>Valid</th><th></th></tr>${vRows}</table>` : `<p class="mut">No vouchers issued yet.</p>`}</div>`, user);
+}
+async function supportPage(db, user, mem) {
+  const r = await db.query(`SELECT * FROM receptionist_supportmessage WHERE workspace_id=$1 ORDER BY created_at LIMIT 100`, [mem.workspace_id]);
+  const rows = r.rows.map((m) => {
+    const src = Array.isArray(m.sources) && m.sources.length ? `<br><span class="mut">Grounded in: ${m.sources.map((x) => esc(x)).join(" \xB7 ")}</span>` : "";
+    const conf = m.role === "assistant" ? `<br><span class="mut">Confidence ${m.confidence}%${m.escalated ? " \xB7 flagged for a human" : ""}</span>` : "";
+    return m.role === "owner" ? `<div class="card" style="background:var(--brand-soft)"><b>You:</b> ${esc(m.text)}</div>` : `<div class="card"><b>Support:</b> ${esc(m.text)}${src}${conf}</div>`;
+  }).join("");
+  return layout("Support", `
+<div class="card"><h2 style="margin-top:0">Ask about your numbers</h2>
+<form method="post" action="/support">
+<label>Question<textarea name="question" required placeholder="How many bookings do we have today?"></textarea></label>
+<button>Ask</button></form>
+<p class="mut">Answers come only from your own data, with confidence and sources shown. Anything it cannot ground gets flagged for a human - it never invents figures.</p></div>
+${rows || `<div class="card"><p class="mut">No questions yet.</p></div>`}`, user);
+}
+async function competitorsPage(db, user, mem, msg = "") {
+  await refreshOpportunities(db, mem.workspace_id);
+  const rmq = await db.query(`SELECT revenue_mode FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [mem.workspace_id]);
+  const revMode = rmq.rows[0]?.revenue_mode || "suggest";
+  const comps = await db.query(`SELECT * FROM receptionist_competitor WHERE workspace_id=$1 ORDER BY name`, [mem.workspace_id]);
+  const menu = await db.query(`SELECT id, name, price FROM menus_item WHERE workspace_id=$1 ORDER BY position LIMIT 100`, [mem.workspace_id]);
+  const opps = await db.query(
+    `SELECT o.*, c.name AS competitor_name FROM receptionist_marketopportunity o
+     LEFT JOIN receptionist_competitor c ON c.id=o.competitor_id
+     WHERE o.workspace_id=$1 ORDER BY CASE o.status WHEN 'new' THEN 0 WHEN 'acted' THEN 1 ELSE 2 END, o.confidence DESC, o.updated_at DESC LIMIT 30`,
+    [mem.workspace_id]
+  );
+  const kindLabel = { price_gap: "Price gap", price_advantage: "Price advantage", rating_gap: "Rating gap", promo: "Competitor promotion", demand: "Demand" };
+  const compCards = [];
+  for (const c of comps.rows) {
+    const dishes = await db.query(
+      `SELECT d.*, m.name AS own_name, m.price AS own_price FROM receptionist_competitordish d
+       LEFT JOIN menus_item m ON m.id=d.own_item_id WHERE d.competitor_id=$1 ORDER BY d.name`,
+      [c.id]
+    );
+    const promos = await db.query(`SELECT * FROM receptionist_competitorpromo WHERE competitor_id=$1 ORDER BY created_at DESC LIMIT 5`, [c.id]);
+    const dishRows = dishes.rows.map((d) => `<tr><td>${esc(d.name)}</td><td>R${Number(d.price).toFixed(2)}</td>
+<td>${d.own_name ? `${esc(d.own_name)} (yours R${Number(d.own_price).toFixed(2)})` : '<span class="mut">not mapped</span>'}</td></tr>`).join("");
+    const promoRows = promos.rows.map((p) => `<li>${esc(p.text)}${p.valid_until ? ` <span class="mut">to ${new Date(p.valid_until).toLocaleDateString("en-ZA")}</span>` : ""}</li>`).join("");
+    const menuOpts = ['<option value="">(map to your menu)</option>', ...menu.rows.map((m) => `<option value="${m.id}">${esc(m.name)} R${Number(m.price).toFixed(2)}</option>`)].join("");
+    compCards.push(`<div class="card"><h3 style="margin-top:0">${esc(c.name)} <span class="mut">${esc(c.area || "")}${c.rating !== null ? ` \xB7 their Google ${c.rating}` : ""}</span></h3>
+${dishes.rows.length ? `<table><tr><th>Their dish</th><th>Price</th><th>Mapped to</th></tr>${dishRows}</table>` : `<p class="mut">No dishes logged yet.</p>`}
+<form method="post" action="/competitors/${c.id}/dishes" style="margin-top:10px">
+<input name="name" required maxlength="120" placeholder="Their dish" style="width:180px">
+<input name="price" type="number" min="0" step="0.01" required placeholder="R" style="width:90px">
+<select name="own_item_id">${menuOpts}</select>
+<button>Add dish</button></form>
+${promos.rows.length ? `<ul>${promoRows}</ul>` : ""}
+<form class="inline" method="post" action="/competitors/${c.id}/promos">
+<input name="text" required maxlength="200" placeholder="Promotion they are running" style="width:280px">
+<input name="valid_until" type="date">
+<button>Log promo</button></form></div>`);
+  }
+  const oppRows = opps.rows.map((o) => {
+    const ev = Array.isArray(o.evidence) ? o.evidence : [];
+    return `<tr>
+<td><b>${esc(o.title)}</b><br><span class="mut">${kindLabel[o.kind] || esc(o.kind)}${o.competitor_name ? " \xB7 " + esc(o.competitor_name) : ""} \xB7 confidence ${o.confidence}%${o.impact_rand !== null ? ` \xB7 about R${Number(o.impact_rand).toLocaleString("en-ZA")}/month` : ""}</span><br>
+${esc(o.detail)}${ev.length ? `<br><span class="mut">${ev.map((e) => esc(e)).join("<br>")}</span>` : ""}</td>
+<td>${o.status === "new" ? "<b>new</b>" : o.status === "acted" ? '<span class="ok">acted on</span>' : '<span class="mut">dismissed</span>'}</td>
+<td>${o.status === "new" ? `<form class="inline" method="post" action="/opportunities/${o.id}/draft"><button>Draft a campaign</button></form>
+<form class="inline" method="post" action="/opportunities/${o.id}/acted"><button class="link">Acted on</button></form>
+<form class="inline" method="post" action="/opportunities/${o.id}/dismissed"><button class="link">Dismiss</button></form>` : o.campaign_id ? `<a href="/campaigns">campaign</a>` : ""}</td></tr>`;
+  }).join("");
+  return layout("Competitors", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+<h2>Opportunities</h2>
+<div class="card">${opps.rows.length ? `<table><tr><th>Opportunity</th><th>Status</th><th></th></tr>${oppRows}</table>` : `<p class="mut">No opportunities right now. Log competitors, their dishes and their promos below and the board fills itself.</p>`}</div>
+<h2>Competitors</h2>
+<div class="card"><form method="post" action="/competitors">
+<input name="name" required maxlength="120" placeholder="Competitor name" style="width:180px">
+<input name="area" maxlength="120" placeholder="Area" style="width:140px">
+<input name="rating" type="number" min="0" max="5" step="0.1" placeholder="Google rating" style="width:110px">
+<input name="website" maxlength="200" placeholder="Website" style="width:180px">
+<button>Track competitor</button></form>
+<p class="mut">Adding the same name again updates it.</p></div>
+${compCards.join("")}
+<h2>Revenue Employee</h2>
+<div class="card"><form method="post" action="/revenue-mode">
+<label>Mode <select name="mode">
+<option value="suggest" ${revMode === "suggest" ? "selected" : ""}>Suggest only - opportunities appear on this board</option>
+<option value="draft" ${revMode === "draft" ? "selected" : ""}>Prepare drafts - strong opportunities also become campaign drafts</option>
+</select></label>
+<button>Save mode</button></form>
+<p class="mut">You approve every send yourself, in every mode. Nothing ever sends itself.</p></div>`, user);
+}
+async function campaignsPage(db, user, mem, msg = "") {
+  const r = await db.query(`SELECT * FROM receptionist_campaign WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 30`, [mem.workspace_id]);
+  const rows = [];
+  for (const c of r.rows) {
+    const st = await campaignStats(db, c.id);
+    const segLabel = { all: "every customer", dormant: "dormant 30+ days", vip: "VIPs" };
+    const fmt = (v) => v ? `${v.sent}/${v.total} sent${Number(v.failed) ? `, ${v.failed} failed` : ""}${Number(v.skipped) ? `, ${v.skipped} skipped` : ""} \xB7 ${v.bookings} bookings \xB7 R${Number(v.revenue).toLocaleString("en-ZA")}` : "";
+    const variantB = c.body_b ? `<br><span class="mut">B: ${fmt(st.b)}</span>` : "";
+    rows.push(`<tr>
+<td><b>${esc(c.name)}</b><br><span class="mut">${segLabel[c.segment] || esc(c.segment)}${c.scheduled_at ? " \xB7 " + new Date(c.scheduled_at).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" }) : ""}</span></td>
+<td>${c.status === "sent" ? '<span class="ok">sent</span>' : c.status === "draft" ? "<b>draft</b>" : c.status === "cancelled" ? '<span class="mut">cancelled</span>' : `<span class="pill warn">${esc(c.status)}</span>`}</td>
+<td>${fmt(st.a)}${variantB}</td>
+<td>${c.status === "draft" ? `<form class="inline" method="post" action="/campaigns/${c.id}/approve"><input type="datetime-local" name="when" style="width:auto"><button>Approve & send</button></form>` : ""}
+${["draft", "scheduled"].includes(c.status) ? `<form class="inline" method="post" action="/campaigns/${c.id}/cancel"><button class="link">Cancel</button></form>` : ""}</td></tr>`);
+  }
+  const nAll = (await segmentContacts(db, mem.workspace_id, "all")).length;
+  const nDormant = (await segmentContacts(db, mem.workspace_id, "dormant")).length;
+  const nVip = (await segmentContacts(db, mem.workspace_id, "vip")).length;
+  return layout("Campaigns", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+<div class="card"><h2 style="margin-top:0">New campaign</h2>
+<form method="post" action="/campaigns">
+<label>Name<input name="name" required maxlength="120" placeholder="November win-back"></label>
+<label>Segment<select name="segment">
+<option value="all">Every customer (${nAll})</option>
+<option value="dormant">Dormant - no visit in 30+ days (${nDormant})</option>
+<option value="vip">VIP customers (${nVip})</option>
+</select></label>
+<label>Message<textarea name="body_a" required placeholder="Hi {first name}, ..."></textarea></label>
+<label>B version (optional - half get each)<textarea name="body_b"></textarea></label>
+<button>Save draft</button></form>
+<p class="mut">Use {first name} for the customer's first name. Sends start after you approve; customers who never messaged you or opted out are skipped automatically. Nothing sends itself.</p></div>
+<div class="card">${r.rows.length ? `<table><tr><th>Campaign</th><th>Status</th><th>Delivery</th><th></th></tr>${rows.join("")}</table>` : `<p class="mut">No campaigns yet.</p>`}</div>`, user);
+}
+async function quotesPage(db, user, mem, msg = "") {
+  const today = (/* @__PURE__ */ new Date()).toLocaleDateString("en-CA", { timeZone: "Africa/Johannesburg" });
+  const r = await db.query(
+    `SELECT q.*, c.name AS contact_name FROM receptionist_quote q
+     LEFT JOIN receptionist_contact c ON c.id=q.contact_id
+     WHERE q.workspace_id=$1 ORDER BY CASE q.status WHEN 'draft' THEN 0 WHEN 'sent' THEN 1 WHEN 'won' THEN 2 ELSE 3 END, q.follow_up_on NULLS LAST, q.created_at DESC LIMIT 50`,
+    [mem.workspace_id]
+  );
+  const contacts = await db.query(`SELECT id, name, wa_id FROM receptionist_contact WHERE workspace_id=$1 ORDER BY updated_at DESC LIMIT 100`, [mem.workspace_id]);
+  const opts = ['<option value="">(no linked customer)</option>', ...contacts.rows.map((c) => `<option value="${c.id}">${esc(c.name || c.wa_id)}</option>`)].join("");
+  const rows = r.rows.map((q) => {
+    const chase = q.status === "sent" && q.follow_up_on && new Date(q.follow_up_on) <= /* @__PURE__ */ new Date(today + "T00:00:00");
+    return `<tr${chase ? ' style="background:#fff7ed"' : ""}>
+<td><b>${esc(q.customer_name)}</b><br><span class="mut">${esc(q.title || "Quote")}</span></td>
+<td>R${(q.amount_cents / 100).toLocaleString("en-ZA", { minimumFractionDigits: 2 })}</td>
+<td>${q.status === "sent" ? '<span class="pill warn">sent</span>' : q.status === "won" ? '<span class="ok">won</span>' : q.status === "lost" ? '<span class="mut">lost</span>' : "<b>draft</b>"}
+${chase ? `<br><span class="bad">chase today</span>` : q.follow_up_on ? `<br><span class="mut">chase ${new Date(q.follow_up_on).toLocaleDateString("en-ZA")}</span>` : ""}</td>
+<td>${q.status === "draft" ? `<form class="inline" method="post" action="/quotes/${q.id}/sent"><button>Mark sent</button></form>` : ""}
+${["draft", "sent"].includes(q.status) ? `<form class="inline" method="post" action="/quotes/${q.id}/won"><button class="link">Won</button></form> <form class="inline" method="post" action="/quotes/${q.id}/lost"><button class="link">Lost</button></form>` : ""}</td></tr>`;
+  }).join("");
+  const won = r.rows.filter((q) => q.status === "won").reduce((t, q) => t + q.amount_cents, 0) / 100;
+  return layout("Quotes", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+<div class="card"><h2 style="margin-top:0">New quote</h2>
+<form method="post" action="/quotes">
+<label>Customer name<input name="customer_name" required maxlength="200"></label>
+<label>Link a customer (for WhatsApp send)<select name="contact_id">${opts}</select></label>
+<label>What is it for<input name="title" maxlength="200" placeholder="Geyser replacement"></label>
+<label>Amount (R)<input name="amount" type="number" min="0" step="0.01" required style="width:140px"></label>
+<label>Chase on<input name="follow_up_on" type="date"></label>
+<button>Save quote</button></form>
+<p class="mut">Mark it sent when it goes out - a linked customer gets it on WhatsApp too. Chase rows highlight when the follow-up day arrives.</p></div>
+<p class="mut">Won so far: <b>R${won.toLocaleString("en-ZA", { minimumFractionDigits: 2 })}</b></p>
+<div class="card">${r.rows.length ? `<table><tr><th>Customer</th><th>Amount</th><th>Status</th><th></th></tr>${rows}</table>` : `<p class="mut">No quotes yet.</p>`}</div>`, user);
+}
 async function reviewsPage(db, user, mem, base, msg = "") {
   const bp = await db.query(`SELECT * FROM receptionist_businessprofile WHERE workspace_id=$1 LIMIT 1`, [mem.workspace_id]);
   const b = bp.rows[0] || {};
@@ -1829,6 +2983,16 @@ async function conversationPage(db, user, mem, contactId, env) {
   }).join("");
   return html(layout(`Chat: ${esc(c.rows[0].name || c.rows[0].wa_id)}`, `
 <p><a href="/inbox">&larr; all conversations</a></p>
+<div class="card"><h2 style="margin-top:0">Customer card</h2>
+<form method="post" action="/inbox/${c.rows[0].id}/card">
+<label>Name<input name="name" maxlength="120" value="${esc(c.rows[0].name || "")}"></label>
+<label>Birthday<input name="birthday" type="date" value="${c.rows[0].birthday ? new Date(c.rows[0].birthday).toISOString().slice(0, 10) : ""}"></label>
+<label>Dietary / preferences<input name="dietary_notes" maxlength="200" value="${esc(c.rows[0].dietary_notes || "")}"></label>
+<label>Lifetime spend (R)<input name="total_spend" inputmode="decimal" value="${esc(String(c.rows[0].total_spend ?? "0"))}" style="width:140px"></label>
+<label><input type="checkbox" name="is_vip" ${c.rows[0].is_vip ? "checked" : ""} style="width:auto"> VIP</label>
+<label>Private notes<textarea name="notes">${esc(c.rows[0].notes || "")}</textarea></label>
+<button>Save card</button></form>
+<p class="mut">${c.rows[0].visit_count || 0} visits${c.rows[0].opted_out ? " \xB7 opted out of automated messages" : ""}</p></div>
 <div class="card">${bubbles || `<p class="mut">No messages.</p>`}</div>`, user));
 }
 async function radarPage(db, user, mem, msg) {
@@ -1964,6 +3128,9 @@ var index_default = {
       ctx.waitUntil((async () => {
         await runDueReviewEvents(db, env, "https://revup.nahalabs.co.za");
         await runDueServiceReminders(db, env);
+        await expireVouchers(db);
+        await runDueCampaigns(db, env);
+        await autoDraftOpportunities(db);
         await db.end().catch(() => {
         });
       })());
@@ -1992,7 +3159,7 @@ async function handle(req, env) {
       return redirect("/");
     }
   }
-  if (path === "/webhooks/zernio" && req.method === "POST") {
+  if ((path === "/webhooks/zernio" || path === "/webhooks/zernio/") && req.method === "POST") {
     const raw = await req.text();
     const sig = req.headers.get("x-zernio-signature") || req.headers.get("x-late-signature") || "";
     let payload = {};
@@ -2214,6 +3381,16 @@ async function handle(req, env) {
       });
     }
   }
+  const pm = /^\/p\/([a-z0-9-]{4,64})(\/go)?$/.exec(path);
+  if (pm) {
+    const pgdb = pool(env);
+    try {
+      return await servePublic(pgdb, pm[1], !!pm[2], req);
+    } finally {
+      await pgdb.end().catch(() => {
+      });
+    }
+  }
   const db = pool(env);
   try {
     if (path === "/static/brand/revup-light.png") return new Response(Uint8Array.from(atob(LOGO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
@@ -2225,6 +3402,92 @@ async function handle(req, env) {
     user._cur_ws = mem.workspace_name;
     user._ws_count = (mem.workspaces || []).length;
     user._goals = Array.isArray(mem.goals) ? mem.goals : [];
+    if (path === "/pages") {
+      await ensurePageTables(db);
+      const msg = url.searchParams.get("msg") || "";
+      return html(layout("Landing pages", await pagesListBody(db, mem, base, msg), user));
+    }
+    if (path === "/pages/new") {
+      await ensurePageTables(db);
+      if (req.method === "GET") return html(layout("New landing page", newPageBody(), user));
+      const f = await formData(req);
+      if (!(f.angle || "").trim()) return html(layout("New landing page", newPageBody("Tell us the one customer pain this page answers."), user), 400);
+      if (await rateLimited(db, "pages", req, 40)) return html(layout("New landing page", newPageBody("Too many pages built today - please try again tomorrow."), user), 429);
+      let skeleton = [{ type: "hero", words: 90 }, { type: "pains", words: 120 }, { type: "benefits", words: 160 }, { type: "how", words: 120 }, { type: "proof", words: 100 }, { type: "faq", words: 120 }, { type: "cta", words: 60 }];
+      let sourceUrl = "";
+      const mirrorUrl = (f.mirror_url || "").trim();
+      if (mirrorUrl) {
+        try {
+          const src = await fetchForMirror(mirrorUrl);
+          skeleton = mirrorStructure(src);
+          sourceUrl = mirrorUrl.slice(0, 500);
+        } catch (e) {
+          return html(layout("New landing page", newPageBody("Could not read that page: " + String(e?.message || e).slice(0, 150)), user), 400);
+        }
+      }
+      const brief = {
+        business: (f.business || mem.workspace_name || "").trim().slice(0, 200),
+        industry: (f.industry || "general").trim().slice(0, 40),
+        angle: (f.angle || "").trim().slice(0, 200),
+        offer: (f.offer || "").trim().slice(0, 300),
+        area: (f.area || "").trim().slice(0, 120),
+        whatsapp: (f.whatsapp || "").trim().slice(0, 20),
+        cta_label: (f.cta_label || "WhatsApp us").trim().slice(0, 40)
+      };
+      let gen;
+      try {
+        gen = await generateSections(env, brief, skeleton);
+      } catch {
+        return html(layout("New landing page", newPageBody("The copywriter is busy right now - please try again in a minute."), user), 502);
+      }
+      const pageId = crypto.randomUUID();
+      const slug = makeSlug(brief.business || "page");
+      const title = (gen.seo_title || `${brief.business} - ${brief.angle}`).slice(0, 200);
+      const brand = { business: brief.business, whatsapp: brief.whatsapp, cta_label: brief.cta_label, color: (f.color || "#F97316").slice(0, 7), area: brief.area, link: "" };
+      await db.query(
+        `INSERT INTO cf_page(id,workspace_id,title,slug,angle,industry,status,brand,sections,source_url) VALUES($1,$2,$3,$4,$5,$6,'draft',$7,$8,$9)`,
+        [pageId, mem.workspace_id, title, slug, brief.angle, brief.industry, JSON.stringify(brand), JSON.stringify(gen.sections), sourceUrl]
+      );
+      return redirect("/pages/" + pageId);
+    }
+    const pam = /^\/pages\/([0-9a-f-]{36})(?:\/(publish|unpublish|delete))?$/.exec(path);
+    if (pam) {
+      await ensurePageTables(db);
+      const pr = await db.query(`SELECT * FROM cf_page WHERE id=$1 AND workspace_id=$2`, [pam[1], mem.workspace_id]);
+      const page = pr.rows[0];
+      if (!page) return html(layout("Page not found", `<p class="bad">That page does not exist.</p>`, user), 404);
+      const action = pam[2] || "";
+      if (req.method === "POST" && action === "publish") {
+        await db.query(`UPDATE cf_page SET status='published', published_at=COALESCE(published_at,now()), updated_at=now() WHERE id=$1`, [page.id]);
+        return redirect("/pages/" + page.id);
+      }
+      if (req.method === "POST" && action === "unpublish") {
+        await db.query(`UPDATE cf_page SET status='draft', updated_at=now() WHERE id=$1`, [page.id]);
+        return redirect("/pages/" + page.id);
+      }
+      if (req.method === "POST" && action === "delete") {
+        await db.query(`UPDATE cf_page SET status='archived', updated_at=now() WHERE id=$1`, [page.id]);
+        return redirect("/pages?msg=Page deleted");
+      }
+      if (req.method === "POST") {
+        const f = await formData(req);
+        const sections = (page.sections || []).map((s, i) => ({
+          type: s.type,
+          heading: (f["h_" + i] ?? s.heading).slice(0, 140),
+          body: (f["b_" + i] ?? s.body).slice(0, 800),
+          items: String(f["i_" + i] ?? (s.items || []).join("\n")).split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 8).map((x) => x.slice(0, 140))
+        }));
+        const brand = Object.assign({}, page.brand || {}, {
+          cta_label: (f.cta_label || "WhatsApp us").slice(0, 40),
+          whatsapp: (f.whatsapp || "").slice(0, 20),
+          link: (f.link || "").slice(0, 500),
+          color: (f.color || "#F97316").slice(0, 7)
+        });
+        await db.query(`UPDATE cf_page SET sections=$1, brand=$2, updated_at=now() WHERE id=$3`, [JSON.stringify(sections), JSON.stringify(brand), page.id]);
+        return redirect("/pages/" + page.id);
+      }
+      return html(layout(page.title, await pageDetailBody(db, page, base, url.searchParams.get("msg") || ""), user));
+    }
     if (path === "/switch") {
       if (req.method === "POST") {
         const f = await formData(req);
@@ -2562,6 +3825,19 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
       }
     }
     if (path === "/inbox") return html(await inboxPage(db, user, mem));
+    const cardPost = /^\/inbox\/([0-9a-f-]{36})\/card$/.exec(path);
+    if (cardPost && req.method === "POST") {
+      const f = await formData(req);
+      const spend = Number(String(f.total_spend || "0").replace(",", "."));
+      if (isNaN(spend) || spend < 0 || spend > 1e8) return redirect("/inbox/" + cardPost[1]);
+      const bday = /^\d{4}-\d{2}-\d{2}$/.test(f.birthday || "") ? f.birthday : null;
+      await db.query(
+        `UPDATE receptionist_contact SET name=$1, birthday=$2, dietary_notes=$3, notes=$4, total_spend=$5, is_vip=$6, updated_at=now()
+           WHERE id=$7 AND workspace_id=$8`,
+        [String(f.name || "").trim().slice(0, 120), bday, String(f.dietary_notes || "").trim().slice(0, 200), String(f.notes || "").trim(), spend, f.is_vip === "on", cardPost[1], mem.workspace_id]
+      );
+      return redirect("/inbox/" + cardPost[1]);
+    }
     const ires = /^\/inbox\/intake\/(receptionist_funeralclaim|receptionist_dentalappointment|receptionist_tradedispatch)\/([0-9a-f-]{36})\/resolve$/.exec(path);
     if (ires && req.method === "POST") {
       await db.query(`UPDATE ${ires[1]} SET status='resolved' WHERE id=$1 AND workspace_id=$2`, [ires[2], mem.workspace_id]);
@@ -2635,18 +3911,161 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
       }
       if (bact[2] === "done" && b.status === "confirmed") {
         await db.query(`UPDATE receptionist_booking SET status='done' WHERE id=$1`, [b.id]);
-        await db.query(`UPDATE receptionist_contact SET visit_count=visit_count+1, updated_at=now() WHERE id=$1`, [b.contact_id]);
+        await db.query(`UPDATE receptionist_contact SET visit_count=visit_count+1, last_visit_at=now(), is_vip=(visit_count+1>=5 OR is_vip), updated_at=now() WHERE id=$1`, [b.contact_id]);
+        await attributeBookingToCampaign(db, mem.workspace_id, b);
+        const lacc = await awardForBooking(db, mem.workspace_id, b.id, b.contact_id);
+        const loyaltyNote = lacc ? ` ${lacc.balance} loyalty points on their card.` : "";
         const evId = await startPipeline(db, mem.workspace_id, b.contact_id, b.id);
         const svc = await db.query(`SELECT service FROM receptionist_booking WHERE id=$1`, [b.id]);
         const remId = await scheduleServiceReminder(db, mem.workspace_id, b.id, b.contact_id, svc.rows[0]?.service || "");
         const extra = remId ? " A service reminder is scheduled too." : "";
-        return redirect("/bookings?msg=" + encodeURIComponent((evId ? "Marked done - the review check-in goes out in 15 minutes." : "Marked done. (This customer opted out of messages.)") + extra));
+        return redirect("/bookings?msg=" + encodeURIComponent((evId ? "Marked done - the review check-in goes out in 15 minutes." : "Marked done. (This customer opted out of messages.)") + extra + loyaltyNote));
       }
       if (bact[2] === "cancel" && ["requested", "confirmed"].includes(b.status)) {
         await db.query(`UPDATE receptionist_booking SET status='cancelled' WHERE id=$1`, [b.id]);
         return redirect("/bookings?msg=" + encodeURIComponent("Booking cancelled."));
       }
       return redirect("/bookings");
+    }
+    if (path === "/waitlist") {
+      if (req.method === "POST") {
+        const f = await formData(req);
+        const wa = String(f.wa_id || "").replace(/\D/g, "");
+        if (!wa) return redirect("/waitlist");
+        await waitlistAdd(db, mem.workspace_id, wa, String(f.name || "").trim(), Number(f.party_size) || 2, String(f.wanted_time || "").trim());
+        return redirect("/waitlist?msg=" + encodeURIComponent("Added to the waitlist."));
+      }
+      return html(await waitlistPage(db, user, mem, url.searchParams.get("msg") || ""));
+    }
+    const wact = /^\/waitlist\/([0-9a-f-]{36})\/(offer|accept|cancel)$/.exec(path);
+    if (wact && req.method === "POST") {
+      const okd = await waitlistAction(db, mem.workspace_id, wact[1], wact[2]);
+      return redirect("/waitlist?msg=" + encodeURIComponent(okd ? "Done." : "That change does not apply to this entry."));
+    }
+    if (path === "/loyalty") return html(await loyaltyPage(db, user, mem, url.searchParams.get("msg") || ""));
+    if (path === "/loyalty/settings" && req.method === "POST") {
+      const f = await formData(req);
+      await loyaltySettings(db, mem.workspace_id);
+      await db.query(
+        `UPDATE receptionist_loyaltysettings SET enabled=$1, points_per_visit=$2, welcome_bonus=$3, points_for_voucher=$4, voucher_value_rand=$5, voucher_valid_days=$6 WHERE workspace_id=$7`,
+        [f.enabled === "on", Math.max(0, Number(f.points_per_visit) || 0), Math.max(0, Number(f.welcome_bonus) || 0), Math.max(1, Number(f.points_for_voucher) || 100), Math.max(1, Number(f.voucher_value_rand) || 50), Math.max(1, Number(f.voucher_valid_days) || 90), mem.workspace_id]
+      );
+      return redirect("/loyalty?msg=" + encodeURIComponent("Rules saved."));
+    }
+    if (path === "/loyalty/vouchers/new" && req.method === "POST") {
+      const f = await formData(req);
+      try {
+        const v = await issueVoucher(db, mem.workspace_id, String(f.contact_id || ""));
+        return redirect("/loyalty?msg=" + encodeURIComponent(`Voucher ${v.code} issued - R${v.amount_rand}.`));
+      } catch (e) {
+        return redirect("/loyalty?msg=" + encodeURIComponent(String(e?.message || e)));
+      }
+    }
+    const vred = /^\/loyalty\/vouchers\/([0-9a-f-]{36})\/redeem$/.exec(path);
+    if (vred && req.method === "POST") {
+      const okd = await redeemVoucher(db, mem.workspace_id, vred[1]);
+      return redirect("/loyalty?msg=" + encodeURIComponent(okd ? "Voucher redeemed." : "That voucher is not usable."));
+    }
+    if (path === "/quotes") {
+      if (req.method === "POST") {
+        const f = await formData(req);
+        if (!String(f.customer_name || "").trim()) return redirect("/quotes");
+        await quoteCreate(db, mem.workspace_id, String(f.customer_name).trim(), /^[0-9a-f-]{36}$/.test(f.contact_id || "") ? f.contact_id : null, String(f.title || "").trim(), Number(f.amount) || 0, String(f.follow_up_on || ""));
+        return redirect("/quotes?msg=" + encodeURIComponent("Quote saved."));
+      }
+      return html(await quotesPage(db, user, mem, url.searchParams.get("msg") || ""));
+    }
+    const qact = /^\/quotes\/([0-9a-f-]{36})\/(sent|won|lost)$/.exec(path);
+    if (qact && req.method === "POST") {
+      const out = await quoteAction(db, env, mem.workspace_id, qact[1], qact[2]);
+      return redirect("/quotes?msg=" + encodeURIComponent(out === "marked sent" ? "Marked sent (WhatsApp too, when the customer is linked and reachable)." : out === "no change" ? "That change does not apply to this quote." : `Quote ${out}.`));
+    }
+    if (path === "/campaigns") {
+      if (req.method === "POST") {
+        const f = await formData(req);
+        try {
+          await campaignCreate(db, mem.workspace_id, String(f.name || ""), String(f.segment || ""), String(f.body_a || ""), String(f.body_b || ""));
+          return redirect("/campaigns?msg=" + encodeURIComponent("Draft saved. Approve it when you are ready to send."));
+        } catch (e) {
+          return redirect("/campaigns?msg=" + encodeURIComponent(String(e?.message || e)));
+        }
+      }
+      return html(await campaignsPage(db, user, mem, url.searchParams.get("msg") || ""));
+    }
+    const capp = /^\/campaigns\/([0-9a-f-]{36})\/approve$/.exec(path);
+    if (capp && req.method === "POST") {
+      const f = await formData(req);
+      try {
+        await campaignApprove(db, mem.workspace_id, capp[1], String(f.when || ""));
+        return redirect("/campaigns?msg=" + encodeURIComponent("Approved. The send starts within 15 minutes."));
+      } catch (e) {
+        return redirect("/campaigns?msg=" + encodeURIComponent(String(e?.message || e)));
+      }
+    }
+    const ccan = /^\/campaigns\/([0-9a-f-]{36})\/cancel$/.exec(path);
+    if (ccan && req.method === "POST") {
+      await campaignCancel(db, mem.workspace_id, ccan[1]);
+      return redirect("/campaigns?msg=" + encodeURIComponent("Cancelled."));
+    }
+    if (path === "/competitors") {
+      if (req.method === "POST") {
+        const f = await formData(req);
+        try {
+          await competitorAdd(db, mem.workspace_id, String(f.name || ""), String(f.area || ""), String(f.website || ""), String(f.rating || ""), "");
+          return redirect("/competitors?msg=" + encodeURIComponent("Competitor saved."));
+        } catch (e) {
+          return redirect("/competitors?msg=" + encodeURIComponent(String(e?.message || e)));
+        }
+      }
+      return html(await competitorsPage(db, user, mem, url.searchParams.get("msg") || ""));
+    }
+    const cdish = /^\/competitors\/([0-9a-f-]{36})\/dishes$/.exec(path);
+    if (cdish && req.method === "POST") {
+      const f = await formData(req);
+      try {
+        await dishAdd(db, mem.workspace_id, cdish[1], String(f.name || ""), Number(f.price), String(f.own_item_id || ""));
+        return redirect("/competitors?msg=" + encodeURIComponent("Dish logged."));
+      } catch (e) {
+        return redirect("/competitors?msg=" + encodeURIComponent(String(e?.message || e)));
+      }
+    }
+    const cpromo = /^\/competitors\/([0-9a-f-]{36})\/promos$/.exec(path);
+    if (cpromo && req.method === "POST") {
+      const f = await formData(req);
+      try {
+        await promoAdd(db, mem.workspace_id, cpromo[1], String(f.text || ""), String(f.valid_until || ""));
+        return redirect("/competitors?msg=" + encodeURIComponent("Promotion logged."));
+      } catch (e) {
+        return redirect("/competitors?msg=" + encodeURIComponent(String(e?.message || e)));
+      }
+    }
+    const oppact = /^\/opportunities\/([0-9a-f-]{36})\/(acted|dismissed|draft)$/.exec(path);
+    if (oppact && req.method === "POST") {
+      try {
+        if (oppact[2] === "draft") {
+          await opportunityDraftCampaign(db, mem.workspace_id, oppact[1]);
+          return redirect("/campaigns?msg=" + encodeURIComponent("Draft campaign ready - approve it when you are ready to send."));
+        }
+        await opportunityAction(db, mem.workspace_id, oppact[1], oppact[2]);
+        return redirect("/competitors?msg=" + encodeURIComponent("Marked."));
+      } catch (e) {
+        return redirect("/competitors?msg=" + encodeURIComponent(String(e?.message || e)));
+      }
+    }
+    if (path === "/support") {
+      if (req.method === "POST") {
+        const f = await formData(req);
+        const q = String(f.question || "").trim();
+        if (q) await supportHandle(db, mem.workspace_id, q.slice(0, 1e3));
+        return redirect("/support");
+      }
+      return html(await supportPage(db, user, mem));
+    }
+    if (path === "/revenue-mode" && req.method === "POST") {
+      const f = await formData(req);
+      const mode = f.mode === "draft" ? "draft" : "suggest";
+      await db.query(`UPDATE receptionist_businessprofile SET revenue_mode=$1, updated_at=now() WHERE workspace_id=$2`, [mode, mem.workspace_id]);
+      return redirect("/competitors?msg=" + encodeURIComponent(mode === "draft" ? "Revenue Employee will prepare campaign drafts for strong opportunities. You still approve every send." : "Revenue Employee will suggest opportunities only."));
     }
     if (path === "/reviews") return html(await reviewsPage(db, user, mem, base, url.searchParams.get("msg") || ""));
     if (path === "/reviews/toggle" && req.method === "POST") {

@@ -14,7 +14,7 @@
     "wrangler": "^4.158.0"
   },
   "scripts": {
-    "build:test": "esbuild src/index.ts --bundle --format=esm --platform=node --external:pg --outfile=dist-test/index.mjs && esbuild src/receptionist.ts --bundle --format=esm --platform=node --external:pg --outfile=dist-test/receptionist.mjs",
+    "build:test": "esbuild src/index.ts --bundle --format=esm --platform=node --external:pg --outfile=dist-test/index.mjs && esbuild src/receptionist.ts --bundle --format=esm --platform=node --external:pg --outfile=dist-test/receptionist.mjs && esbuild src/pages.ts --bundle --format=esm --platform=node --external:pg --outfile=dist-test/pages.mjs",
     "test": "npm run build:test --silent && node --test test/worker.test.mjs"
   }
 }
