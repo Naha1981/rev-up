@@ -6,6 +6,7 @@ import { LOGO_B64, landingPage } from "./landing";
 export { landingPage } from "./landing";
 import { INDUSTRIES, getPreset, industryLabel } from "./presets";
 import { handleZernioWebhook, verifyZernioSignature, validateTenantKey, tenantConnectUrl, tenantConfirmAndBind, tenantWebhookSecret } from "./receptionist";
+import { startPipeline, cancelPending, runDueReviewEvents, resolveIssue } from "./reviews";
 
 interface Env {
   DATABASE_URL: string;
@@ -411,6 +412,21 @@ async function reviewsPage(db: Pool, user: any, mem: any, base: string, msg = ""
 <td><a href="${base}/r/${esc(l.short_code)}" target="_blank">/r/${esc(l.short_code)}</a></td>
 <td>${l.clicked_at ? `<span class="ok">clicked ${new Date(l.clicked_at).toLocaleString("en-ZA")}</span>` : `<span class="mut">not yet</span>`}</td>
 <td class="mut">${new Date(l.created_at).toLocaleDateString("en-ZA")}</td></tr>`).join("");
+  const contacts = await db.query(
+    `SELECT id, name, wa_id, review_status, issue_note, opted_out FROM receptionist_contact
+     WHERE workspace_id=$1 AND wa_id <> '' ORDER BY updated_at DESC LIMIT 50`, [mem.workspace_id]);
+  const events = await db.query(
+    `SELECT e.*, c.name AS contact_name FROM receptionist_reviewevent e
+     JOIN receptionist_contact c ON c.id=e.contact_id
+     WHERE e.workspace_id=$1 ORDER BY e.created_at DESC LIMIT 20`, [mem.workspace_id]);
+  const contactOpts = contacts.rows.filter((c: any) => !c.opted_out).map((c: any) => `<option value="${c.id}">${esc(c.name || c.wa_id)}</option>`).join("");
+  const evRows = events.rows.map((e: any) => `<tr>
+<td>${esc(e.contact_name)}</td><td>${esc(e.step.replace("_", " "))}</td>
+<td>${e.status === "sent" ? `<span class="ok">sent</span>` : e.status === "failed" ? `<span class="bad">failed</span>` : esc(e.status)}</td>
+<td class="mut">${new Date(e.scheduled_for).toLocaleString("en-ZA")}</td>
+<td class="mut">${e.error ? esc(e.error) : ""}</td></tr>`).join("");
+  const issues = contacts.rows.filter((c: any) => c.review_status === "issue_flagged");
+  const statusLabel: any = { new: "new", check_in_sent: "check-in sent", review_requested: "review asked", clicked: "clicked", unsubscribed: "opted out", issue_flagged: "issue" };
   return layout("Reviews", `
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 ${b.google_review_url ? `<p>Google review destination: <a href="${esc(b.google_review_url)}">${esc(b.google_review_url)}</a></p>` : `<div class="card" style="border-color:var(--brand)"><h2 style="margin-top:0">First: where should reviews go?</h2><p class="mut">Paste your Google review link (from Google Business Profile → "Ask for reviews"). Every tracked link you create sends customers here.</p><form method="post" action="/reviews/destination"><input name="google_review_url" placeholder="https://g.page/r/…" required><button>Save and continue</button></form></div>`}
@@ -422,7 +438,24 @@ ${b.google_review_url ? `<h2>New review link</h2>
 <p class="mut">Send the /r/… link to the customer. It redirects to your Google review page and records the click.</p>
 </form></div>` : ""}
 <h2>Links</h2>
-<div class="card">${links.rows.length ? `<table><tr><th>Customer</th><th>Link</th><th>Click</th><th>Created</th></tr>${rows}</table>` : `<p class="mut">No review links yet.</p>`}</div>`, user);
+<div class="card">${links.rows.length ? `<table><tr><th>Customer</th><th>Link</th><th>Click</th><th>Created</th></tr>${rows}</table>` : `<p class="mut">No review links yet.</p>`}</div>
+
+<h2>Review requests on WhatsApp</h2>
+<div class="card">
+<p>Automatic pipeline per finished visit: a friendly check-in 15 minutes after the job, the review request with a tracked link 2 hours later, and one reminder after 48 hours if the link was never clicked. Customers can reply STOP at any time. A negative reply to the check-in flags the customer here for a personal call first.</p>
+<p><b>Status: ${b.review_requests_enabled ? '<span class="ok">ON</span>' : '<span class="bad">OFF</span>'}</b>
+<form method="post" action="/reviews/toggle" style="display:inline"><button class="btn-secondary">${b.review_requests_enabled ? "Switch off" : "Switch on"}</button></form></p>
+${b.review_requests_enabled && contacts.rows.length ? `<form method="post" action="/reviews/pipeline"><label>Mark a visit done<select name="contact_id">${contactOpts}</select></label><button>Start the pipeline</button></form>` : ""}
+</div>
+
+${issues.length ? `<h2>Needs a personal call</h2>
+<div class="card">${issues.map((c: any) => `<p><b>${esc(c.name || c.wa_id)}</b>: ${esc(c.issue_note || "negative reply")} <form method="post" action="/reviews/resolve" style="display:inline"><input type="hidden" name="contact_id" value="${c.id}"><button class="link">Resolved</button></form></p>`).join("")}</div>` : ""}
+
+<h2>Pipeline activity</h2>
+<div class="card">${events.rows.length ? `<table><tr><th>Customer</th><th>Step</th><th>Status</th><th>When</th><th>Note</th></tr>${evRows}</table>` : `<p class="mut">Nothing yet. Mark a visit done above to start the flow.</p>`}</div>
+
+<h2>Customers</h2>
+<div class="card">${contacts.rows.length ? `<table><tr><th>Name</th><th>Phone</th><th>Review status</th></tr>${contacts.rows.map((c: any) => `<tr><td>${esc(c.name || "-")}</td><td class="mut">${esc(c.wa_id)}</td><td>${c.opted_out ? '<span class="bad">opted out</span>' : esc(statusLabel[c.review_status] || c.review_status || "new")}</td></tr>`).join("")}</table>` : `<p class="mut">No customers yet.</p>`}</div>`, user);
 }
 
 
@@ -614,6 +647,15 @@ export default {
     const res = await handle(req, env);
     return withSecurity(res, new URL(req.url).pathname);
   },
+  async scheduled(_event: any, env: Env, ctx: any): Promise<void> {
+    const db = pool(env);
+    try {
+      ctx.waitUntil((async () => {
+        await runDueReviewEvents(db, env, "https://revup.nahalabs.co.za");
+        await db.end().catch(() => {});
+      })());
+    } catch { await db.end().catch(() => {}); }
+  },
 };
 
 async function handle(req: Request, env: Env): Promise<Response> {
@@ -678,8 +720,10 @@ async function handle(req: Request, env: Env): Promise<Response> {
       const db = pool(env);
       try {
         const r = await db.query(
-          `UPDATE receptionist_reviewlink SET clicked_at=COALESCE(clicked_at, now()) WHERE short_code=$1 RETURNING original_url`, [rm[1]]);
+          `UPDATE receptionist_reviewlink SET clicked_at=COALESCE(clicked_at, now()) WHERE short_code=$1 RETURNING original_url, contact_id, clicked_at`, [rm[1]]);
         if (!r.rows[0]) return html(layout("Link not found", `<p class="bad">This review link doesn't exist.</p>`), 404);
+        await cancelPending(db, r.rows[0].contact_id, "reminder");
+        await db.query(`UPDATE receptionist_contact SET review_status='clicked', updated_at=now() WHERE id=$1 AND review_status NOT IN ('unsubscribed','issue_flagged') AND NOT opted_out`, [r.rows[0].contact_id]);
         return new Response(null, { status: 302, headers: { location: r.rows[0].original_url } });
       } finally { await db.end().catch(() => {}); }
     }
@@ -1163,6 +1207,31 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
 
 
       if (path === "/reviews") return html(await reviewsPage(db, user, mem, base, url.searchParams.get("msg") || ""));
+
+      if (path === "/reviews/toggle" && req.method === "POST") {
+        const cur = await db.query(`SELECT review_requests_enabled FROM receptionist_businessprofile WHERE workspace_id=$1 LIMIT 1`, [mem.workspace_id]);
+        if (!cur.rows[0]) return redirect("/reviews");
+        await db.query(`UPDATE receptionist_businessprofile SET review_requests_enabled=$1, updated_at=now() WHERE workspace_id=$2`, [!cur.rows[0].review_requests_enabled, mem.workspace_id]);
+        return redirect("/reviews?msg=" + encodeURIComponent(!cur.rows[0].review_requests_enabled ? "Review requests are ON." : "Review requests are OFF."));
+      }
+
+      if (path === "/reviews/pipeline" && req.method === "POST") {
+        const f = await formData(req);
+        const id = await startPipeline(db, mem.workspace_id, f.contact_id || "", null);
+        return redirect("/reviews?msg=" + encodeURIComponent(id ? "Visit marked done - check-in goes out in 15 minutes." : "That customer has opted out, so nothing was scheduled."));
+      }
+
+      if (path === "/reviews/resolve" && req.method === "POST") {
+        const f = await formData(req);
+        const c = await db.query(`SELECT id FROM receptionist_contact WHERE id=$1 AND workspace_id=$2`, [f.contact_id || "", mem.workspace_id]);
+        if (c.rows[0]) await resolveIssue(db, c.rows[0].id);
+        return redirect("/reviews?msg=" + encodeURIComponent("Issue marked resolved - the customer is back in the normal flow."));
+      }
+
+      if (path === "/reviews/run-due" && req.method === "POST") {
+        const out = await runDueReviewEvents(db, env, base, mem.workspace_id);
+        return redirect("/reviews?msg=" + encodeURIComponent(`Ran ${out.due} due step(s): ` + Object.entries(out.results).map(([k, v]) => `${k} ${v}`).join(", ")));
+      }
 
       if (path === "/reviews/destination" && req.method === "POST") {
         const f = await formData(req);

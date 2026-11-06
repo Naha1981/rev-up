@@ -148,8 +148,19 @@ export async function handleZernioWebhook(db: Pool, env: any, payload: any): Pro
     [crypto.randomUUID(), body, zid, contact.id, channel.workspace_id, JSON.stringify(media)]);
 
   if (OPT_OUT.has(body.trim().toUpperCase())) {
-    await db.query(`UPDATE receptionist_contact SET opted_out=true, opted_out_at=now(), updated_at=now() WHERE id=$1`, [contact.id]);
+    const { unsubscribeContact } = await import("./reviews");
+    await unsubscribeContact(db, contact.id);
     return;
+  }
+
+  // A negative reply right after a check-in or review ask flags the customer
+  // for personal follow-up (Google policy: never suppress the ask itself).
+  if (["check_in_sent", "review_requested"].includes(contact.review_status || "")) {
+    const { looksNegative, flagIssue } = await import("./reviews");
+    if (looksNegative(body)) {
+      await flagIssue(db, channel.workspace_id, contact.id, body);
+      return; // a person takes it from the inbox
+    }
   }
 
   // monthly plan allowance (org-wide AI replies)

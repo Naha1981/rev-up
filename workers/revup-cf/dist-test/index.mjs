@@ -4,12 +4,24 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esm = (fn, res, err) => function __init() {
+  if (err) throw err[0];
+  try {
+    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+  } catch (e) {
+    throw err = [e], e;
+  }
+};
 var __commonJS = (cb, mod) => function __require() {
   try {
     return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
   } catch (e) {
     throw mod = 0, e;
   }
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -27,6 +39,256 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+
+// src/reviews.ts
+var reviews_exports = {};
+__export(reviews_exports, {
+  CHECK_IN_DELAY_MIN: () => CHECK_IN_DELAY_MIN,
+  OPT_OUT_FOOTER: () => OPT_OUT_FOOTER,
+  REMINDER_DELAY_H: () => REMINDER_DELAY_H,
+  REVIEW_REQUEST_DELAY_H: () => REVIEW_REQUEST_DELAY_H,
+  cancelPending: () => cancelPending,
+  checkInMessage: () => checkInMessage,
+  flagIssue: () => flagIssue,
+  looksNegative: () => looksNegative,
+  reminderMessage: () => reminderMessage,
+  resolveIssue: () => resolveIssue,
+  reviewRequestMessage: () => reviewRequestMessage,
+  runDueReviewEvents: () => runDueReviewEvents,
+  sendEvent: () => sendEvent,
+  startPipeline: () => startPipeline,
+  unsubscribeContact: () => unsubscribeContact
+});
+function looksNegative(body) {
+  const t = (body || "").toLowerCase();
+  return NEGATIVE_KEYWORDS.some((w) => t.includes(w));
+}
+function checkInMessage(profile, wsName, contact) {
+  return `Hey ${firstName(contact)}, this is ${businessName(profile, wsName)}. Just checking in to make sure everything looks good with the work we did today.`;
+}
+function reviewRequestMessage(profile, wsName, contact, link) {
+  return `Hi ${firstName(contact)}, ${businessName(profile, wsName)} here. Just wanted to say thanks again for the opportunity. If you have 30 seconds, would you mind sharing your experience in a quick Google review? It helps other customers know they can trust us: ${link}`;
+}
+function reminderMessage(link) {
+  return `Just a quick follow-up. If you haven't had a chance yet, we'd really appreciate a quick Google review: ${link}`;
+}
+async function startPipeline(db, workspaceId, contactId, bookingId = null) {
+  const c = await db.query(`SELECT opted_out FROM receptionist_contact WHERE id=$1 AND workspace_id=$2`, [contactId, workspaceId]);
+  if (!c.rows[0] || c.rows[0].opted_out) return null;
+  const id = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO receptionist_reviewevent(id,step,status,scheduled_for,created_at,booking_id,contact_id,workspace_id)
+     VALUES($1,'check_in','scheduled',now() + ($2 || ' minutes')::interval,now(),$3,$4,$5)`,
+    [id, String(CHECK_IN_DELAY_MIN), bookingId, contactId, workspaceId]
+  );
+  return id;
+}
+async function ensureLink(db, workspaceId, contactId) {
+  const ex = await db.query(`SELECT * FROM receptionist_reviewlink WHERE contact_id=$1 LIMIT 1`, [contactId]);
+  if (ex.rows[0]) return ex.rows[0];
+  const bp = await db.query(`SELECT google_review_url FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [workspaceId]);
+  const url = bp.rows[0]?.google_review_url || "";
+  if (!url) throw new Error("No Google review link set on the Reviews page.");
+  for (let i = 0; i < 5; i++) {
+    const code = [...crypto.getRandomValues(new Uint8Array(6))].map((b) => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[b % 32]).join("");
+    const dup = await db.query(`SELECT 1 FROM receptionist_reviewlink WHERE short_code=$1`, [code]);
+    if (!dup.rows[0]) {
+      const id = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO receptionist_reviewlink(id,workspace_id,contact_id,short_code,original_url,created_at)
+         VALUES($1,$2,$3,$4,$5,now())`,
+        [id, workspaceId, contactId, code, url]
+      );
+      return (await db.query(`SELECT * FROM receptionist_reviewlink WHERE id=$1`, [id])).rows[0];
+    }
+  }
+  throw new Error("Could not allocate a short link code.");
+}
+async function cancelPending(db, contactId, step) {
+  if (step) await db.query(`UPDATE receptionist_reviewevent SET status='cancelled' WHERE contact_id=$1 AND status='scheduled' AND step=$2`, [contactId, step]);
+  else await db.query(`UPDATE receptionist_reviewevent SET status='cancelled' WHERE contact_id=$1 AND status='scheduled'`, [contactId]);
+}
+async function unsubscribeContact(db, contactId) {
+  await db.query(`UPDATE receptionist_contact SET opted_out=true, opted_out_at=now(), review_status='unsubscribed', updated_at=now() WHERE id=$1`, [contactId]);
+  await cancelPending(db, contactId);
+}
+async function flagIssue(db, workspaceId, contactId, note) {
+  await db.query(`UPDATE receptionist_contact SET review_status='issue_flagged', issue_note=$1, needs_human=true, updated_at=now() WHERE id=$2`, [note.slice(0, 500), contactId]);
+  try {
+    await db.query(
+      `INSERT INTO receptionist_complaint(id,text,source,status,created_at,contact_id,workspace_id)
+       VALUES($1,$2,'check_in','new',now(),$3,$4)`,
+      [crypto.randomUUID(), note.slice(0, 2e3), contactId, workspaceId]
+    );
+  } catch {
+  }
+}
+async function resolveIssue(db, contactId) {
+  const r = await db.query(
+    `UPDATE receptionist_contact SET review_status='check_in_sent', issue_note='', updated_at=now() WHERE id=$1 AND review_status='issue_flagged'`,
+    [contactId]
+  );
+  return (r.rowCount || 0) > 0;
+}
+async function reviewGate(db, workspaceId) {
+  const p = await db.query(`SELECT review_requests_enabled FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [workspaceId]);
+  if (!p.rows[0] || !p.rows[0].review_requests_enabled) return "review requests are off for this workspace";
+  const org = await db.query(`SELECT o.plan FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [workspaceId]);
+  const plan = org.rows[0]?.plan || "starter";
+  if (!REVIEW_PLANS.has(plan)) return `plan ${plan} does not include review requests`;
+  const ch = await db.query(`SELECT 1 FROM receptionist_zerniochannel WHERE workspace_id=$1 LIMIT 1`, [workspaceId]);
+  if (!ch.rows[0]) return "no connected WhatsApp number";
+  return "";
+}
+async function deliver(db, env, workspaceId, contact, body) {
+  const ch = await db.query(`SELECT * FROM receptionist_zerniochannel WHERE workspace_id=$1 LIMIT 1`, [workspaceId]);
+  const channel = ch.rows[0];
+  if (!channel) throw new Error("No connected WhatsApp number.");
+  const outId = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO receptionist_message(id,direction,sender_type,body,zernio_message_id,is_draft,created_at,contact_id,workspace_id,media_urls)
+     VALUES($1,'outbound','ai',$2,'',true,now(),$3,$4,'[]'::jsonb)`,
+    [outId, body, contact.id, workspaceId]
+  );
+  const sandbox = channel.is_sandbox || channel.zernio_account_id === "6a180a034c7f364ffded3c9c";
+  const ALLOW = /* @__PURE__ */ new Set(["27672347593", "27612980377"]);
+  if (sandbox && !ALLOW.has(contact.wa_id)) throw new Error("sandbox line may only message allowlisted test numbers");
+  const budget = await db.query(
+    `SELECT count(*) FILTER (WHERE created_at >= now() - interval '1 hour') h,
+            count(*) FILTER (WHERE created_at >= now() - interval '1 day') d
+     FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND is_draft=false`,
+    [workspaceId]
+  );
+  if (Number(budget.rows[0].h) >= 20 || Number(budget.rows[0].d) >= 100) throw new Error("send budget reached");
+  if (!contact.zernio_conversation_id) throw new Error("customer has no active WhatsApp conversation yet");
+  const connQ = await db.query(`SELECT api_key, status FROM receptionist_tenantmessagingconnection WHERE workspace_id=$1 LIMIT 1`, [workspaceId]);
+  const conn = connQ.rows[0];
+  if (conn && conn.status === "needs_attention") throw new Error("messaging account needs reconnection");
+  const sendKey = conn && conn.status === "connected" && conn.api_key ? conn.api_key : env.ZERNIO_API_KEY;
+  const base = env.ZERNIO_BASE_URL || "https://zernio.com/api/v1";
+  const resp = await fetch(`${base}/inbox/conversations/${contact.zernio_conversation_id}/messages`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${sendKey}` },
+    body: JSON.stringify({ accountId: channel.zernio_account_id, message: body })
+  });
+  if (!resp.ok) throw new Error(`messaging send failed (${resp.status})`);
+  const data = await resp.json().catch(() => ({}));
+  const sentId = String(data?.message?.id || data?.messageId || data?.id || "");
+  await db.query(`UPDATE receptionist_message SET is_draft=false, zernio_message_id=$1 WHERE id=$2`, [sentId, outId]);
+}
+async function sendEvent(db, env, appUrl, event) {
+  const claim = await db.query(
+    `UPDATE receptionist_reviewevent SET status='sending' WHERE id=$1 AND status='scheduled'`,
+    [event.id]
+  );
+  if (!claim.rowCount) return "cancelled";
+  const cq = await db.query(`SELECT * FROM receptionist_contact WHERE id=$1`, [event.contact_id]);
+  const contact = cq.rows[0];
+  const wq = await db.query(`SELECT name FROM workspaces_workspace WHERE id=$1`, [event.workspace_id]);
+  const wsName = wq.rows[0]?.name || "the business";
+  const pq = await db.query(`SELECT * FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [event.workspace_id]);
+  const profile = pq.rows[0];
+  if (!contact || contact.opted_out) {
+    await db.query(`UPDATE receptionist_reviewevent SET status='cancelled' WHERE id=$1`, [event.id]);
+    await cancelPending(db, event.contact_id);
+    return "cancelled";
+  }
+  const holdReason = await reviewGate(db, event.workspace_id);
+  if (holdReason) {
+    await db.query(`UPDATE receptionist_reviewevent SET status='scheduled', scheduled_for=now() + interval '15 minutes' WHERE id=$1`, [event.id]);
+    return "held";
+  }
+  const base = appUrl.replace(/\/$/, "");
+  try {
+    if (event.step === "check_in") {
+      await deliver(db, env, event.workspace_id, contact, checkInMessage(profile, wsName, contact) + OPT_OUT_FOOTER);
+      if (contact.review_status !== "issue_flagged")
+        await db.query(`UPDATE receptionist_contact SET review_status='check_in_sent', updated_at=now() WHERE id=$1`, [contact.id]);
+      await db.query(
+        `INSERT INTO receptionist_reviewevent(id,step,status,scheduled_for,created_at,booking_id,contact_id,workspace_id)
+         VALUES($1,'review_request','scheduled',now() + ($2 || ' hours')::interval,now(),$3,$4,$5)`,
+        [crypto.randomUUID(), String(REVIEW_REQUEST_DELAY_H), event.booking_id, contact.id, event.workspace_id]
+      );
+    } else if (event.step === "review_request") {
+      const link = await ensureLink(db, event.workspace_id, contact.id);
+      await deliver(db, env, event.workspace_id, contact, reviewRequestMessage(profile, wsName, contact, `${base}/r/${link.short_code}`) + OPT_OUT_FOOTER);
+      if (contact.review_status !== "issue_flagged")
+        await db.query(`UPDATE receptionist_contact SET review_status='review_requested', updated_at=now() WHERE id=$1`, [contact.id]);
+      await db.query(
+        `INSERT INTO receptionist_reviewevent(id,step,status,scheduled_for,created_at,booking_id,contact_id,workspace_id)
+         VALUES($1,'reminder','scheduled',now() + ($2 || ' hours')::interval,now(),$3,$4,$5)`,
+        [crypto.randomUUID(), String(REMINDER_DELAY_H), event.booking_id, contact.id, event.workspace_id]
+      );
+    } else {
+      const found = await db.query(`SELECT * FROM receptionist_reviewlink WHERE contact_id=$1 LIMIT 1`, [contact.id]);
+      if (found.rows[0]?.clicked_at) {
+        await db.query(`UPDATE receptionist_reviewevent SET status='cancelled' WHERE id=$1`, [event.id]);
+        return "cancelled";
+      }
+      if (!found.rows[0]) throw new Error("No tracked link exists for this contact.");
+      await deliver(db, env, event.workspace_id, contact, reminderMessage(`${base}/r/${found.rows[0].short_code}`) + OPT_OUT_FOOTER);
+    }
+  } catch (e) {
+    await db.query(`UPDATE receptionist_reviewevent SET status='failed', error=$1 WHERE id=$2`, [String(e?.message || e).slice(0, 500), event.id]);
+    return "failed";
+  }
+  await db.query(`UPDATE receptionist_reviewevent SET status='sent', sent_at=now() WHERE id=$1`, [event.id]);
+  return "sent";
+}
+async function runDueReviewEvents(db, env, appUrl, workspaceId) {
+  const due = workspaceId ? await db.query(
+    `SELECT * FROM receptionist_reviewevent WHERE status='scheduled' AND scheduled_for <= now() AND workspace_id=$1 ORDER BY scheduled_for LIMIT 10`,
+    [workspaceId]
+  ) : await db.query(
+    `SELECT * FROM receptionist_reviewevent WHERE status='scheduled' AND scheduled_for <= now() ORDER BY scheduled_for LIMIT 10`
+  );
+  const results = {};
+  for (const ev of due.rows) {
+    const r = await sendEvent(db, env, appUrl, ev);
+    results[r] = (results[r] || 0) + 1;
+  }
+  return { due: due.rows.length, results };
+}
+var CHECK_IN_DELAY_MIN, REVIEW_REQUEST_DELAY_H, REMINDER_DELAY_H, REVIEW_PLANS, OPT_OUT_FOOTER, NEGATIVE_KEYWORDS, firstName, businessName;
+var init_reviews = __esm({
+  "src/reviews.ts"() {
+    CHECK_IN_DELAY_MIN = 15;
+    REVIEW_REQUEST_DELAY_H = 2;
+    REMINDER_DELAY_H = 48;
+    REVIEW_PLANS = /* @__PURE__ */ new Set(["starter", "growth", "business-pro"]);
+    OPT_OUT_FOOTER = "\nReply STOP to opt out.";
+    NEGATIVE_KEYWORDS = [
+      "not happy",
+      "unhappy",
+      "not satisfied",
+      "terrible",
+      "awful",
+      "horrible",
+      "worst",
+      "bad service",
+      "poor service",
+      "disappointed",
+      "complaint",
+      "problem",
+      "broken",
+      "not fixed",
+      "still leaking",
+      "refund",
+      "useless",
+      "angry",
+      "not impressed",
+      "still not working",
+      "still not fixed",
+      "came back",
+      "waste of money",
+      "rip off",
+      "ripped off",
+      "disgusted"
+    ];
+    firstName = (c) => (c.name || "").trim().split(" ")[0] || "there";
+    businessName = (p, ws) => p?.business_name || "" || ws;
+  }
+});
 
 // node_modules/spark-md5/spark-md5.js
 var require_spark_md5 = __commonJS({
@@ -780,8 +1042,16 @@ async function handleZernioWebhook(db, env, payload) {
     [crypto.randomUUID(), body, zid, contact.id, channel.workspace_id, JSON.stringify(media)]
   );
   if (OPT_OUT.has(body.trim().toUpperCase())) {
-    await db.query(`UPDATE receptionist_contact SET opted_out=true, opted_out_at=now(), updated_at=now() WHERE id=$1`, [contact.id]);
+    const { unsubscribeContact: unsubscribeContact2 } = await Promise.resolve().then(() => (init_reviews(), reviews_exports));
+    await unsubscribeContact2(db, contact.id);
     return;
+  }
+  if (["check_in_sent", "review_requested"].includes(contact.review_status || "")) {
+    const { looksNegative: looksNegative2, flagIssue: flagIssue2 } = await Promise.resolve().then(() => (init_reviews(), reviews_exports));
+    if (looksNegative2(body)) {
+      await flagIssue2(db, channel.workspace_id, contact.id, body);
+      return;
+    }
   }
   const org = await db.query(`SELECT o.plan, o.id FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [channel.workspace_id]);
   const plan = org.rows[0]?.plan || "starter";
@@ -850,10 +1120,14 @@ ${RULES}`;
   const sentDay = await db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND is_draft=false AND created_at >= now() - interval '1 day'`, [channel.workspace_id]);
   if (Number(sentHour.rows[0].c) >= MAX_SENDS_HOUR || Number(sentDay.rows[0].c) >= MAX_SENDS_DAY) return;
   if (!contact.zernio_conversation_id) return;
+  const connQ = await db.query(`SELECT api_key, status FROM receptionist_tenantmessagingconnection WHERE workspace_id=$1 LIMIT 1`, [channel.workspace_id]);
+  const conn = connQ.rows[0];
+  if (conn && conn.status === "needs_attention") return;
+  const sendKey = conn && conn.status === "connected" && conn.api_key ? conn.api_key : env.ZERNIO_API_KEY;
   const base = env.ZERNIO_BASE_URL || "https://zernio.com/api/v1";
   const resp = await fetch(`${base}/inbox/conversations/${contact.zernio_conversation_id}/messages`, {
     method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${env.ZERNIO_API_KEY}` },
+    headers: { "content-type": "application/json", authorization: `Bearer ${sendKey}` },
     body: JSON.stringify({ accountId: channel.zernio_account_id, message: reply })
   });
   if (!resp.ok) return;
@@ -861,8 +1135,111 @@ ${RULES}`;
   const sentId = String(data?.message?.id || data?.messageId || data?.id || "");
   await db.query(`UPDATE receptionist_message SET is_draft=false, zernio_message_id=$1 WHERE id=$2`, [sentId, outId]);
 }
+var ZBASE = "https://zernio.com/api/v1";
+async function zget(apiKey, path) {
+  const resp = await fetch(ZBASE + path, { headers: { authorization: `Bearer ${apiKey}` } });
+  if (!resp.ok) {
+    const e = new Error("zernio " + resp.status);
+    e.status = resp.status;
+    throw e;
+  }
+  return resp.json();
+}
+async function zpost(apiKey, path, body) {
+  const resp = await fetch(ZBASE + path, { method: "POST", headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (!resp.ok) {
+    const e = new Error("zernio " + resp.status);
+    e.status = resp.status;
+    throw e;
+  }
+  return resp.json();
+}
+async function validateTenantKey(apiKey, workspaceId, workspaceName) {
+  try {
+    await zget(apiKey, "/accounts");
+    const byExt = await zget(apiKey, `/profiles?externalId=${encodeURIComponent(workspaceId)}`).catch(() => ({}));
+    let profile = (byExt.profiles || [])[0] || byExt.profile;
+    if (!profile) {
+      const all = await zget(apiKey, "/profiles");
+      const profiles = all.profiles || [];
+      if (profiles.length === 1) profile = profiles[0];
+    }
+    if (!profile) {
+      const made = await zpost(apiKey, "/profiles", { name: workspaceName.slice(0, 80), externalId: workspaceId });
+      profile = made.profile;
+    }
+    return { profileId: String(profile?._id || profile?.id || ""), error: "" };
+  } catch (e) {
+    if (e.status === 401 || e.status === 403) return { profileId: "", error: "That key was not accepted. Copy the full key from your messaging account and paste it again." };
+    if (e.status === 402) return { profileId: "", error: "Your messaging plan covers 2 numbers. Add a card in your messaging account to connect more." };
+    return { profileId: "", error: "Could not reach the messaging service. Please try again." };
+  }
+}
+async function tenantConnectUrl(apiKey, profileId, redirectUrl) {
+  const data = await zget(apiKey, `/connect/whatsapp?profileId=${encodeURIComponent(profileId)}&redirect_url=${encodeURIComponent(redirectUrl)}`);
+  const url = data.authUrl || data.data?.authUrl;
+  if (!url) throw new Error("no authUrl");
+  return url;
+}
+async function tenantConfirmAndBind(db, conn, profileId, accountId, webhookUrl) {
+  const accounts = await zget(conn.api_key, `/accounts?profileId=${encodeURIComponent(profileId)}&platform=whatsapp`);
+  const list = accounts.accounts || [];
+  const match = list.find((a) => String(a._id || a.id) === accountId);
+  if (!match) return { ok: false, msg: "That number was not found on your messaging account. Please try again." };
+  const secret = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  let webhookId = "", webhookOk = false;
+  try {
+    const hook = await zpost(conn.api_key, "/webhooks/settings", {
+      name: "revup-" + conn.workspace_id,
+      url: webhookUrl,
+      secret,
+      events: ["message.received", "message.delivered", "message.read", "account.disconnected"],
+      profileIds: [profileId]
+    });
+    webhookId = String(hook.webhook?._id || hook.webhook?.id || "");
+    if (webhookId) {
+      const t = await zpost(conn.api_key, "/webhooks/test", { webhookId });
+      webhookOk = !!t.success;
+    }
+  } catch {
+  }
+  const phone = String(match.username || match.phoneNumber || "").replace(/^\+/, "");
+  await db.query(
+    `UPDATE receptionist_tenantmessagingconnection SET account_id=$1, phone_number=$2, webhook_id=$3, webhook_secret=$4, status='connected', last_error=$5, updated_at=now() WHERE workspace_id=$6`,
+    [accountId, phone, webhookId, webhookId ? secret : "", webhookOk ? "" : "Webhook check did not pass yet - replies may be delayed.", conn.workspace_id]
+  );
+  const ex = await db.query(`SELECT id FROM receptionist_zerniochannel WHERE workspace_id=$1`, [conn.workspace_id]);
+  if (ex.rows[0]) {
+    await db.query(
+      `UPDATE receptionist_zerniochannel SET zernio_account_id=$1, zernio_profile_id=$2, phone_number=$3, label=$4, is_sandbox=false WHERE workspace_id=$5`,
+      [accountId, profileId, phone, match.name || "WhatsApp", conn.workspace_id]
+    );
+  } else {
+    await db.query(
+      `INSERT INTO receptionist_zerniochannel(id,workspace_id,zernio_account_id,zernio_profile_id,phone_number,label,is_sandbox,connected_at)
+       VALUES($1,$2,$3,$4,$5,$6,false,now())`,
+      [crypto.randomUUID(), conn.workspace_id, accountId, profileId, phone, match.name || "WhatsApp"]
+    );
+  }
+  return { ok: true, msg: webhookOk ? "WhatsApp connected. Your receptionist is live on your number." : "Connected, but the delivery check did not pass yet - replies may be delayed." };
+}
+async function tenantWebhookSecret(db, payload) {
+  const account = payload?.message?.account || payload?.account || {};
+  const accountId = account.accountId || account._id || payload?.accountId || "";
+  const profileId = account.profileId || payload?.profileId || "";
+  if (accountId) {
+    const r = await db.query(`SELECT webhook_secret FROM receptionist_tenantmessagingconnection WHERE account_id=$1 AND webhook_secret<>'' LIMIT 1`, [accountId]);
+    if (r.rows[0]) return r.rows[0].webhook_secret;
+  }
+  if (profileId) {
+    const r = await db.query(`SELECT webhook_secret FROM receptionist_tenantmessagingconnection WHERE profile_id=$1 AND webhook_secret<>'' LIMIT 1`, [profileId]);
+    if (r.rows[0]) return r.rows[0].webhook_secret;
+  }
+  return "";
+}
 
 // src/index.ts
+init_reviews();
 var import_spark_md5 = __toESM(require_spark_md5(), 1);
 function pool(env) {
   return new Pool({ connectionString: env.DATABASE_URL, max: 3, connectionTimeoutMillis: 15e3, idleTimeoutMillis: 0 });
@@ -884,6 +1261,7 @@ function navLinks(user) {
   if (show("social")) h += `<a href="/analytics">Analytics</a>`;
   if (show("reviews")) h += `<a href="/radar">Radar</a>`;
   if (show("social")) h += `<a href="/posts">Posts</a>`;
+  if (show("social")) h += `<a href="/media">Media</a>`;
   h += `<a href="/onboarding">Onboarding</a>`;
   if (show("reviews")) h += `<a href="/reviews">Reviews</a>`;
   if (show("receptionist")) h += `<a href="/receptionist">Receptionist</a>`;
@@ -1247,6 +1625,25 @@ async function reviewsPage(db, user, mem, base, msg = "") {
 <td><a href="${base}/r/${esc(l.short_code)}" target="_blank">/r/${esc(l.short_code)}</a></td>
 <td>${l.clicked_at ? `<span class="ok">clicked ${new Date(l.clicked_at).toLocaleString("en-ZA")}</span>` : `<span class="mut">not yet</span>`}</td>
 <td class="mut">${new Date(l.created_at).toLocaleDateString("en-ZA")}</td></tr>`).join("");
+  const contacts = await db.query(
+    `SELECT id, name, wa_id, review_status, issue_note, opted_out FROM receptionist_contact
+     WHERE workspace_id=$1 AND wa_id <> '' ORDER BY updated_at DESC LIMIT 50`,
+    [mem.workspace_id]
+  );
+  const events = await db.query(
+    `SELECT e.*, c.name AS contact_name FROM receptionist_reviewevent e
+     JOIN receptionist_contact c ON c.id=e.contact_id
+     WHERE e.workspace_id=$1 ORDER BY e.created_at DESC LIMIT 20`,
+    [mem.workspace_id]
+  );
+  const contactOpts = contacts.rows.filter((c) => !c.opted_out).map((c) => `<option value="${c.id}">${esc(c.name || c.wa_id)}</option>`).join("");
+  const evRows = events.rows.map((e) => `<tr>
+<td>${esc(e.contact_name)}</td><td>${esc(e.step.replace("_", " "))}</td>
+<td>${e.status === "sent" ? `<span class="ok">sent</span>` : e.status === "failed" ? `<span class="bad">failed</span>` : esc(e.status)}</td>
+<td class="mut">${new Date(e.scheduled_for).toLocaleString("en-ZA")}</td>
+<td class="mut">${e.error ? esc(e.error) : ""}</td></tr>`).join("");
+  const issues = contacts.rows.filter((c) => c.review_status === "issue_flagged");
+  const statusLabel = { new: "new", check_in_sent: "check-in sent", review_requested: "review asked", clicked: "clicked", unsubscribed: "opted out", issue_flagged: "issue" };
   return layout("Reviews", `
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 ${b.google_review_url ? `<p>Google review destination: <a href="${esc(b.google_review_url)}">${esc(b.google_review_url)}</a></p>` : `<div class="card" style="border-color:var(--brand)"><h2 style="margin-top:0">First: where should reviews go?</h2><p class="mut">Paste your Google review link (from Google Business Profile \u2192 "Ask for reviews"). Every tracked link you create sends customers here.</p><form method="post" action="/reviews/destination"><input name="google_review_url" placeholder="https://g.page/r/\u2026" required><button>Save and continue</button></form></div>`}
@@ -1258,7 +1655,24 @@ ${b.google_review_url ? `<h2>New review link</h2>
 <p class="mut">Send the /r/\u2026 link to the customer. It redirects to your Google review page and records the click.</p>
 </form></div>` : ""}
 <h2>Links</h2>
-<div class="card">${links.rows.length ? `<table><tr><th>Customer</th><th>Link</th><th>Click</th><th>Created</th></tr>${rows}</table>` : `<p class="mut">No review links yet.</p>`}</div>`, user);
+<div class="card">${links.rows.length ? `<table><tr><th>Customer</th><th>Link</th><th>Click</th><th>Created</th></tr>${rows}</table>` : `<p class="mut">No review links yet.</p>`}</div>
+
+<h2>Review requests on WhatsApp</h2>
+<div class="card">
+<p>Automatic pipeline per finished visit: a friendly check-in 15 minutes after the job, the review request with a tracked link 2 hours later, and one reminder after 48 hours if the link was never clicked. Customers can reply STOP at any time. A negative reply to the check-in flags the customer here for a personal call first.</p>
+<p><b>Status: ${b.review_requests_enabled ? '<span class="ok">ON</span>' : '<span class="bad">OFF</span>'}</b>
+<form method="post" action="/reviews/toggle" style="display:inline"><button class="btn-secondary">${b.review_requests_enabled ? "Switch off" : "Switch on"}</button></form></p>
+${b.review_requests_enabled && contacts.rows.length ? `<form method="post" action="/reviews/pipeline"><label>Mark a visit done<select name="contact_id">${contactOpts}</select></label><button>Start the pipeline</button></form>` : ""}
+</div>
+
+${issues.length ? `<h2>Needs a personal call</h2>
+<div class="card">${issues.map((c) => `<p><b>${esc(c.name || c.wa_id)}</b>: ${esc(c.issue_note || "negative reply")} <form method="post" action="/reviews/resolve" style="display:inline"><input type="hidden" name="contact_id" value="${c.id}"><button class="link">Resolved</button></form></p>`).join("")}</div>` : ""}
+
+<h2>Pipeline activity</h2>
+<div class="card">${events.rows.length ? `<table><tr><th>Customer</th><th>Step</th><th>Status</th><th>When</th><th>Note</th></tr>${evRows}</table>` : `<p class="mut">Nothing yet. Mark a visit done above to start the flow.</p>`}</div>
+
+<h2>Customers</h2>
+<div class="card">${contacts.rows.length ? `<table><tr><th>Name</th><th>Phone</th><th>Review status</th></tr>${contacts.rows.map((c) => `<tr><td>${esc(c.name || "-")}</td><td class="mut">${esc(c.wa_id)}</td><td>${c.opted_out ? '<span class="bad">opted out</span>' : esc(statusLabel[c.review_status] || c.review_status || "new")}</td></tr>`).join("")}</table>` : `<p class="mut">No customers yet.</p>`}</div>`, user);
 }
 function newPostPage(user, mem, pre, msg = "") {
   return layout("New post", `
@@ -1267,7 +1681,9 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <label>Topic<input name="topic" maxlength="200" value="${esc(pre.topic || "")}" placeholder="e.g. teeth whitening special this month" required></label>
 <button class="btn-secondary">Draft with AI</button>
 </form></div>
+${pre.media ? `<div class="card"><h2 style="margin-top:0">Attached image</h2><img src="/media/${esc(pre.media)}/raw" style="max-width:280px;border-radius:8px"></div>` : ""}
 <div class="card"><form method="post" action="/posts/new">
+${pre.media ? `<input type="hidden" name="media_id" value="${esc(pre.media)}">` : ""}
 <label>Title<input name="title" maxlength="200" value="${esc(pre.title || "")}" placeholder="Internal title"></label>
 <label>Caption<textarea name="caption" rows="6" placeholder="What should go out?">${esc(pre.caption || "")}</textarea></label>
 <button>Save draft</button>
@@ -1446,6 +1862,19 @@ var index_default = {
   async fetch(req, env) {
     const res = await handle(req, env);
     return withSecurity(res, new URL(req.url).pathname);
+  },
+  async scheduled(_event, env, ctx) {
+    const db = pool(env);
+    try {
+      ctx.waitUntil((async () => {
+        await runDueReviewEvents(db, env, "https://revup.nahalabs.co.za");
+        await db.end().catch(() => {
+        });
+      })());
+    } catch {
+      await db.end().catch(() => {
+      });
+    }
   }
 };
 async function handle(req, env) {
@@ -1470,13 +1899,23 @@ async function handle(req, env) {
   if (path === "/webhooks/zernio" && req.method === "POST") {
     const raw = await req.text();
     const sig = req.headers.get("x-zernio-signature") || req.headers.get("x-late-signature") || "";
-    if (!await verifyZernioSignature(env.ZERNIO_WEBHOOK_SECRET || "", raw, sig.toLowerCase()))
-      return json({ ok: false }, 403);
     let payload = {};
     try {
       payload = JSON.parse(raw);
     } catch {
       return json({ ok: false }, 400);
+    }
+    if (!await verifyZernioSignature(env.ZERNIO_WEBHOOK_SECRET || "", raw, sig.toLowerCase())) {
+      const tdb = pool(env);
+      let tenantSecret = "";
+      try {
+        tenantSecret = await tenantWebhookSecret(tdb, payload);
+      } finally {
+        await tdb.end().catch(() => {
+        });
+      }
+      if (!tenantSecret || !await verifyZernioSignature(tenantSecret, raw, sig.toLowerCase()))
+        return json({ ok: false }, 403);
     }
     const eventId = String(payload.id || req.headers.get("x-zernio-event-id") || "");
     const db2 = pool(env);
@@ -1515,10 +1954,12 @@ async function handle(req, env) {
     const db2 = pool(env);
     try {
       const r = await db2.query(
-        `UPDATE receptionist_reviewlink SET clicked_at=COALESCE(clicked_at, now()) WHERE short_code=$1 RETURNING original_url`,
+        `UPDATE receptionist_reviewlink SET clicked_at=COALESCE(clicked_at, now()) WHERE short_code=$1 RETURNING original_url, contact_id, clicked_at`,
         [rm[1]]
       );
       if (!r.rows[0]) return html(layout("Link not found", `<p class="bad">This review link doesn't exist.</p>`), 404);
+      await cancelPending(db2, r.rows[0].contact_id, "reminder");
+      await db2.query(`UPDATE receptionist_contact SET review_status='clicked', updated_at=now() WHERE id=$1 AND review_status NOT IN ('unsubscribed','issue_flagged') AND NOT opted_out`, [r.rows[0].contact_id]);
       return new Response(null, { status: 302, headers: { location: r.rows[0].original_url } });
     } finally {
       await db2.end().catch(() => {
@@ -1730,6 +2171,74 @@ async function handle(req, env) {
 <button>Create link</button></form></div>
 <div class="card"><table><tr><th>Prospect</th><th>Link</th><th>Clicks</th></tr>${rows || '<tr><td colspan="3" class="mut">No links yet.</td></tr>'}</table></div>`, user));
     }
+    if (path === "/receptionist/connect") {
+      const connQ = await db.query(`SELECT * FROM receptionist_tenantmessagingconnection WHERE workspace_id=$1 LIMIT 1`, [mem.workspace_id]);
+      const conn = connQ.rows[0];
+      const msg = url.searchParams.get("msg") || "", err = url.searchParams.get("err") || "";
+      if (req.method === "POST") {
+        const f = await formData(req);
+        if (f.action === "save_key") {
+          const key = (f.api_key || "").trim();
+          if (!key) return redirect("/receptionist/connect?err=" + encodeURIComponent("Paste the key from your messaging account first."));
+          const v = await validateTenantKey(key, mem.workspace_id, mem.workspace_name);
+          if (v.error) return redirect("/receptionist/connect?err=" + encodeURIComponent(v.error));
+          await db.query(
+            `INSERT INTO receptionist_tenantmessagingconnection(id,workspace_id,api_key,profile_id,status,last_error,created_at,updated_at)
+               VALUES($1,$2,$3,$4,'key_valid','',now(),now())
+               ON CONFLICT (workspace_id) DO UPDATE SET api_key=EXCLUDED.api_key, profile_id=EXCLUDED.profile_id, status='key_valid', last_error='', updated_at=now()`,
+            [crypto.randomUUID(), mem.workspace_id, key, v.profileId]
+          );
+          return redirect("/receptionist/connect?msg=" + encodeURIComponent("Key saved. Now connect your WhatsApp."));
+        }
+        if (f.action === "start") {
+          if (!conn || !conn.profile_id) return redirect("/receptionist/connect?err=" + encodeURIComponent("Save your API key first."));
+          const cb = `${base}/receptionist/connect/callback?ws=${mem.workspace_id}&u=${user.id}&p=${conn.profile_id}`;
+          let authUrl = "";
+          try {
+            authUrl = await tenantConnectUrl(conn.api_key, conn.profile_id, cb);
+          } catch (e) {
+            return redirect("/receptionist/connect?err=" + encodeURIComponent(e.status === 402 ? "Your messaging plan covers 2 numbers. Add a card in your messaging account to connect more." : "Could not start the connection. Please try again."));
+          }
+          await db.query(`UPDATE receptionist_tenantmessagingconnection SET status='connecting', updated_at=now() WHERE workspace_id=$1`, [mem.workspace_id]);
+          return new Response(null, { status: 303, headers: { location: authUrl } });
+        }
+        return redirect("/receptionist/connect");
+      }
+      const step = conn ? conn.status === "connected" ? 3 : 2 : 1;
+      return html(layout("Connect WhatsApp", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}</p>` : ""}
+<div class="card"><h2 style="margin-top:0">Connect your own WhatsApp number</h2>
+<p class="mut">Three one-time steps. Your customers then chat with YOUR number, and the receptionist answers them with your business details.</p>
+<h3>1. Create your messaging account ${step > 1 ? '<span class="ok">&#10003;</span>' : ""}</h3>
+<p class="mut">Open a free account with our messaging partner, then copy your API key from its settings.</p>
+<h3>2. Paste your API key ${step > 2 ? '<span class="ok">&#10003;</span>' : ""}</h3>
+${conn && conn.status === "connected" ? `<p class="ok">Number connected: +${esc(conn.phone_number || "")}</p>` : `<form method="post"><input type="hidden" name="action" value="save_key"><label>API key<input name="api_key" required maxlength="200" autocomplete="off"></label><button>Save key</button></form>`}
+${conn && conn.status !== "connected" ? `<h3>3. Connect WhatsApp</h3><form method="post"><input type="hidden" name="action" value="start"><button class="btn btn-primary">Connect WhatsApp</button><p class="mut">You will scan a QR code with the WhatsApp app on your phone - the same way WhatsApp Web pairs.</p></form>` : ""}
+${conn && conn.status === "connected" && conn.last_error ? `<p class="warn">${esc(conn.last_error)}</p>` : ""}
+</div>`, user));
+    }
+    if (path === "/receptionist/connect/callback") {
+      const ws = url.searchParams.get("ws") || "", u = url.searchParams.get("u") || "", p = url.searchParams.get("p") || "";
+      if (ws !== mem.workspace_id || u !== user.id) return html(layout("Connect WhatsApp", `<p class="bad">The connection did not match this business. Please try again.</p>`), 400);
+      const connQ = await db.query(`SELECT * FROM receptionist_tenantmessagingconnection WHERE workspace_id=$1 LIMIT 1`, [ws]);
+      const conn = connQ.rows[0];
+      if (!conn || p !== conn.profile_id) return redirect("/receptionist/connect?err=" + encodeURIComponent("Your connection session expired. Please try again."));
+      const error = url.searchParams.get("error") || "";
+      if (error) {
+        await db.query(`UPDATE receptionist_tenantmessagingconnection SET status='key_valid', updated_at=now() WHERE workspace_id=$1`, [ws]);
+        const msg = /already/i.test(error) ? "This number is connected somewhere else. Disconnect it there first, then try again." : "The connection was cancelled before it finished. Nothing was connected.";
+        return redirect("/receptionist/connect?err=" + encodeURIComponent(msg));
+      }
+      const connected = url.searchParams.get("connected") || "", profileId = url.searchParams.get("profileId") || "", accountId = url.searchParams.get("accountId") || "";
+      if (connected !== "whatsapp" || !profileId || !accountId || profileId !== conn.profile_id)
+        return redirect("/receptionist/connect?err=" + encodeURIComponent("The connection came back incomplete. Please try again."));
+      try {
+        const r = await tenantConfirmAndBind(db, conn, profileId, accountId, `${base}/webhooks/zernio`);
+        return redirect("/receptionist/connect?" + (r.ok ? "msg" : "err") + "=" + encodeURIComponent(r.msg));
+      } catch (e) {
+        return redirect("/receptionist/connect?err=" + encodeURIComponent("Your number connected, but we could not confirm it yet. Refresh in a moment."));
+      }
+    }
     if (path === "/receptionist") {
       const [ch, prof, usedM, planRow] = await Promise.all([
         db.query(`SELECT phone_number, label, is_sandbox, connected_at FROM receptionist_zerniochannel WHERE workspace_id=$1`, [mem.workspace_id]),
@@ -1743,7 +2252,7 @@ async function handle(req, env) {
       const chan = ch.rows.map((c) => `<tr><td>+${esc(c.phone_number || "")}</td><td>${esc(c.label || "")}</td><td>${c.is_sandbox ? "demo line" : "live"}</td></tr>`).join("");
       const p = prof.rows[0];
       return html(layout("Receptionist", `
-${!ch.rows.length ? `<div class="card" style="border-color:var(--brand)"><h2 style="margin-top:0">Connect your WhatsApp</h2><p>Your receptionist answers customers on your own business WhatsApp number. Contact NahaLabs to connect your number - it takes a few minutes.</p></div>` : ""}
+${!ch.rows.length ? `<div class="card" style="border-color:var(--brand)"><h2 style="margin-top:0">Connect your WhatsApp</h2><p>Your receptionist answers customers on your own business WhatsApp number. <a href="/receptionist/connect">Connect it yourself in three steps</a> - it takes a few minutes.</p></div>` : ""}
 <div class="card"><h2 style="margin-top:0">Your receptionist</h2>
 <p>${p ? `${esc(p.business_name || mem.org_name)} \xB7 ${esc(p.industry || "general")} \xB7 ${p.is_active ? '<span class="ok">answering</span>' : '<span class="warn">paused</span>'}` : "Tell RevUp about your business in onboarding so the receptionist knows what to say."}</p>
 <p class="mut">Business details, hours and prices come from <a href="/onboarding">onboarding</a>. Conversations live in your <a href="/inbox">inbox</a> - step in any time.</p></div>
@@ -1861,6 +2370,49 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
       await db.query(`UPDATE frontdesk_followup_draft SET status='approved', updated_at=now() WHERE id=$1 AND workspace_id=$2`, [fappr[1], mem.workspace_id]);
       return redirect("/frontdesk");
     }
+    if (path === "/media") {
+      if (req.method === "POST") {
+        const fd = await req.formData();
+        const file = fd.get("file");
+        if (!(file instanceof File) || !file.size) return redirect("/media?err=" + encodeURIComponent("Choose an image first."));
+        if (!(file.type || "").startsWith("image/")) return redirect("/media?err=" + encodeURIComponent("Images only (jpg, png, webp, gif)."));
+        if (file.size > 2 * 1024 * 1024) return redirect("/media?err=" + encodeURIComponent("That image is over 2 MB - please use a smaller one."));
+        const caps = await db.query(`SELECT count(*) c, COALESCE(sum(size),0) b FROM cf_media WHERE workspace_id=$1`, [mem.workspace_id]);
+        if (Number(caps.rows[0].c) >= 25) return redirect("/media?err=" + encodeURIComponent("Library full (25 images on the free library) - delete one first."));
+        if (Number(caps.rows[0].b) + file.size > 50 * 1024 * 1024) return redirect("/media?err=" + encodeURIComponent("Library storage limit reached (50 MB) - delete something first."));
+        const buf = Buffer.from(await file.arrayBuffer());
+        await db.query(
+          `INSERT INTO cf_media(id,workspace_id,filename,mime,size,data) VALUES($1,$2,$3,$4,$5,$6)`,
+          [crypto.randomUUID(), mem.workspace_id, (file.name || "image").slice(0, 200), file.type, file.size, buf]
+        );
+        return redirect("/media?msg=" + encodeURIComponent("Image added to your library."));
+      }
+      const items = await db.query(`SELECT id, filename, mime, size, created_at FROM cf_media WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 60`, [mem.workspace_id]);
+      const msg = url.searchParams.get("msg") || "", err = url.searchParams.get("err") || "";
+      const cards = items.rows.map((m) => `<div class="card" style="padding:10px">
+<img src="/media/${m.id}/raw" alt="${esc(m.filename)}" style="width:100%;height:140px;object-fit:cover;border-radius:8px;background:var(--line)">
+<p style="margin:6px 0 2px"><b>${esc(m.filename)}</b><br><span class="mut">${Math.round(m.size / 1024)} KB \xB7 ${new Date(m.created_at).toLocaleDateString("en-ZA")}</span></p>
+<p style="margin:4px 0"><a href="/posts/new?media=${m.id}">Use in a post</a></p>
+<form method="post" action="/media/${m.id}/delete" onsubmit="return confirm('Delete this image?')"><button class="link" style="color:var(--bad)">Delete</button></form>
+</div>`).join("");
+      return html(layout("Media library", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}</p>` : ""}
+<div class="card"><h2 style="margin-top:0">Add an image</h2>
+<form method="post" enctype="multipart/form-data"><input type="file" name="file" accept="image/*" required><button>Upload</button></form>
+<p class="mut">Images up to 2 MB. Your library holds 25 images (50 MB) - plenty for a month of posts.</p></div>
+<div class="grid">${cards || '<div class="card"><p class="mut">No images yet. Your first upload lands here.</p></div>'}</div>`, user));
+    }
+    const mraw = /^\/media\/([0-9a-f-]{36})\/raw$/.exec(path);
+    if (mraw) {
+      const r = await db.query(`SELECT mime, data FROM cf_media WHERE id=$1 AND workspace_id=$2`, [mraw[1], mem.workspace_id]);
+      if (!r.rows[0]) return new Response("not found", { status: 404 });
+      return new Response(new Uint8Array(r.rows[0].data), { headers: { "content-type": r.rows[0].mime, "cache-control": "private, max-age=3600" } });
+    }
+    const mdel = /^\/media\/([0-9a-f-]{36})\/delete$/.exec(path);
+    if (mdel && req.method === "POST") {
+      await db.query(`DELETE FROM cf_media WHERE id=$1 AND workspace_id=$2`, [mdel[1], mem.workspace_id]);
+      return redirect("/media?msg=" + encodeURIComponent("Image deleted."));
+    }
     if (path === "/posts") {
       const msg = url.searchParams.get("msg") || "";
       return html((msg ? `<p class="ok">${esc(msg)}</p>` : "") + await postsPage(db, user, mem));
@@ -1874,9 +2426,9 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
         try {
           await client.query("BEGIN");
           await client.query(
-            `INSERT INTO composer_post(id,title,caption,first_comment,internal_notes,tags,workspace_id,author_id,created_at,updated_at)
-               VALUES($1,$2,$3,'','','{}'::jsonb,$4,$5,now(),now())`,
-            [postId, (f.title || "").trim(), (f.caption || "").trim(), mem.workspace_id, user.id]
+            `INSERT INTO composer_post(id,title,caption,first_comment,internal_notes,tags,workspace_id,author_id,media_id,created_at,updated_at)
+               VALUES($1,$2,$3,'','','{}'::jsonb,$4,$5,$6,now(),now())`,
+            [postId, (f.title || "").trim(), (f.caption || "").trim(), mem.workspace_id, user.id, /^[0-9a-f-]{36}$/.test(f.media_id || "") ? f.media_id : null]
           );
           const accs = await client.query(
             `SELECT id, provider FROM social_accounts_social_account WHERE workspace_id=$1 AND connection_status='connected'`,
@@ -1898,7 +2450,7 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
           client.release();
         }
       }
-      return html(newPostPage(user, mem, {}, url.searchParams.get("msg") || ""));
+      return html(newPostPage(user, mem, { media: url.searchParams.get("media") || "" }, url.searchParams.get("msg") || ""));
     }
     if (path === "/posts/draft" && req.method === "POST") {
       const f = await formData(req);
@@ -1949,6 +2501,27 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
       }
     }
     if (path === "/reviews") return html(await reviewsPage(db, user, mem, base, url.searchParams.get("msg") || ""));
+    if (path === "/reviews/toggle" && req.method === "POST") {
+      const cur = await db.query(`SELECT review_requests_enabled FROM receptionist_businessprofile WHERE workspace_id=$1 LIMIT 1`, [mem.workspace_id]);
+      if (!cur.rows[0]) return redirect("/reviews");
+      await db.query(`UPDATE receptionist_businessprofile SET review_requests_enabled=$1, updated_at=now() WHERE workspace_id=$2`, [!cur.rows[0].review_requests_enabled, mem.workspace_id]);
+      return redirect("/reviews?msg=" + encodeURIComponent(!cur.rows[0].review_requests_enabled ? "Review requests are ON." : "Review requests are OFF."));
+    }
+    if (path === "/reviews/pipeline" && req.method === "POST") {
+      const f = await formData(req);
+      const id = await startPipeline(db, mem.workspace_id, f.contact_id || "", null);
+      return redirect("/reviews?msg=" + encodeURIComponent(id ? "Visit marked done - check-in goes out in 15 minutes." : "That customer has opted out, so nothing was scheduled."));
+    }
+    if (path === "/reviews/resolve" && req.method === "POST") {
+      const f = await formData(req);
+      const c = await db.query(`SELECT id FROM receptionist_contact WHERE id=$1 AND workspace_id=$2`, [f.contact_id || "", mem.workspace_id]);
+      if (c.rows[0]) await resolveIssue(db, c.rows[0].id);
+      return redirect("/reviews?msg=" + encodeURIComponent("Issue marked resolved - the customer is back in the normal flow."));
+    }
+    if (path === "/reviews/run-due" && req.method === "POST") {
+      const out = await runDueReviewEvents(db, env, base, mem.workspace_id);
+      return redirect("/reviews?msg=" + encodeURIComponent(`Ran ${out.due} due step(s): ` + Object.entries(out.results).map(([k, v]) => `${k} ${v}`).join(", ")));
+    }
     if (path === "/reviews/destination" && req.method === "POST") {
       const f = await formData(req);
       if (!/^https:\/\//.test(f.google_review_url || "")) return redirect("/reviews");

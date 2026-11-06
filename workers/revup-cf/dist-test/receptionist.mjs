@@ -1,3 +1,268 @@
+var __defProp = Object.defineProperty;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __esm = (fn, res, err) => function __init() {
+  if (err) throw err[0];
+  try {
+    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+  } catch (e) {
+    throw err = [e], e;
+  }
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+
+// src/reviews.ts
+var reviews_exports = {};
+__export(reviews_exports, {
+  CHECK_IN_DELAY_MIN: () => CHECK_IN_DELAY_MIN,
+  OPT_OUT_FOOTER: () => OPT_OUT_FOOTER,
+  REMINDER_DELAY_H: () => REMINDER_DELAY_H,
+  REVIEW_REQUEST_DELAY_H: () => REVIEW_REQUEST_DELAY_H,
+  cancelPending: () => cancelPending,
+  checkInMessage: () => checkInMessage,
+  flagIssue: () => flagIssue,
+  looksNegative: () => looksNegative,
+  reminderMessage: () => reminderMessage,
+  resolveIssue: () => resolveIssue,
+  reviewRequestMessage: () => reviewRequestMessage,
+  runDueReviewEvents: () => runDueReviewEvents,
+  sendEvent: () => sendEvent,
+  startPipeline: () => startPipeline,
+  unsubscribeContact: () => unsubscribeContact
+});
+function looksNegative(body) {
+  const t = (body || "").toLowerCase();
+  return NEGATIVE_KEYWORDS.some((w) => t.includes(w));
+}
+function checkInMessage(profile, wsName, contact) {
+  return `Hey ${firstName(contact)}, this is ${businessName(profile, wsName)}. Just checking in to make sure everything looks good with the work we did today.`;
+}
+function reviewRequestMessage(profile, wsName, contact, link) {
+  return `Hi ${firstName(contact)}, ${businessName(profile, wsName)} here. Just wanted to say thanks again for the opportunity. If you have 30 seconds, would you mind sharing your experience in a quick Google review? It helps other customers know they can trust us: ${link}`;
+}
+function reminderMessage(link) {
+  return `Just a quick follow-up. If you haven't had a chance yet, we'd really appreciate a quick Google review: ${link}`;
+}
+async function startPipeline(db, workspaceId, contactId, bookingId = null) {
+  const c = await db.query(`SELECT opted_out FROM receptionist_contact WHERE id=$1 AND workspace_id=$2`, [contactId, workspaceId]);
+  if (!c.rows[0] || c.rows[0].opted_out) return null;
+  const id = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO receptionist_reviewevent(id,step,status,scheduled_for,created_at,booking_id,contact_id,workspace_id)
+     VALUES($1,'check_in','scheduled',now() + ($2 || ' minutes')::interval,now(),$3,$4,$5)`,
+    [id, String(CHECK_IN_DELAY_MIN), bookingId, contactId, workspaceId]
+  );
+  return id;
+}
+async function ensureLink(db, workspaceId, contactId) {
+  const ex = await db.query(`SELECT * FROM receptionist_reviewlink WHERE contact_id=$1 LIMIT 1`, [contactId]);
+  if (ex.rows[0]) return ex.rows[0];
+  const bp = await db.query(`SELECT google_review_url FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [workspaceId]);
+  const url = bp.rows[0]?.google_review_url || "";
+  if (!url) throw new Error("No Google review link set on the Reviews page.");
+  for (let i = 0; i < 5; i++) {
+    const code = [...crypto.getRandomValues(new Uint8Array(6))].map((b) => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[b % 32]).join("");
+    const dup = await db.query(`SELECT 1 FROM receptionist_reviewlink WHERE short_code=$1`, [code]);
+    if (!dup.rows[0]) {
+      const id = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO receptionist_reviewlink(id,workspace_id,contact_id,short_code,original_url,created_at)
+         VALUES($1,$2,$3,$4,$5,now())`,
+        [id, workspaceId, contactId, code, url]
+      );
+      return (await db.query(`SELECT * FROM receptionist_reviewlink WHERE id=$1`, [id])).rows[0];
+    }
+  }
+  throw new Error("Could not allocate a short link code.");
+}
+async function cancelPending(db, contactId, step) {
+  if (step) await db.query(`UPDATE receptionist_reviewevent SET status='cancelled' WHERE contact_id=$1 AND status='scheduled' AND step=$2`, [contactId, step]);
+  else await db.query(`UPDATE receptionist_reviewevent SET status='cancelled' WHERE contact_id=$1 AND status='scheduled'`, [contactId]);
+}
+async function unsubscribeContact(db, contactId) {
+  await db.query(`UPDATE receptionist_contact SET opted_out=true, opted_out_at=now(), review_status='unsubscribed', updated_at=now() WHERE id=$1`, [contactId]);
+  await cancelPending(db, contactId);
+}
+async function flagIssue(db, workspaceId, contactId, note) {
+  await db.query(`UPDATE receptionist_contact SET review_status='issue_flagged', issue_note=$1, needs_human=true, updated_at=now() WHERE id=$2`, [note.slice(0, 500), contactId]);
+  try {
+    await db.query(
+      `INSERT INTO receptionist_complaint(id,text,source,status,created_at,contact_id,workspace_id)
+       VALUES($1,$2,'check_in','new',now(),$3,$4)`,
+      [crypto.randomUUID(), note.slice(0, 2e3), contactId, workspaceId]
+    );
+  } catch {
+  }
+}
+async function resolveIssue(db, contactId) {
+  const r = await db.query(
+    `UPDATE receptionist_contact SET review_status='check_in_sent', issue_note='', updated_at=now() WHERE id=$1 AND review_status='issue_flagged'`,
+    [contactId]
+  );
+  return (r.rowCount || 0) > 0;
+}
+async function reviewGate(db, workspaceId) {
+  const p = await db.query(`SELECT review_requests_enabled FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [workspaceId]);
+  if (!p.rows[0] || !p.rows[0].review_requests_enabled) return "review requests are off for this workspace";
+  const org = await db.query(`SELECT o.plan FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [workspaceId]);
+  const plan = org.rows[0]?.plan || "starter";
+  if (!REVIEW_PLANS.has(plan)) return `plan ${plan} does not include review requests`;
+  const ch = await db.query(`SELECT 1 FROM receptionist_zerniochannel WHERE workspace_id=$1 LIMIT 1`, [workspaceId]);
+  if (!ch.rows[0]) return "no connected WhatsApp number";
+  return "";
+}
+async function deliver(db, env, workspaceId, contact, body) {
+  const ch = await db.query(`SELECT * FROM receptionist_zerniochannel WHERE workspace_id=$1 LIMIT 1`, [workspaceId]);
+  const channel = ch.rows[0];
+  if (!channel) throw new Error("No connected WhatsApp number.");
+  const outId = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO receptionist_message(id,direction,sender_type,body,zernio_message_id,is_draft,created_at,contact_id,workspace_id,media_urls)
+     VALUES($1,'outbound','ai',$2,'',true,now(),$3,$4,'[]'::jsonb)`,
+    [outId, body, contact.id, workspaceId]
+  );
+  const sandbox = channel.is_sandbox || channel.zernio_account_id === "6a180a034c7f364ffded3c9c";
+  const ALLOW = /* @__PURE__ */ new Set(["27672347593", "27612980377"]);
+  if (sandbox && !ALLOW.has(contact.wa_id)) throw new Error("sandbox line may only message allowlisted test numbers");
+  const budget = await db.query(
+    `SELECT count(*) FILTER (WHERE created_at >= now() - interval '1 hour') h,
+            count(*) FILTER (WHERE created_at >= now() - interval '1 day') d
+     FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND is_draft=false`,
+    [workspaceId]
+  );
+  if (Number(budget.rows[0].h) >= 20 || Number(budget.rows[0].d) >= 100) throw new Error("send budget reached");
+  if (!contact.zernio_conversation_id) throw new Error("customer has no active WhatsApp conversation yet");
+  const connQ = await db.query(`SELECT api_key, status FROM receptionist_tenantmessagingconnection WHERE workspace_id=$1 LIMIT 1`, [workspaceId]);
+  const conn = connQ.rows[0];
+  if (conn && conn.status === "needs_attention") throw new Error("messaging account needs reconnection");
+  const sendKey = conn && conn.status === "connected" && conn.api_key ? conn.api_key : env.ZERNIO_API_KEY;
+  const base = env.ZERNIO_BASE_URL || "https://zernio.com/api/v1";
+  const resp = await fetch(`${base}/inbox/conversations/${contact.zernio_conversation_id}/messages`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${sendKey}` },
+    body: JSON.stringify({ accountId: channel.zernio_account_id, message: body })
+  });
+  if (!resp.ok) throw new Error(`messaging send failed (${resp.status})`);
+  const data = await resp.json().catch(() => ({}));
+  const sentId = String(data?.message?.id || data?.messageId || data?.id || "");
+  await db.query(`UPDATE receptionist_message SET is_draft=false, zernio_message_id=$1 WHERE id=$2`, [sentId, outId]);
+}
+async function sendEvent(db, env, appUrl, event) {
+  const claim = await db.query(
+    `UPDATE receptionist_reviewevent SET status='sending' WHERE id=$1 AND status='scheduled'`,
+    [event.id]
+  );
+  if (!claim.rowCount) return "cancelled";
+  const cq = await db.query(`SELECT * FROM receptionist_contact WHERE id=$1`, [event.contact_id]);
+  const contact = cq.rows[0];
+  const wq = await db.query(`SELECT name FROM workspaces_workspace WHERE id=$1`, [event.workspace_id]);
+  const wsName = wq.rows[0]?.name || "the business";
+  const pq = await db.query(`SELECT * FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [event.workspace_id]);
+  const profile = pq.rows[0];
+  if (!contact || contact.opted_out) {
+    await db.query(`UPDATE receptionist_reviewevent SET status='cancelled' WHERE id=$1`, [event.id]);
+    await cancelPending(db, event.contact_id);
+    return "cancelled";
+  }
+  const holdReason = await reviewGate(db, event.workspace_id);
+  if (holdReason) {
+    await db.query(`UPDATE receptionist_reviewevent SET status='scheduled', scheduled_for=now() + interval '15 minutes' WHERE id=$1`, [event.id]);
+    return "held";
+  }
+  const base = appUrl.replace(/\/$/, "");
+  try {
+    if (event.step === "check_in") {
+      await deliver(db, env, event.workspace_id, contact, checkInMessage(profile, wsName, contact) + OPT_OUT_FOOTER);
+      if (contact.review_status !== "issue_flagged")
+        await db.query(`UPDATE receptionist_contact SET review_status='check_in_sent', updated_at=now() WHERE id=$1`, [contact.id]);
+      await db.query(
+        `INSERT INTO receptionist_reviewevent(id,step,status,scheduled_for,created_at,booking_id,contact_id,workspace_id)
+         VALUES($1,'review_request','scheduled',now() + ($2 || ' hours')::interval,now(),$3,$4,$5)`,
+        [crypto.randomUUID(), String(REVIEW_REQUEST_DELAY_H), event.booking_id, contact.id, event.workspace_id]
+      );
+    } else if (event.step === "review_request") {
+      const link = await ensureLink(db, event.workspace_id, contact.id);
+      await deliver(db, env, event.workspace_id, contact, reviewRequestMessage(profile, wsName, contact, `${base}/r/${link.short_code}`) + OPT_OUT_FOOTER);
+      if (contact.review_status !== "issue_flagged")
+        await db.query(`UPDATE receptionist_contact SET review_status='review_requested', updated_at=now() WHERE id=$1`, [contact.id]);
+      await db.query(
+        `INSERT INTO receptionist_reviewevent(id,step,status,scheduled_for,created_at,booking_id,contact_id,workspace_id)
+         VALUES($1,'reminder','scheduled',now() + ($2 || ' hours')::interval,now(),$3,$4,$5)`,
+        [crypto.randomUUID(), String(REMINDER_DELAY_H), event.booking_id, contact.id, event.workspace_id]
+      );
+    } else {
+      const found = await db.query(`SELECT * FROM receptionist_reviewlink WHERE contact_id=$1 LIMIT 1`, [contact.id]);
+      if (found.rows[0]?.clicked_at) {
+        await db.query(`UPDATE receptionist_reviewevent SET status='cancelled' WHERE id=$1`, [event.id]);
+        return "cancelled";
+      }
+      if (!found.rows[0]) throw new Error("No tracked link exists for this contact.");
+      await deliver(db, env, event.workspace_id, contact, reminderMessage(`${base}/r/${found.rows[0].short_code}`) + OPT_OUT_FOOTER);
+    }
+  } catch (e) {
+    await db.query(`UPDATE receptionist_reviewevent SET status='failed', error=$1 WHERE id=$2`, [String(e?.message || e).slice(0, 500), event.id]);
+    return "failed";
+  }
+  await db.query(`UPDATE receptionist_reviewevent SET status='sent', sent_at=now() WHERE id=$1`, [event.id]);
+  return "sent";
+}
+async function runDueReviewEvents(db, env, appUrl, workspaceId) {
+  const due = workspaceId ? await db.query(
+    `SELECT * FROM receptionist_reviewevent WHERE status='scheduled' AND scheduled_for <= now() AND workspace_id=$1 ORDER BY scheduled_for LIMIT 10`,
+    [workspaceId]
+  ) : await db.query(
+    `SELECT * FROM receptionist_reviewevent WHERE status='scheduled' AND scheduled_for <= now() ORDER BY scheduled_for LIMIT 10`
+  );
+  const results = {};
+  for (const ev of due.rows) {
+    const r = await sendEvent(db, env, appUrl, ev);
+    results[r] = (results[r] || 0) + 1;
+  }
+  return { due: due.rows.length, results };
+}
+var CHECK_IN_DELAY_MIN, REVIEW_REQUEST_DELAY_H, REMINDER_DELAY_H, REVIEW_PLANS, OPT_OUT_FOOTER, NEGATIVE_KEYWORDS, firstName, businessName;
+var init_reviews = __esm({
+  "src/reviews.ts"() {
+    CHECK_IN_DELAY_MIN = 15;
+    REVIEW_REQUEST_DELAY_H = 2;
+    REMINDER_DELAY_H = 48;
+    REVIEW_PLANS = /* @__PURE__ */ new Set(["starter", "growth", "business-pro"]);
+    OPT_OUT_FOOTER = "\nReply STOP to opt out.";
+    NEGATIVE_KEYWORDS = [
+      "not happy",
+      "unhappy",
+      "not satisfied",
+      "terrible",
+      "awful",
+      "horrible",
+      "worst",
+      "bad service",
+      "poor service",
+      "disappointed",
+      "complaint",
+      "problem",
+      "broken",
+      "not fixed",
+      "still leaking",
+      "refund",
+      "useless",
+      "angry",
+      "not impressed",
+      "still not working",
+      "still not fixed",
+      "came back",
+      "waste of money",
+      "rip off",
+      "ripped off",
+      "disgusted"
+    ];
+    firstName = (c) => (c.name || "").trim().split(" ")[0] || "there";
+    businessName = (p, ws) => p?.business_name || "" || ws;
+  }
+});
+
 // src/presets.ts
 var PRESETS = {
   "general": { "label": "General / other", "radar_keywords": [], "post_themes": ["Industry news with a local angle", "Customer questions answered", "Behind-the-scenes"], "hashtags": [], "responder_tone": "warm and professional", "responder_questions": [], "responder_faqs": [] },
@@ -166,8 +431,16 @@ async function handleZernioWebhook(db, env, payload) {
     [crypto.randomUUID(), body, zid, contact.id, channel.workspace_id, JSON.stringify(media)]
   );
   if (OPT_OUT.has(body.trim().toUpperCase())) {
-    await db.query(`UPDATE receptionist_contact SET opted_out=true, opted_out_at=now(), updated_at=now() WHERE id=$1`, [contact.id]);
+    const { unsubscribeContact: unsubscribeContact2 } = await Promise.resolve().then(() => (init_reviews(), reviews_exports));
+    await unsubscribeContact2(db, contact.id);
     return;
+  }
+  if (["check_in_sent", "review_requested"].includes(contact.review_status || "")) {
+    const { looksNegative: looksNegative2, flagIssue: flagIssue2 } = await Promise.resolve().then(() => (init_reviews(), reviews_exports));
+    if (looksNegative2(body)) {
+      await flagIssue2(db, channel.workspace_id, contact.id, body);
+      return;
+    }
   }
   const org = await db.query(`SELECT o.plan, o.id FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [channel.workspace_id]);
   const plan = org.rows[0]?.plan || "starter";
@@ -236,10 +509,14 @@ ${RULES}`;
   const sentDay = await db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND is_draft=false AND created_at >= now() - interval '1 day'`, [channel.workspace_id]);
   if (Number(sentHour.rows[0].c) >= MAX_SENDS_HOUR || Number(sentDay.rows[0].c) >= MAX_SENDS_DAY) return;
   if (!contact.zernio_conversation_id) return;
+  const connQ = await db.query(`SELECT api_key, status FROM receptionist_tenantmessagingconnection WHERE workspace_id=$1 LIMIT 1`, [channel.workspace_id]);
+  const conn = connQ.rows[0];
+  if (conn && conn.status === "needs_attention") return;
+  const sendKey = conn && conn.status === "connected" && conn.api_key ? conn.api_key : env.ZERNIO_API_KEY;
   const base = env.ZERNIO_BASE_URL || "https://zernio.com/api/v1";
   const resp = await fetch(`${base}/inbox/conversations/${contact.zernio_conversation_id}/messages`, {
     method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${env.ZERNIO_API_KEY}` },
+    headers: { "content-type": "application/json", authorization: `Bearer ${sendKey}` },
     body: JSON.stringify({ accountId: channel.zernio_account_id, message: reply })
   });
   if (!resp.ok) return;
@@ -247,10 +524,116 @@ ${RULES}`;
   const sentId = String(data?.message?.id || data?.messageId || data?.id || "");
   await db.query(`UPDATE receptionist_message SET is_draft=false, zernio_message_id=$1 WHERE id=$2`, [sentId, outId]);
 }
+var ZBASE = "https://zernio.com/api/v1";
+async function zget(apiKey, path) {
+  const resp = await fetch(ZBASE + path, { headers: { authorization: `Bearer ${apiKey}` } });
+  if (!resp.ok) {
+    const e = new Error("zernio " + resp.status);
+    e.status = resp.status;
+    throw e;
+  }
+  return resp.json();
+}
+async function zpost(apiKey, path, body) {
+  const resp = await fetch(ZBASE + path, { method: "POST", headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (!resp.ok) {
+    const e = new Error("zernio " + resp.status);
+    e.status = resp.status;
+    throw e;
+  }
+  return resp.json();
+}
+async function validateTenantKey(apiKey, workspaceId, workspaceName) {
+  try {
+    await zget(apiKey, "/accounts");
+    const byExt = await zget(apiKey, `/profiles?externalId=${encodeURIComponent(workspaceId)}`).catch(() => ({}));
+    let profile = (byExt.profiles || [])[0] || byExt.profile;
+    if (!profile) {
+      const all = await zget(apiKey, "/profiles");
+      const profiles = all.profiles || [];
+      if (profiles.length === 1) profile = profiles[0];
+    }
+    if (!profile) {
+      const made = await zpost(apiKey, "/profiles", { name: workspaceName.slice(0, 80), externalId: workspaceId });
+      profile = made.profile;
+    }
+    return { profileId: String(profile?._id || profile?.id || ""), error: "" };
+  } catch (e) {
+    if (e.status === 401 || e.status === 403) return { profileId: "", error: "That key was not accepted. Copy the full key from your messaging account and paste it again." };
+    if (e.status === 402) return { profileId: "", error: "Your messaging plan covers 2 numbers. Add a card in your messaging account to connect more." };
+    return { profileId: "", error: "Could not reach the messaging service. Please try again." };
+  }
+}
+async function tenantConnectUrl(apiKey, profileId, redirectUrl) {
+  const data = await zget(apiKey, `/connect/whatsapp?profileId=${encodeURIComponent(profileId)}&redirect_url=${encodeURIComponent(redirectUrl)}`);
+  const url = data.authUrl || data.data?.authUrl;
+  if (!url) throw new Error("no authUrl");
+  return url;
+}
+async function tenantConfirmAndBind(db, conn, profileId, accountId, webhookUrl) {
+  const accounts = await zget(conn.api_key, `/accounts?profileId=${encodeURIComponent(profileId)}&platform=whatsapp`);
+  const list = accounts.accounts || [];
+  const match = list.find((a) => String(a._id || a.id) === accountId);
+  if (!match) return { ok: false, msg: "That number was not found on your messaging account. Please try again." };
+  const secret = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  let webhookId = "", webhookOk = false;
+  try {
+    const hook = await zpost(conn.api_key, "/webhooks/settings", {
+      name: "revup-" + conn.workspace_id,
+      url: webhookUrl,
+      secret,
+      events: ["message.received", "message.delivered", "message.read", "account.disconnected"],
+      profileIds: [profileId]
+    });
+    webhookId = String(hook.webhook?._id || hook.webhook?.id || "");
+    if (webhookId) {
+      const t = await zpost(conn.api_key, "/webhooks/test", { webhookId });
+      webhookOk = !!t.success;
+    }
+  } catch {
+  }
+  const phone = String(match.username || match.phoneNumber || "").replace(/^\+/, "");
+  await db.query(
+    `UPDATE receptionist_tenantmessagingconnection SET account_id=$1, phone_number=$2, webhook_id=$3, webhook_secret=$4, status='connected', last_error=$5, updated_at=now() WHERE workspace_id=$6`,
+    [accountId, phone, webhookId, webhookId ? secret : "", webhookOk ? "" : "Webhook check did not pass yet - replies may be delayed.", conn.workspace_id]
+  );
+  const ex = await db.query(`SELECT id FROM receptionist_zerniochannel WHERE workspace_id=$1`, [conn.workspace_id]);
+  if (ex.rows[0]) {
+    await db.query(
+      `UPDATE receptionist_zerniochannel SET zernio_account_id=$1, zernio_profile_id=$2, phone_number=$3, label=$4, is_sandbox=false WHERE workspace_id=$5`,
+      [accountId, profileId, phone, match.name || "WhatsApp", conn.workspace_id]
+    );
+  } else {
+    await db.query(
+      `INSERT INTO receptionist_zerniochannel(id,workspace_id,zernio_account_id,zernio_profile_id,phone_number,label,is_sandbox,connected_at)
+       VALUES($1,$2,$3,$4,$5,$6,false,now())`,
+      [crypto.randomUUID(), conn.workspace_id, accountId, profileId, phone, match.name || "WhatsApp"]
+    );
+  }
+  return { ok: true, msg: webhookOk ? "WhatsApp connected. Your receptionist is live on your number." : "Connected, but the delivery check did not pass yet - replies may be delayed." };
+}
+async function tenantWebhookSecret(db, payload) {
+  const account = payload?.message?.account || payload?.account || {};
+  const accountId = account.accountId || account._id || payload?.accountId || "";
+  const profileId = account.profileId || payload?.profileId || "";
+  if (accountId) {
+    const r = await db.query(`SELECT webhook_secret FROM receptionist_tenantmessagingconnection WHERE account_id=$1 AND webhook_secret<>'' LIMIT 1`, [accountId]);
+    if (r.rows[0]) return r.rows[0].webhook_secret;
+  }
+  if (profileId) {
+    const r = await db.query(`SELECT webhook_secret FROM receptionist_tenantmessagingconnection WHERE profile_id=$1 AND webhook_secret<>'' LIMIT 1`, [profileId]);
+    if (r.rows[0]) return r.rows[0].webhook_secret;
+  }
+  return "";
+}
 export {
   customerBlock,
   handleZernioWebhook,
   industryBrief,
   profileBlock,
+  tenantConfirmAndBind,
+  tenantConnectUrl,
+  tenantWebhookSecret,
+  validateTenantKey,
   verifyZernioSignature
 };
