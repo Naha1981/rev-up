@@ -210,9 +210,12 @@ export async function handleZernioWebhook(db: Pool, env: any, payload: any): Pro
      VALUES($1,'outbound','ai',$2,'',true,now(),$3,$4,'[]'::jsonb)`,
     [outId, reply, contact.id, channel.workspace_id]);
 
-  // intake -> booking record for the owner
+  // intake -> booking record for the owner + industry board record
   const intake = draft.intake || {};
-  const detail = String(intake.detail || "").trim(), preferred = String(intake.preferred_time || "").trim();
+  let detail = String(intake.detail || "").trim();
+  const preferred = String(intake.preferred_time || "").trim();
+  const industry = String(profile.industry || "general");
+  if (industry === "restaurant" && /^\d+$/.test(detail)) detail = `Table for ${detail}`;
   if (detail || preferred) {
     try {
       await db.query(`INSERT INTO receptionist_booking(id,service,preferred_time,status,notes,created_at,contact_id,workspace_id,duration_minutes,google_event_id,value)
@@ -220,6 +223,21 @@ export async function handleZernioWebhook(db: Pool, env: any, payload: any): Pro
         [crypto.randomUUID(), detail.slice(0, 200), preferred.slice(0, 200), contact.id, channel.workspace_id]);
     } catch { /* intake is best-effort */ }
   }
+  const inName = String(intake.name || "").trim();
+  const inAddress = String(intake.address || "").trim();
+  const inPolicy = String(intake.policy_number || "").trim();
+  try {
+    if (industry === "funeral" && (inName || detail || inPolicy)) {
+      await db.query(`INSERT INTO receptionist_funeralclaim(id,deceased_name,claimant_name,policy_number,status,notes,created_at,contact_id,workspace_id)
+        VALUES($1,$2,$3,$4,'new','',now(),$5,$6)`, [crypto.randomUUID(), detail.slice(0, 200), inName.slice(0, 200), inPolicy.slice(0, 64), contact.id, channel.workspace_id]);
+    } else if (industry === "dental" && (inName || detail)) {
+      await db.query(`INSERT INTO receptionist_dentalappointment(id,patient_name,reason,status,created_at,contact_id,workspace_id)
+        VALUES($1,$2,$3,'new',now(),$4,$5)`, [crypto.randomUUID(), inName.slice(0, 200), detail.slice(0, 300), contact.id, channel.workspace_id]);
+    } else if (industry === "trades" && (detail || inAddress)) {
+      await db.query(`INSERT INTO receptionist_tradedispatch(id,job_type,address,urgent,status,created_at,contact_id,workspace_id)
+        VALUES($1,$2,$3,false,'new',now(),$4,$5)`, [crypto.randomUUID(), detail.slice(0, 120), inAddress.slice(0, 300), contact.id, channel.workspace_id]);
+    }
+  } catch { /* industry board record is best-effort */ }
 
   // send guard: reply-only, sandbox allowlist, send budget
   const sandbox = channel.is_sandbox || channel.zernio_account_id === SANDBOX_ACCOUNT_ID;

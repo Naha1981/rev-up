@@ -28,7 +28,10 @@ __export(reviews_exports, {
   resolveIssue: () => resolveIssue,
   reviewRequestMessage: () => reviewRequestMessage,
   runDueReviewEvents: () => runDueReviewEvents,
+  runDueServiceReminders: () => runDueServiceReminders,
+  scheduleServiceReminder: () => scheduleServiceReminder,
   sendEvent: () => sendEvent,
+  serviceReminderMessage: () => serviceReminderMessage,
   startPipeline: () => startPipeline,
   unsubscribeContact: () => unsubscribeContact
 });
@@ -50,8 +53,8 @@ async function startPipeline(db, workspaceId, contactId, bookingId = null) {
   if (!c.rows[0] || c.rows[0].opted_out) return null;
   const id = crypto.randomUUID();
   await db.query(
-    `INSERT INTO receptionist_reviewevent(id,step,status,scheduled_for,created_at,booking_id,contact_id,workspace_id)
-     VALUES($1,'check_in','scheduled',now() + ($2 || ' minutes')::interval,now(),$3,$4,$5)`,
+    `INSERT INTO receptionist_reviewevent(id,step,status,scheduled_for,error,created_at,booking_id,contact_id,workspace_id)
+     VALUES($1,'check_in','scheduled',now() + ($2 || ' minutes')::interval,'',now(),$3,$4,$5)`,
     [id, String(CHECK_IN_DELAY_MIN), bookingId, contactId, workspaceId]
   );
   return id;
@@ -178,8 +181,8 @@ async function sendEvent(db, env, appUrl, event) {
       if (contact.review_status !== "issue_flagged")
         await db.query(`UPDATE receptionist_contact SET review_status='check_in_sent', updated_at=now() WHERE id=$1`, [contact.id]);
       await db.query(
-        `INSERT INTO receptionist_reviewevent(id,step,status,scheduled_for,created_at,booking_id,contact_id,workspace_id)
-         VALUES($1,'review_request','scheduled',now() + ($2 || ' hours')::interval,now(),$3,$4,$5)`,
+        `INSERT INTO receptionist_reviewevent(id,step,status,scheduled_for,error,created_at,booking_id,contact_id,workspace_id)
+         VALUES($1,'review_request','scheduled',now() + ($2 || ' hours')::interval,'',now(),$3,$4,$5)`,
         [crypto.randomUUID(), String(REVIEW_REQUEST_DELAY_H), event.booking_id, contact.id, event.workspace_id]
       );
     } else if (event.step === "review_request") {
@@ -188,8 +191,8 @@ async function sendEvent(db, env, appUrl, event) {
       if (contact.review_status !== "issue_flagged")
         await db.query(`UPDATE receptionist_contact SET review_status='review_requested', updated_at=now() WHERE id=$1`, [contact.id]);
       await db.query(
-        `INSERT INTO receptionist_reviewevent(id,step,status,scheduled_for,created_at,booking_id,contact_id,workspace_id)
-         VALUES($1,'reminder','scheduled',now() + ($2 || ' hours')::interval,now(),$3,$4,$5)`,
+        `INSERT INTO receptionist_reviewevent(id,step,status,scheduled_for,error,created_at,booking_id,contact_id,workspace_id)
+         VALUES($1,'reminder','scheduled',now() + ($2 || ' hours')::interval,'',now(),$3,$4,$5)`,
         [crypto.randomUUID(), String(REMINDER_DELAY_H), event.booking_id, contact.id, event.workspace_id]
       );
     } else {
@@ -219,6 +222,56 @@ async function runDueReviewEvents(db, env, appUrl, workspaceId) {
   for (const ev of due.rows) {
     const r = await sendEvent(db, env, appUrl, ev);
     results[r] = (results[r] || 0) + 1;
+  }
+  return { due: due.rows.length, results };
+}
+function serviceReminderMessage(profile, wsName, contact, service) {
+  const what = service || "your vehicle";
+  const biz = profile?.business_name || "" || wsName;
+  const name = (contact.name || "").trim().split(" ")[0] || "there";
+  return `Hi ${name}, ${biz} here. It's time to book ${what} in for its next service. Reply to this message and we will find you a slot.`;
+}
+async function scheduleServiceReminder(db, workspaceId, bookingId, contactId, service) {
+  const p = await db.query(`SELECT service_reminder_days FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [workspaceId]);
+  const days = Number(p.rows[0]?.service_reminder_days || 0);
+  if (days <= 0) return null;
+  const c = await db.query(`SELECT opted_out FROM receptionist_contact WHERE id=$1`, [contactId]);
+  if (!c.rows[0] || c.rows[0].opted_out) return null;
+  const id = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO receptionist_servicereminder(id,service,due_on,status,created_at,booking_id,contact_id,workspace_id)
+     VALUES($1,$2,(now() AT TIME ZONE 'Africa/Johannesburg')::date + $3,'scheduled',now(),$4,$5,$6)`,
+    [id, (service || "").slice(0, 200), days, bookingId, contactId, workspaceId]
+  );
+  return id;
+}
+async function runDueServiceReminders(db, env, workspaceId) {
+  const due = workspaceId ? await db.query(`SELECT * FROM receptionist_servicereminder WHERE status='scheduled' AND due_on <= (now() AT TIME ZONE 'Africa/Johannesburg')::date AND workspace_id=$1 ORDER BY due_on LIMIT 10`, [workspaceId]) : await db.query(`SELECT * FROM receptionist_servicereminder WHERE status='scheduled' AND due_on <= (now() AT TIME ZONE 'Africa/Johannesburg')::date ORDER BY due_on LIMIT 10`);
+  const results = {};
+  for (const rem of due.rows) {
+    const claim = await db.query(`UPDATE receptionist_servicereminder SET status='sending' WHERE id=$1 AND status='scheduled'`, [rem.id]);
+    if (!claim.rowCount) {
+      results.cancelled = (results.cancelled || 0) + 1;
+      continue;
+    }
+    const cq = await db.query(`SELECT * FROM receptionist_contact WHERE id=$1`, [rem.contact_id]);
+    const contact = cq.rows[0];
+    if (!contact || contact.opted_out) {
+      await db.query(`UPDATE receptionist_servicereminder SET status='cancelled' WHERE id=$1`, [rem.id]);
+      results.cancelled = (results.cancelled || 0) + 1;
+      continue;
+    }
+    const wq = await db.query(`SELECT name FROM workspaces_workspace WHERE id=$1`, [rem.workspace_id]);
+    const pq = await db.query(`SELECT * FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [rem.workspace_id]);
+    try {
+      await deliver(db, env, rem.workspace_id, contact, serviceReminderMessage(pq.rows[0], wq.rows[0]?.name || "the business", contact, rem.service) + OPT_OUT_FOOTER);
+    } catch (e) {
+      await db.query(`UPDATE receptionist_servicereminder SET status='scheduled' WHERE id=$1`, [rem.id]);
+      results.held = (results.held || 0) + 1;
+      continue;
+    }
+    await db.query(`UPDATE receptionist_servicereminder SET status='sent', sent_at=now() WHERE id=$1`, [rem.id]);
+    results.sent = (results.sent || 0) + 1;
   }
   return { due: due.rows.length, results };
 }
@@ -492,16 +545,35 @@ ${RULES}`;
     [outId, reply, contact.id, channel.workspace_id]
   );
   const intake = draft.intake || {};
-  const detail = String(intake.detail || "").trim(), preferred = String(intake.preferred_time || "").trim();
+  let detail = String(intake.detail || "").trim();
+  const preferred = String(intake.preferred_time || "").trim();
+  const industry = String(profile.industry || "general");
+  if (industry === "restaurant" && /^\d+$/.test(detail)) detail = `Table for ${detail}`;
   if (detail || preferred) {
     try {
       await db.query(
         `INSERT INTO receptionist_booking(id,service,preferred_time,status,notes,created_at,contact_id,workspace_id,duration_minutes,google_event_id,value)
-        VALUES($1,$2,$3,'new','',now(),$4,$5,60,'',0)`,
+        VALUES($1,$2,$3,'requested','',now(),$4,$5,60,'',0)`,
         [crypto.randomUUID(), detail.slice(0, 200), preferred.slice(0, 200), contact.id, channel.workspace_id]
       );
     } catch {
     }
+  }
+  const inName = String(intake.name || "").trim();
+  const inAddress = String(intake.address || "").trim();
+  const inPolicy = String(intake.policy_number || "").trim();
+  try {
+    if (industry === "funeral" && (inName || detail || inPolicy)) {
+      await db.query(`INSERT INTO receptionist_funeralclaim(id,deceased_name,claimant_name,policy_number,status,notes,created_at,contact_id,workspace_id)
+        VALUES($1,$2,$3,$4,'new','',now(),$5,$6)`, [crypto.randomUUID(), detail.slice(0, 200), inName.slice(0, 200), inPolicy.slice(0, 64), contact.id, channel.workspace_id]);
+    } else if (industry === "dental" && (inName || detail)) {
+      await db.query(`INSERT INTO receptionist_dentalappointment(id,patient_name,reason,status,created_at,contact_id,workspace_id)
+        VALUES($1,$2,$3,'new',now(),$4,$5)`, [crypto.randomUUID(), inName.slice(0, 200), detail.slice(0, 300), contact.id, channel.workspace_id]);
+    } else if (industry === "trades" && (detail || inAddress)) {
+      await db.query(`INSERT INTO receptionist_tradedispatch(id,job_type,address,urgent,status,created_at,contact_id,workspace_id)
+        VALUES($1,$2,$3,false,'new',now(),$4,$5)`, [crypto.randomUUID(), detail.slice(0, 120), inAddress.slice(0, 300), contact.id, channel.workspace_id]);
+    }
+  } catch {
   }
   const sandbox = channel.is_sandbox || channel.zernio_account_id === SANDBOX_ACCOUNT_ID;
   if (sandbox && !SANDBOX_SEND_ALLOWLIST.has(waId)) return;

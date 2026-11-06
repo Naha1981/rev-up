@@ -213,3 +213,55 @@ export async function runDueReviewEvents(db: Pool, env: any, appUrl: string, wor
   }
   return { due: due.rows.length, results };
 }
+
+// ---------- service reminders (retention engine, ported from reminders.py) ----------
+
+export function serviceReminderMessage(profile: any, wsName: string, contact: any, service: string): string {
+  const what = service || "your vehicle";
+  const biz = (profile?.business_name || "") || wsName;
+  const name = ((contact.name || "").trim().split(" ")[0]) || "there";
+  return `Hi ${name}, ${biz} here. It's time to book ${what} in for its next service. Reply to this message and we will find you a slot.`;
+}
+
+export async function scheduleServiceReminder(db: Pool, workspaceId: string, bookingId: string, contactId: string, service: string): Promise<string | null> {
+  const p = await db.query(`SELECT service_reminder_days FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [workspaceId]);
+  const days = Number(p.rows[0]?.service_reminder_days || 0);
+  if (days <= 0) return null;
+  const c = await db.query(`SELECT opted_out FROM receptionist_contact WHERE id=$1`, [contactId]);
+  if (!c.rows[0] || c.rows[0].opted_out) return null;
+  const id = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO receptionist_servicereminder(id,service,due_on,status,created_at,booking_id,contact_id,workspace_id)
+     VALUES($1,$2,(now() AT TIME ZONE 'Africa/Johannesburg')::date + $3,'scheduled',now(),$4,$5,$6)`,
+    [id, (service || "").slice(0, 200), days, bookingId, contactId, workspaceId]);
+  return id;
+}
+
+export async function runDueServiceReminders(db: Pool, env: any, workspaceId?: string): Promise<any> {
+  const due = workspaceId
+    ? await db.query(`SELECT * FROM receptionist_servicereminder WHERE status='scheduled' AND due_on <= (now() AT TIME ZONE 'Africa/Johannesburg')::date AND workspace_id=$1 ORDER BY due_on LIMIT 10`, [workspaceId])
+    : await db.query(`SELECT * FROM receptionist_servicereminder WHERE status='scheduled' AND due_on <= (now() AT TIME ZONE 'Africa/Johannesburg')::date ORDER BY due_on LIMIT 10`);
+  const results: any = {};
+  for (const rem of due.rows) {
+    const claim = await db.query(`UPDATE receptionist_servicereminder SET status='sending' WHERE id=$1 AND status='scheduled'`, [rem.id]);
+    if (!claim.rowCount) { results.cancelled = (results.cancelled || 0) + 1; continue; }
+    const cq = await db.query(`SELECT * FROM receptionist_contact WHERE id=$1`, [rem.contact_id]);
+    const contact = cq.rows[0];
+    if (!contact || contact.opted_out) {
+      await db.query(`UPDATE receptionist_servicereminder SET status='cancelled' WHERE id=$1`, [rem.id]);
+      results.cancelled = (results.cancelled || 0) + 1; continue;
+    }
+    const wq = await db.query(`SELECT name FROM workspaces_workspace WHERE id=$1`, [rem.workspace_id]);
+    const pq = await db.query(`SELECT * FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [rem.workspace_id]);
+    try {
+      await deliver(db, env, rem.workspace_id, contact, serviceReminderMessage(pq.rows[0], wq.rows[0]?.name || "the business", contact, rem.service) + OPT_OUT_FOOTER);
+    } catch (e: any) {
+      // Missing channel or send-guard refusal: keep it scheduled for the next drain.
+      await db.query(`UPDATE receptionist_servicereminder SET status='scheduled' WHERE id=$1`, [rem.id]);
+      results.held = (results.held || 0) + 1; continue;
+    }
+    await db.query(`UPDATE receptionist_servicereminder SET status='sent', sent_at=now() WHERE id=$1`, [rem.id]);
+    results.sent = (results.sent || 0) + 1;
+  }
+  return { due: due.rows.length, results };
+}

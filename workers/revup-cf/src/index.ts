@@ -6,7 +6,7 @@ import { LOGO_B64, landingPage } from "./landing";
 export { landingPage } from "./landing";
 import { INDUSTRIES, getPreset, industryLabel } from "./presets";
 import { handleZernioWebhook, verifyZernioSignature, validateTenantKey, tenantConnectUrl, tenantConfirmAndBind, tenantWebhookSecret } from "./receptionist";
-import { startPipeline, cancelPending, runDueReviewEvents, resolveIssue } from "./reviews";
+import { startPipeline, cancelPending, runDueReviewEvents, resolveIssue, scheduleServiceReminder, runDueServiceReminders } from "./reviews";
 
 interface Env {
   DATABASE_URL: string;
@@ -477,6 +477,26 @@ ${pre.media ? `<input type="hidden" name="media_id" value="${esc(pre.media)}">` 
 </form></div>`, user);
 }
 
+async function intakeBoards(db: Pool, mem: any): Promise<string> {
+  const bp = await db.query(`SELECT industry FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [mem.workspace_id]);
+  const industry = bp.rows[0]?.industry || "";
+  const board = async (table: string, title: string, cols: (t: any) => string) => {
+    const r = await db.query(
+      `SELECT t.*, c.name AS contact_name, c.wa_id FROM ${table} t JOIN receptionist_contact c ON c.id=t.contact_id
+       WHERE t.workspace_id=$1 ORDER BY t.created_at DESC LIMIT 20`, [mem.workspace_id]);
+    if (!r.rows.length) return "";
+    const rows = r.rows.map((t: any) => `<tr><td><b>${esc(t.contact_name || t.wa_id)}</b></td><td>${cols(t)}</td>
+<td>${t.status === "resolved" ? '<span class="ok">resolved</span>' : esc(t.status)}</td>
+<td>${t.status !== "resolved" ? `<form class="inline" method="post" action="/inbox/intake/${table}/${t.id}/resolve"><button class="link">Resolve</button></form>` : ""}</td></tr>`).join("");
+    return `<h2>${title}</h2><div class="card"><table><tr><th>Customer</th><th>Details</th><th>Status</th><th></th></tr>${rows}</table></div>`;
+  };
+  let h = "";
+  if (industry === "funeral") h += await board("receptionist_funeralclaim", "Funeral claims", (t: any) => esc([t.deceased_name, t.claimant_name && `claimant: ${t.claimant_name}`, t.policy_number && `policy: ${t.policy_number}`].filter(Boolean).join(" · ")));
+  if (industry === "dental") h += await board("receptionist_dentalappointment", "Appointment requests", (t: any) => esc([t.patient_name, t.reason].filter(Boolean).join(" · ")));
+  if (industry === "trades") h += await board("receptionist_tradedispatch", "Job dispatch", (t: any) => esc([t.job_type, t.address].filter(Boolean).join(" · ")));
+  return h;
+}
+
 async function inboxPage(db: Pool, user: any, mem: any): Promise<string> {
   const r = await db.query(
     `SELECT c.id, c.name, c.wa_id, count(m.id) AS msgs, max(m.created_at) AS last_at,
@@ -488,7 +508,8 @@ async function inboxPage(db: Pool, user: any, mem: any): Promise<string> {
 <td class="mut">${esc((c.last_body || "").slice(0, 80))}</td>
 <td class="mut">${c.last_at ? new Date(c.last_at).toLocaleString("en-ZA") : ""}</td></tr>`).join("");
   return layout("Inbox", `
-<div class="card">${r.rows.length ? `<table><tr><th>Customer</th><th>Latest</th><th>When</th></tr>${rows}</table>` : `<p class="mut">No customer conversations yet. When customers WhatsApp the business, they appear here.</p>`}</div>`, user);
+<div class="card">${r.rows.length ? `<table><tr><th>Customer</th><th>Latest</th><th>When</th></tr>${rows}</table>` : `<p class="mut">No customer conversations yet. When customers WhatsApp the business, they appear here.</p>`}</div>
+${await intakeBoards(db, mem)}`, user);
 }
 
 async function conversationPage(db: Pool, user: any, mem: any, contactId: string, env: Env): Promise<Response> {
@@ -653,6 +674,7 @@ export default {
     try {
       ctx.waitUntil((async () => {
         await runDueReviewEvents(db, env, "https://revup.nahalabs.co.za");
+        await runDueServiceReminders(db, env);
         await db.end().catch(() => {});
       })());
     } catch { await db.end().catch(() => {}); }
@@ -1179,6 +1201,12 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
       }
 
       if (path === "/inbox") return html(await inboxPage(db, user, mem));
+
+      const ires = /^\/inbox\/intake\/(receptionist_funeralclaim|receptionist_dentalappointment|receptionist_tradedispatch)\/([0-9a-f-]{36})\/resolve$/.exec(path);
+      if (ires && req.method === "POST") {
+        await db.query(`UPDATE ${ires[1]} SET status='resolved' WHERE id=$1 AND workspace_id=$2`, [ires[2], mem.workspace_id]);
+        return redirect("/inbox");
+      }
       const cm = /^\/inbox\/([0-9a-f-]{36})$/.exec(path);
       if (cm) return conversationPage(db, user, mem, cm[1], env);
 
@@ -1242,7 +1270,10 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
           await db.query(`UPDATE receptionist_booking SET status='done' WHERE id=$1`, [b.id]);
           await db.query(`UPDATE receptionist_contact SET visit_count=visit_count+1, updated_at=now() WHERE id=$1`, [b.contact_id]);
           const evId = await startPipeline(db, mem.workspace_id, b.contact_id, b.id);
-          return redirect("/bookings?msg=" + encodeURIComponent(evId ? "Marked done - the review check-in goes out in 15 minutes." : "Marked done. (This customer opted out of messages.)"));
+          const svc = await db.query(`SELECT service FROM receptionist_booking WHERE id=$1`, [b.id]);
+          const remId = await scheduleServiceReminder(db, mem.workspace_id, b.id, b.contact_id, svc.rows[0]?.service || "");
+          const extra = remId ? " A service reminder is scheduled too." : "";
+          return redirect("/bookings?msg=" + encodeURIComponent((evId ? "Marked done - the review check-in goes out in 15 minutes." : "Marked done. (This customer opted out of messages.)") + extra));
         }
         if (bact[2] === "cancel" && ["requested", "confirmed"].includes(b.status)) {
           await db.query(`UPDATE receptionist_booking SET status='cancelled' WHERE id=$1`, [b.id]);

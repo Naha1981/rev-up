@@ -55,7 +55,10 @@ __export(reviews_exports, {
   resolveIssue: () => resolveIssue,
   reviewRequestMessage: () => reviewRequestMessage,
   runDueReviewEvents: () => runDueReviewEvents,
+  runDueServiceReminders: () => runDueServiceReminders,
+  scheduleServiceReminder: () => scheduleServiceReminder,
   sendEvent: () => sendEvent,
+  serviceReminderMessage: () => serviceReminderMessage,
   startPipeline: () => startPipeline,
   unsubscribeContact: () => unsubscribeContact
 });
@@ -77,8 +80,8 @@ async function startPipeline(db, workspaceId, contactId, bookingId = null) {
   if (!c.rows[0] || c.rows[0].opted_out) return null;
   const id = crypto.randomUUID();
   await db.query(
-    `INSERT INTO receptionist_reviewevent(id,step,status,scheduled_for,created_at,booking_id,contact_id,workspace_id)
-     VALUES($1,'check_in','scheduled',now() + ($2 || ' minutes')::interval,now(),$3,$4,$5)`,
+    `INSERT INTO receptionist_reviewevent(id,step,status,scheduled_for,error,created_at,booking_id,contact_id,workspace_id)
+     VALUES($1,'check_in','scheduled',now() + ($2 || ' minutes')::interval,'',now(),$3,$4,$5)`,
     [id, String(CHECK_IN_DELAY_MIN), bookingId, contactId, workspaceId]
   );
   return id;
@@ -205,8 +208,8 @@ async function sendEvent(db, env, appUrl, event) {
       if (contact.review_status !== "issue_flagged")
         await db.query(`UPDATE receptionist_contact SET review_status='check_in_sent', updated_at=now() WHERE id=$1`, [contact.id]);
       await db.query(
-        `INSERT INTO receptionist_reviewevent(id,step,status,scheduled_for,created_at,booking_id,contact_id,workspace_id)
-         VALUES($1,'review_request','scheduled',now() + ($2 || ' hours')::interval,now(),$3,$4,$5)`,
+        `INSERT INTO receptionist_reviewevent(id,step,status,scheduled_for,error,created_at,booking_id,contact_id,workspace_id)
+         VALUES($1,'review_request','scheduled',now() + ($2 || ' hours')::interval,'',now(),$3,$4,$5)`,
         [crypto.randomUUID(), String(REVIEW_REQUEST_DELAY_H), event.booking_id, contact.id, event.workspace_id]
       );
     } else if (event.step === "review_request") {
@@ -215,8 +218,8 @@ async function sendEvent(db, env, appUrl, event) {
       if (contact.review_status !== "issue_flagged")
         await db.query(`UPDATE receptionist_contact SET review_status='review_requested', updated_at=now() WHERE id=$1`, [contact.id]);
       await db.query(
-        `INSERT INTO receptionist_reviewevent(id,step,status,scheduled_for,created_at,booking_id,contact_id,workspace_id)
-         VALUES($1,'reminder','scheduled',now() + ($2 || ' hours')::interval,now(),$3,$4,$5)`,
+        `INSERT INTO receptionist_reviewevent(id,step,status,scheduled_for,error,created_at,booking_id,contact_id,workspace_id)
+         VALUES($1,'reminder','scheduled',now() + ($2 || ' hours')::interval,'',now(),$3,$4,$5)`,
         [crypto.randomUUID(), String(REMINDER_DELAY_H), event.booking_id, contact.id, event.workspace_id]
       );
     } else {
@@ -246,6 +249,56 @@ async function runDueReviewEvents(db, env, appUrl, workspaceId) {
   for (const ev of due.rows) {
     const r = await sendEvent(db, env, appUrl, ev);
     results[r] = (results[r] || 0) + 1;
+  }
+  return { due: due.rows.length, results };
+}
+function serviceReminderMessage(profile, wsName, contact, service) {
+  const what = service || "your vehicle";
+  const biz = profile?.business_name || "" || wsName;
+  const name = (contact.name || "").trim().split(" ")[0] || "there";
+  return `Hi ${name}, ${biz} here. It's time to book ${what} in for its next service. Reply to this message and we will find you a slot.`;
+}
+async function scheduleServiceReminder(db, workspaceId, bookingId, contactId, service) {
+  const p = await db.query(`SELECT service_reminder_days FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [workspaceId]);
+  const days = Number(p.rows[0]?.service_reminder_days || 0);
+  if (days <= 0) return null;
+  const c = await db.query(`SELECT opted_out FROM receptionist_contact WHERE id=$1`, [contactId]);
+  if (!c.rows[0] || c.rows[0].opted_out) return null;
+  const id = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO receptionist_servicereminder(id,service,due_on,status,created_at,booking_id,contact_id,workspace_id)
+     VALUES($1,$2,(now() AT TIME ZONE 'Africa/Johannesburg')::date + $3,'scheduled',now(),$4,$5,$6)`,
+    [id, (service || "").slice(0, 200), days, bookingId, contactId, workspaceId]
+  );
+  return id;
+}
+async function runDueServiceReminders(db, env, workspaceId) {
+  const due = workspaceId ? await db.query(`SELECT * FROM receptionist_servicereminder WHERE status='scheduled' AND due_on <= (now() AT TIME ZONE 'Africa/Johannesburg')::date AND workspace_id=$1 ORDER BY due_on LIMIT 10`, [workspaceId]) : await db.query(`SELECT * FROM receptionist_servicereminder WHERE status='scheduled' AND due_on <= (now() AT TIME ZONE 'Africa/Johannesburg')::date ORDER BY due_on LIMIT 10`);
+  const results = {};
+  for (const rem of due.rows) {
+    const claim = await db.query(`UPDATE receptionist_servicereminder SET status='sending' WHERE id=$1 AND status='scheduled'`, [rem.id]);
+    if (!claim.rowCount) {
+      results.cancelled = (results.cancelled || 0) + 1;
+      continue;
+    }
+    const cq = await db.query(`SELECT * FROM receptionist_contact WHERE id=$1`, [rem.contact_id]);
+    const contact = cq.rows[0];
+    if (!contact || contact.opted_out) {
+      await db.query(`UPDATE receptionist_servicereminder SET status='cancelled' WHERE id=$1`, [rem.id]);
+      results.cancelled = (results.cancelled || 0) + 1;
+      continue;
+    }
+    const wq = await db.query(`SELECT name FROM workspaces_workspace WHERE id=$1`, [rem.workspace_id]);
+    const pq = await db.query(`SELECT * FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [rem.workspace_id]);
+    try {
+      await deliver(db, env, rem.workspace_id, contact, serviceReminderMessage(pq.rows[0], wq.rows[0]?.name || "the business", contact, rem.service) + OPT_OUT_FOOTER);
+    } catch (e) {
+      await db.query(`UPDATE receptionist_servicereminder SET status='scheduled' WHERE id=$1`, [rem.id]);
+      results.held = (results.held || 0) + 1;
+      continue;
+    }
+    await db.query(`UPDATE receptionist_servicereminder SET status='sent', sent_at=now() WHERE id=$1`, [rem.id]);
+    results.sent = (results.sent || 0) + 1;
   }
   return { due: due.rows.length, results };
 }
@@ -1103,16 +1156,35 @@ ${RULES}`;
     [outId, reply, contact.id, channel.workspace_id]
   );
   const intake = draft.intake || {};
-  const detail = String(intake.detail || "").trim(), preferred = String(intake.preferred_time || "").trim();
+  let detail = String(intake.detail || "").trim();
+  const preferred = String(intake.preferred_time || "").trim();
+  const industry = String(profile.industry || "general");
+  if (industry === "restaurant" && /^\d+$/.test(detail)) detail = `Table for ${detail}`;
   if (detail || preferred) {
     try {
       await db.query(
         `INSERT INTO receptionist_booking(id,service,preferred_time,status,notes,created_at,contact_id,workspace_id,duration_minutes,google_event_id,value)
-        VALUES($1,$2,$3,'new','',now(),$4,$5,60,'',0)`,
+        VALUES($1,$2,$3,'requested','',now(),$4,$5,60,'',0)`,
         [crypto.randomUUID(), detail.slice(0, 200), preferred.slice(0, 200), contact.id, channel.workspace_id]
       );
     } catch {
     }
+  }
+  const inName = String(intake.name || "").trim();
+  const inAddress = String(intake.address || "").trim();
+  const inPolicy = String(intake.policy_number || "").trim();
+  try {
+    if (industry === "funeral" && (inName || detail || inPolicy)) {
+      await db.query(`INSERT INTO receptionist_funeralclaim(id,deceased_name,claimant_name,policy_number,status,notes,created_at,contact_id,workspace_id)
+        VALUES($1,$2,$3,$4,'new','',now(),$5,$6)`, [crypto.randomUUID(), detail.slice(0, 200), inName.slice(0, 200), inPolicy.slice(0, 64), contact.id, channel.workspace_id]);
+    } else if (industry === "dental" && (inName || detail)) {
+      await db.query(`INSERT INTO receptionist_dentalappointment(id,patient_name,reason,status,created_at,contact_id,workspace_id)
+        VALUES($1,$2,$3,'new',now(),$4,$5)`, [crypto.randomUUID(), inName.slice(0, 200), detail.slice(0, 300), contact.id, channel.workspace_id]);
+    } else if (industry === "trades" && (detail || inAddress)) {
+      await db.query(`INSERT INTO receptionist_tradedispatch(id,job_type,address,urgent,status,created_at,contact_id,workspace_id)
+        VALUES($1,$2,$3,false,'new',now(),$4,$5)`, [crypto.randomUUID(), detail.slice(0, 120), inAddress.slice(0, 300), contact.id, channel.workspace_id]);
+    }
+  } catch {
   }
   const sandbox = channel.is_sandbox || channel.zernio_account_id === SANDBOX_ACCOUNT_ID;
   if (sandbox && !SANDBOX_SEND_ALLOWLIST.has(waId)) return;
@@ -1265,6 +1337,7 @@ function navLinks(user) {
   h += `<a href="/onboarding">Onboarding</a>`;
   if (show("reviews")) h += `<a href="/reviews">Reviews</a>`;
   if (show("receptionist")) h += `<a href="/receptionist">Receptionist</a>`;
+  if (show("receptionist")) h += `<a href="/bookings">Bookings</a>`;
   if (show("leads", "receptionist")) h += `<a href="/inbox">Inbox</a>`;
   if (show("leads")) h += `<a href="/frontdesk">Leads</a>`;
   if (show("reviews", "leads", "receptionist")) h += `<a href="/approvals">Approvals</a>`;
@@ -1640,7 +1713,7 @@ async function reviewsPage(db, user, mem, base, msg = "") {
   const evRows = events.rows.map((e) => `<tr>
 <td>${esc(e.contact_name)}</td><td>${esc(e.step.replace("_", " "))}</td>
 <td>${e.status === "sent" ? `<span class="ok">sent</span>` : e.status === "failed" ? `<span class="bad">failed</span>` : esc(e.status)}</td>
-<td class="mut">${new Date(e.scheduled_for).toLocaleString("en-ZA")}</td>
+<td class="mut">${new Date(e.scheduled_for).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" })}</td>
 <td class="mut">${e.error ? esc(e.error) : ""}</td></tr>`).join("");
   const issues = contacts.rows.filter((c) => c.review_status === "issue_flagged");
   const statusLabel = { new: "new", check_in_sent: "check-in sent", review_requested: "review asked", clicked: "clicked", unsubscribed: "opted out", issue_flagged: "issue" };
@@ -1690,6 +1763,27 @@ ${pre.media ? `<input type="hidden" name="media_id" value="${esc(pre.media)}">` 
 <p class="mut">Creates a draft for every connected channel. Scheduling and publishing run on the current pipeline.</p>
 </form></div>`, user);
 }
+async function intakeBoards(db, mem) {
+  const bp = await db.query(`SELECT industry FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [mem.workspace_id]);
+  const industry = bp.rows[0]?.industry || "";
+  const board = async (table, title, cols) => {
+    const r = await db.query(
+      `SELECT t.*, c.name AS contact_name, c.wa_id FROM ${table} t JOIN receptionist_contact c ON c.id=t.contact_id
+       WHERE t.workspace_id=$1 ORDER BY t.created_at DESC LIMIT 20`,
+      [mem.workspace_id]
+    );
+    if (!r.rows.length) return "";
+    const rows = r.rows.map((t) => `<tr><td><b>${esc(t.contact_name || t.wa_id)}</b></td><td>${cols(t)}</td>
+<td>${t.status === "resolved" ? '<span class="ok">resolved</span>' : esc(t.status)}</td>
+<td>${t.status !== "resolved" ? `<form class="inline" method="post" action="/inbox/intake/${table}/${t.id}/resolve"><button class="link">Resolve</button></form>` : ""}</td></tr>`).join("");
+    return `<h2>${title}</h2><div class="card"><table><tr><th>Customer</th><th>Details</th><th>Status</th><th></th></tr>${rows}</table></div>`;
+  };
+  let h = "";
+  if (industry === "funeral") h += await board("receptionist_funeralclaim", "Funeral claims", (t) => esc([t.deceased_name, t.claimant_name && `claimant: ${t.claimant_name}`, t.policy_number && `policy: ${t.policy_number}`].filter(Boolean).join(" \xB7 ")));
+  if (industry === "dental") h += await board("receptionist_dentalappointment", "Appointment requests", (t) => esc([t.patient_name, t.reason].filter(Boolean).join(" \xB7 ")));
+  if (industry === "trades") h += await board("receptionist_tradedispatch", "Job dispatch", (t) => esc([t.job_type, t.address].filter(Boolean).join(" \xB7 ")));
+  return h;
+}
 async function inboxPage(db, user, mem) {
   const r = await db.query(
     `SELECT c.id, c.name, c.wa_id, count(m.id) AS msgs, max(m.created_at) AS last_at,
@@ -1703,7 +1797,8 @@ async function inboxPage(db, user, mem) {
 <td class="mut">${esc((c.last_body || "").slice(0, 80))}</td>
 <td class="mut">${c.last_at ? new Date(c.last_at).toLocaleString("en-ZA") : ""}</td></tr>`).join("");
   return layout("Inbox", `
-<div class="card">${r.rows.length ? `<table><tr><th>Customer</th><th>Latest</th><th>When</th></tr>${rows}</table>` : `<p class="mut">No customer conversations yet. When customers WhatsApp the business, they appear here.</p>`}</div>`, user);
+<div class="card">${r.rows.length ? `<table><tr><th>Customer</th><th>Latest</th><th>When</th></tr>${rows}</table>` : `<p class="mut">No customer conversations yet. When customers WhatsApp the business, they appear here.</p>`}</div>
+${await intakeBoards(db, mem)}`, user);
 }
 async function conversationPage(db, user, mem, contactId, env) {
   const dc = new Client({ connectionString: env.DATABASE_URL, connectionTimeoutMillis: 15e3 });
@@ -1868,6 +1963,7 @@ var index_default = {
     try {
       ctx.waitUntil((async () => {
         await runDueReviewEvents(db, env, "https://revup.nahalabs.co.za");
+        await runDueServiceReminders(db, env);
         await db.end().catch(() => {
         });
       })());
@@ -2466,6 +2562,11 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
       }
     }
     if (path === "/inbox") return html(await inboxPage(db, user, mem));
+    const ires = /^\/inbox\/intake\/(receptionist_funeralclaim|receptionist_dentalappointment|receptionist_tradedispatch)\/([0-9a-f-]{36})\/resolve$/.exec(path);
+    if (ires && req.method === "POST") {
+      await db.query(`UPDATE ${ires[1]} SET status='resolved' WHERE id=$1 AND workspace_id=$2`, [ires[2], mem.workspace_id]);
+      return redirect("/inbox");
+    }
     const cm = /^\/inbox\/([0-9a-f-]{36})$/.exec(path);
     if (cm) return conversationPage(db, user, mem, cm[1], env);
     const sm = /^\/posts\/([0-9a-f-]{36})\/submit$/.exec(path);
@@ -2499,6 +2600,53 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
       } finally {
         client.release();
       }
+    }
+    if (path === "/bookings") {
+      const bk = await db.query(
+        `SELECT b.*, c.name AS contact_name, c.wa_id FROM receptionist_booking b
+           JOIN receptionist_contact c ON c.id=b.contact_id
+           WHERE b.workspace_id=$1 ORDER BY b.created_at DESC LIMIT 50`,
+        [mem.workspace_id]
+      );
+      const msg = url.searchParams.get("msg") || "";
+      const rows = bk.rows.map((b) => `<tr>
+<td><b>${esc(b.contact_name || b.wa_id)}</b><br><span class="mut">${esc(b.service || "booking")}</span></td>
+<td class="mut">${b.status === "confirmed" && b.scheduled_start ? new Date(b.scheduled_start).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" }) : esc(b.preferred_time || "to confirm")}</td>
+<td>${b.status === "confirmed" ? '<span class="ok">confirmed</span>' : b.status === "done" ? "done" : b.status === "cancelled" ? '<span class="mut">cancelled</span>' : "<b>requested</b>"}</td>
+<td>${b.status === "requested" ? `<form class="inline" method="post" action="/bookings/${b.id}/confirm"><input type="datetime-local" name="when" required style="width:auto"><button>Confirm</button></form>` : ""}
+${b.status === "confirmed" ? `<form class="inline" method="post" action="/bookings/${b.id}/done"><button>Mark done</button></form>` : ""}
+${["requested", "confirmed"].includes(b.status) ? `<form class="inline" method="post" action="/bookings/${b.id}/cancel"><button class="link">Cancel</button></form>` : ""}</td></tr>`).join("");
+      return html(layout("Bookings", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+<p class="mut">Booking requests land here from your WhatsApp receptionist. Confirm a time, and when the job is finished mark it done - that starts the review request flow automatically.</p>
+<div class="card">${bk.rows.length ? `<table><tr><th>Customer</th><th>Time</th><th>Status</th><th></th></tr>${rows}</table>` : `<p class="mut">No bookings yet. When a customer books on WhatsApp, it shows up here.</p>`}</div>`, user));
+    }
+    const bact = /^\/bookings\/([0-9a-f-]{36})\/(confirm|done|cancel)$/.exec(path);
+    if (bact && req.method === "POST") {
+      const own = await db.query(`SELECT id, contact_id, status FROM receptionist_booking WHERE id=$1 AND workspace_id=$2`, [bact[1], mem.workspace_id]);
+      const b = own.rows[0];
+      if (!b) return redirect("/bookings");
+      if (bact[2] === "confirm" && b.status === "requested") {
+        const f = await formData(req);
+        const when = String(f.when || "").trim();
+        if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(when)) return redirect("/bookings");
+        await db.query(`UPDATE receptionist_booking SET status='confirmed', scheduled_start=($1 || ':00+02')::timestamptz WHERE id=$2`, [when.slice(0, 16), b.id]);
+        return redirect("/bookings?msg=" + encodeURIComponent("Booking confirmed."));
+      }
+      if (bact[2] === "done" && b.status === "confirmed") {
+        await db.query(`UPDATE receptionist_booking SET status='done' WHERE id=$1`, [b.id]);
+        await db.query(`UPDATE receptionist_contact SET visit_count=visit_count+1, updated_at=now() WHERE id=$1`, [b.contact_id]);
+        const evId = await startPipeline(db, mem.workspace_id, b.contact_id, b.id);
+        const svc = await db.query(`SELECT service FROM receptionist_booking WHERE id=$1`, [b.id]);
+        const remId = await scheduleServiceReminder(db, mem.workspace_id, b.id, b.contact_id, svc.rows[0]?.service || "");
+        const extra = remId ? " A service reminder is scheduled too." : "";
+        return redirect("/bookings?msg=" + encodeURIComponent((evId ? "Marked done - the review check-in goes out in 15 minutes." : "Marked done. (This customer opted out of messages.)") + extra));
+      }
+      if (bact[2] === "cancel" && ["requested", "confirmed"].includes(b.status)) {
+        await db.query(`UPDATE receptionist_booking SET status='cancelled' WHERE id=$1`, [b.id]);
+        return redirect("/bookings?msg=" + encodeURIComponent("Booking cancelled."));
+      }
+      return redirect("/bookings");
     }
     if (path === "/reviews") return html(await reviewsPage(db, user, mem, base, url.searchParams.get("msg") || ""));
     if (path === "/reviews/toggle" && req.method === "POST") {
@@ -2545,12 +2693,14 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
       const client = await db.connect();
       try {
         await client.query("BEGIN");
-        const contactId = crypto.randomUUID();
-        await client.query(
+        const cUp = await client.query(
           `INSERT INTO receptionist_contact(id,workspace_id,wa_id,name,tags,needs_human,opted_out,zernio_conversation_id,issue_note,review_status,dietary_notes,is_vip,notes,total_spend,visit_count,created_at,updated_at)
-             VALUES($1,$2,$3,$4,'[]'::jsonb,false,false,'','','new','',false,'',0,0,now(),now())`,
-          [contactId, mem.workspace_id, f.wa_id || "", f.name || ""]
+             VALUES($1,$2,$3,$4,'[]'::jsonb,false,false,'','','new','',false,'',0,0,now(),now())
+             ON CONFLICT (workspace_id, wa_id) DO UPDATE SET name=EXCLUDED.name, updated_at=now()
+             RETURNING id`,
+          [crypto.randomUUID(), mem.workspace_id, (f.wa_id || "").trim(), (f.name || "").trim()]
         );
+        const contactId = cUp.rows[0].id;
         const code = [...crypto.getRandomValues(new Uint8Array(6))].map((b) => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[b % 32]).join("");
         await client.query(
           `INSERT INTO receptionist_reviewlink(id,workspace_id,contact_id,short_code,original_url,created_at)
