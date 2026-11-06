@@ -7,7 +7,7 @@ export { landingPage } from "./landing";
 import { INDUSTRIES, getPreset, industryLabel } from "./presets";
 import { handleZernioWebhook, verifyZernioSignature, validateTenantKey, tenantConnectUrl, tenantConfirmAndBind, tenantWebhookSecret } from "./receptionist";
 import { startPipeline, cancelPending, runDueReviewEvents, resolveIssue, scheduleServiceReminder, runDueServiceReminders } from "./reviews";
-import { waitlistAdd, waitlistExpire, waitlistAction, loyaltySettings, loyaltyAccount, awardForBooking, issueVoucher, redeemVoucher, expireVouchers, quoteCreate, quoteAction, segmentContacts, campaignCreate, campaignApprove, campaignCancel, runDueCampaigns, attributeBookingToCampaign, campaignStats, competitorAdd, dishAdd, promoAdd, refreshOpportunities, opportunityAction, opportunityDraftCampaign } from "./features";
+import { waitlistAdd, waitlistExpire, waitlistAction, loyaltySettings, loyaltyAccount, awardForBooking, issueVoucher, redeemVoucher, expireVouchers, quoteCreate, quoteAction, segmentContacts, campaignCreate, campaignApprove, campaignCancel, runDueCampaigns, attributeBookingToCampaign, campaignStats, competitorAdd, dishAdd, promoAdd, refreshOpportunities, opportunityAction, opportunityDraftCampaign, supportHandle, autoDraftOpportunities } from "./features";
 
 interface Env {
   DATABASE_URL: string;
@@ -59,6 +59,7 @@ export function navLinks(user: any): string {
   if (show("receptionist")) h += `<a href="/quotes">Quotes</a>`;
   if (show("receptionist")) h += `<a href="/campaigns">Campaigns</a>`;
   if (show("receptionist")) h += `<a href="/competitors">Competitors</a>`;
+  if (show("receptionist")) h += `<a href="/support">Support</a>`;
   if (show("leads", "receptionist")) h += `<a href="/inbox">Inbox</a>`;
   if (show("leads")) h += `<a href="/frontdesk">Leads</a>`;
   if (show("reviews", "leads", "receptionist")) h += `<a href="/approvals">Approvals</a>`;
@@ -467,8 +468,29 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 
 
 
+
+async function supportPage(db: Pool, user: any, mem: any): Promise<string> {
+  const r = await db.query(`SELECT * FROM receptionist_supportmessage WHERE workspace_id=$1 ORDER BY created_at LIMIT 100`, [mem.workspace_id]);
+  const rows = r.rows.map((m: any) => {
+    const src = Array.isArray(m.sources) && m.sources.length ? `<br><span class="mut">Grounded in: ${m.sources.map((x: string) => esc(x)).join(" · ")}</span>` : "";
+    const conf = m.role === "assistant" ? `<br><span class="mut">Confidence ${m.confidence}%${m.escalated ? " · flagged for a human" : ""}</span>` : "";
+    return m.role === "owner"
+      ? `<div class="card" style="background:var(--brand-soft)"><b>You:</b> ${esc(m.text)}</div>`
+      : `<div class="card"><b>Support:</b> ${esc(m.text)}${src}${conf}</div>`;
+  }).join("");
+  return layout("Support", `
+<div class="card"><h2 style="margin-top:0">Ask about your numbers</h2>
+<form method="post" action="/support">
+<label>Question<textarea name="question" required placeholder="How many bookings do we have today?"></textarea></label>
+<button>Ask</button></form>
+<p class="mut">Answers come only from your own data, with confidence and sources shown. Anything it cannot ground gets flagged for a human - it never invents figures.</p></div>
+${rows || `<div class="card"><p class="mut">No questions yet.</p></div>`}`, user);
+}
+
 async function competitorsPage(db: Pool, user: any, mem: any, msg = ""): Promise<string> {
   await refreshOpportunities(db, mem.workspace_id);
+  const rmq = await db.query(`SELECT revenue_mode FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [mem.workspace_id]);
+  const revMode = rmq.rows[0]?.revenue_mode || "suggest";
   const comps = await db.query(`SELECT * FROM receptionist_competitor WHERE workspace_id=$1 ORDER BY name`, [mem.workspace_id]);
   const menu = await db.query(`SELECT id, name, price FROM menus_item WHERE workspace_id=$1 ORDER BY position LIMIT 100`, [mem.workspace_id]);
   const opps = await db.query(
@@ -521,7 +543,15 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <input name="website" maxlength="200" placeholder="Website" style="width:180px">
 <button>Track competitor</button></form>
 <p class="mut">Adding the same name again updates it.</p></div>
-${compCards.join("")}`, user);
+${compCards.join("")}
+<h2>Revenue Employee</h2>
+<div class="card"><form method="post" action="/revenue-mode">
+<label>Mode <select name="mode">
+<option value="suggest" ${revMode === "suggest" ? "selected" : ""}>Suggest only - opportunities appear on this board</option>
+<option value="draft" ${revMode === "draft" ? "selected" : ""}>Prepare drafts - strong opportunities also become campaign drafts</option>
+</select></label>
+<button>Save mode</button></form>
+<p class="mut">You approve every send yourself, in every mode. Nothing ever sends itself.</p></div>`, user);
 }
 
 async function campaignsPage(db: Pool, user: any, mem: any, msg = ""): Promise<string> {
@@ -879,6 +909,7 @@ export default {
         await runDueServiceReminders(db, env);
         await expireVouchers(db);
         await runDueCampaigns(db, env);
+        await autoDraftOpportunities(db);
         await db.end().catch(() => {});
       })());
     } catch { await db.end().catch(() => {}); }
@@ -1615,6 +1646,22 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
           await opportunityAction(db, mem.workspace_id, oppact[1], oppact[2]);
           return redirect("/competitors?msg=" + encodeURIComponent("Marked."));
         } catch (e: any) { return redirect("/competitors?msg=" + encodeURIComponent(String(e?.message || e))); }
+      }
+
+      if (path === "/support") {
+        if (req.method === "POST") {
+          const f = await formData(req);
+          const q = String(f.question || "").trim();
+          if (q) await supportHandle(db, mem.workspace_id, q.slice(0, 1000));
+          return redirect("/support");
+        }
+        return html(await supportPage(db, user, mem));
+      }
+      if (path === "/revenue-mode" && req.method === "POST") {
+        const f = await formData(req);
+        const mode = f.mode === "draft" ? "draft" : "suggest";
+        await db.query(`UPDATE receptionist_businessprofile SET revenue_mode=$1, updated_at=now() WHERE workspace_id=$2`, [mode, mem.workspace_id]);
+        return redirect("/competitors?msg=" + encodeURIComponent(mode === "draft" ? "Revenue Employee will prepare campaign drafts for strong opportunities. You still approve every send." : "Revenue Employee will suggest opportunities only."));
       }
 
       if (path === "/reviews") return html(await reviewsPage(db, user, mem, base, url.searchParams.get("msg") || ""));

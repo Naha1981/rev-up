@@ -429,3 +429,97 @@ export async function opportunityDraftCampaign(db: Pool, ws: string, id: string)
   await db.query(
     `UPDATE receptionist_marketopportunity SET campaign_id=$1, status='acted', updated_at=now() WHERE id=$2`, [campId, id]);
 }
+
+// ---------- owner support assistant ----------
+export async function supportAnswer(db: Pool, ws: string, question: string): Promise<{ text: string; confidence: number; sources: string[]; escalate: boolean }> {
+  const q = question.toLowerCase();
+  if (["booking", "table", "reservation", "tonight", "today"].some((w) => q.includes(w))) {
+    const today = await db.query(
+      `SELECT status, count(*) c FROM receptionist_booking
+       WHERE workspace_id=$1 AND status<>'cancelled'
+         AND (COALESCE(scheduled_start, created_at) AT TIME ZONE 'Africa/Johannesburg')::date = (now() AT TIME ZONE 'Africa/Johannesburg')::date
+       GROUP BY status`, [ws]);
+    const week = await db.query(
+      `SELECT count(*) c FROM receptionist_booking
+       WHERE workspace_id=$1 AND status<>'cancelled'
+         AND (COALESCE(scheduled_start, created_at) AT TIME ZONE 'Africa/Johannesburg')::date >= (now() AT TIME ZONE 'Africa/Johannesburg')::date - 7`, [ws]);
+    const confirmed = Number(today.rows.find((r: any) => r.status === "confirmed")?.c || 0);
+    const done = Number(today.rows.find((r: any) => r.status === "done")?.c || 0);
+    const wk = Number(week.rows[0].c);
+    if (!today.rows.length && !wk)
+      return { text: "You have no bookings logged yet. Once bookings come in I can answer questions about them.", confidence: 40, sources: ["0 bookings in the last 7 days"], escalate: false };
+    return {
+      text: `Today: ${confirmed} confirmed booking${confirmed === 1 ? "" : "s"}${done ? `, ${done} already done` : ""}. This week so far: ${wk} bookings. Open the Bookings screen for the full board.`,
+      confidence: 95, sources: [`${confirmed} confirmed bookings today`, `${wk} bookings in the last 7 days`], escalate: false };
+  }
+  if (["waitlist", "waiting", "queue"].some((w) => q.includes(w))) {
+    const r = await db.query(`SELECT count(*) c FROM receptionist_waitlistentry WHERE workspace_id=$1 AND status='waiting'`, [ws]);
+    const n = Number(r.rows[0].c);
+    return {
+      text: n ? `${n} partie${n === 1 ? " is" : "s are"} on the waitlist right now. Manage them on the Waitlist screen.` : "The waitlist is empty right now.",
+      confidence: 95, sources: [`${n} waiting on the waitlist`], escalate: false };
+  }
+  if (["complaint", "unhappy", "angry", "review", "reputation"].some((w) => q.includes(w))) {
+    const r = await db.query(`SELECT count(*) c FROM receptionist_complaint WHERE workspace_id=$1 AND status='open'`, [ws]);
+    const n = Number(r.rows[0].c);
+    return {
+      text: `You have ${n} open complaint${n === 1 ? "" : "s"}.` + (n ? " Answer them from the Inbox - quick replies protect your rating." : " Nothing needs attention."),
+      confidence: 95, sources: [`${n} open complaints`], escalate: false };
+  }
+  if (["campaign", "revenue", "sales", "money", "attribut", "marketing"].some((w) => q.includes(w))) {
+    const running = await db.query(`SELECT count(*) c FROM receptionist_campaign WHERE workspace_id=$1 AND status IN ('scheduled','sending')`, [ws]);
+    const attr = await db.query(
+      `SELECT count(*) c, COALESCE(sum(r.attributed_amount),0) t
+       FROM receptionist_campaignrecipient r
+       JOIN receptionist_campaign c ON c.id=r.campaign_id
+       JOIN receptionist_booking b ON b.id=r.attributed_booking_id
+       WHERE c.workspace_id=$1 AND b.created_at >= date_trunc('month', now())`, [ws]);
+    const total = Number(attr.rows[0].t), n = Number(attr.rows[0].c), run = Number(running.rows[0].c);
+    return {
+      text: `This month your campaigns are linked to R${total.toLocaleString("en-ZA")} across ${n} attributed booking${n === 1 ? "" : "s"}. ${run} campaign${run === 1 ? " is" : "s are"} running. The Campaigns screen has the full picture.`,
+      confidence: 90, sources: [`R${total} attributed this month`, `${n} attributed bookings`], escalate: false };
+  }
+  if (["competitor", "rival", "opportunit", "market"].some((w) => q.includes(w))) {
+    const r = await db.query(`SELECT title FROM receptionist_marketopportunity WHERE workspace_id=$1 AND status='new' ORDER BY confidence DESC`, [ws]);
+    if (r.rows.length)
+      return {
+        text: `${r.rows.length} open opportunit${r.rows.length === 1 ? "y" : "ies"}. Top one: ${r.rows[0].title}. See them all on the Competitors screen.`,
+        confidence: 90, sources: [`${r.rows.length} open opportunities`], escalate: false };
+    return { text: "No open opportunities right now - the Competitors screen is where new ones appear.", confidence: 85, sources: ["0 open opportunities"], escalate: false };
+  }
+  if (["menu", "dish", "food", "sell", "popular", "star"].some((w) => q.includes(w))) {
+    const r = await db.query(`SELECT count(DISTINCT item_id) c FROM menus_dishsale WHERE workspace_id=$1 AND sold_on >= (now() AT TIME ZONE 'Africa/Johannesburg')::date - 30`, [ws]);
+    const n = Number(r.rows[0].c);
+    if (n)
+      return { text: `${n} dishes have sales logged in the last 30 days. Those sales feed the rand-impact estimates on the Competitors screen.`, confidence: 70, sources: [`${n} dishes with sales logged in 30 days`], escalate: false };
+    return { text: "No dish sales logged yet. Once sales are logged I can talk about what is working.", confidence: 50, sources: ["0 dishes with sales logged in 30 days"], escalate: false };
+  }
+  if (["human", "person", "help me", "someone", "call me", "escalat"].some((w) => q.includes(w)))
+    return { text: "Understood - I have flagged this for a human to follow up. Anything else I can answer from your numbers in the meantime?", confidence: 100, sources: ["Owner asked for a human"], escalate: true };
+  return {
+    text: "I do not have enough in your data to answer that confidently. I can answer about bookings, the waitlist, complaints, campaigns and attributed revenue, competitors and your menu. Want me to flag this for a human?",
+    confidence: 20, sources: [], escalate: true };
+}
+
+export async function supportHandle(db: Pool, ws: string, question: string): Promise<void> {
+  await db.query(`INSERT INTO receptionist_supportmessage(id,workspace_id,role,text,sources,escalated,created_at) VALUES($1,$2,'owner',$3,'[]'::jsonb,false,now())`,
+    [crypto.randomUUID(), ws, question]);
+  const a = await supportAnswer(db, ws, question);
+  await db.query(
+    `INSERT INTO receptionist_supportmessage(id,workspace_id,role,text,confidence,sources,escalated,created_at) VALUES($1,$2,'assistant',$3,$4,$5::jsonb,$6,now())`,
+    [crypto.randomUUID(), ws, a.text, a.confidence, JSON.stringify(a.sources), a.escalate]);
+}
+
+// ---------- revenue employee ----------
+export async function autoDraftOpportunities(db: Pool): Promise<number> {
+  const wss = await db.query(`SELECT workspace_id FROM receptionist_businessprofile WHERE revenue_mode='draft' AND is_active`);
+  let made = 0;
+  for (const w of wss.rows) {
+    const opps = await db.query(
+      `SELECT id FROM receptionist_marketopportunity WHERE workspace_id=$1 AND status='new' AND campaign_id IS NULL AND confidence >= 75`, [w.workspace_id]);
+    for (const o of opps.rows) {
+      try { await opportunityDraftCampaign(db, w.workspace_id, o.id); made++; } catch { /* one bad draft never stops the rest */ }
+    }
+  }
+  return made;
+}
