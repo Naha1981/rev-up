@@ -37,7 +37,7 @@ function esc(s: any): string {
 }
 function layout(title: string, body: string, user?: any): string {
   const nav = user
-    ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a href="/">Dashboard</a><a href="/posts">Posts</a><a href="/onboarding">Onboarding</a><a href="/reviews">Reviews</a><a href="/inbox">Inbox</a><a href="/approvals">Approvals</a><a href="/billing">Billing</a><form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>`
+    ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a href="/">Dashboard</a><a href="/posts">Posts</a><a href="/onboarding">Onboarding</a><a href="/reviews">Reviews</a><a href="/inbox">Inbox</a><a href="/approvals">Approvals</a><a href="/billing">Billing</a>${user._cur_ws ? `<a href="/switch" title="Switch business" style="border:1px solid var(--line);border-radius:8px;padding:2px 8px">${esc(user._cur_ws)}${(user._ws_count||0) > 1 ? " &#9662;" : ""}</a>` : ""}<form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>`
     : `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a class="btn btn-ghost" href="/login">Log in</a><a class="btn btn-primary" href="/signup">Get started</a></div></nav>`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} · RevUp</title><style>
 :root{--brand:#F97316;--brand-dark:#EA580C;--brand-soft:#FFF7ED;--ink:#1C1917;--ink2:#57534E;--ink3:#A8A29E;--line:#E7E5E4;--bg:#FAFAF9}
@@ -110,7 +110,7 @@ function sessionCookie(token: string): string {
 const VERIFY_SQL = `SELECT crypt(encode(digest($1,'sha256'),'hex'), '$2a$' || substring($2 from 5)) = '$2a$' || substring($2 from 5) AS ok`;
 const MAKE_HASH_SQL = `SELECT 'bcrypt_sha256$' || '$2b$' || substring(crypt(encode(digest($1,'sha256'),'hex'), gen_salt('bf',12)) from 5) AS hash`;
 
-async function membership(db: Pool, userId: string): Promise<any | null> {
+async function membership(db: Pool, userId: string, req?: Request): Promise<any | null> {
   const r = await db.query(
     `SELECT w.id AS workspace_id, w.name AS workspace_name, w.approval_workflow_mode,
             o.id AS org_id, o.name AS org_name, o.plan, o.subscription_status, o.payment_reference,
@@ -119,8 +119,12 @@ async function membership(db: Pool, userId: string): Promise<any | null> {
      JOIN workspaces_workspace w ON w.id=m.workspace_id
      JOIN organizations_organization o ON o.id=w.organization_id
      WHERE m.user_id=$1 AND w.is_archived=false AND o.deleted_at IS NULL
-     ORDER BY m.added_at LIMIT 1`, [userId]);
-  return r.rows[0] || null;
+     ORDER BY m.added_at`, [userId]);
+  if (!r.rows.length) return null;
+  const want = req ? (/(?:^|;\s*)cf_ws=([0-9a-f-]{36})/.exec(req.headers.get("cookie") || "") || [])[1] : null;
+  const cur = (want && r.rows.find((x: any) => x.workspace_id === want)) || r.rows[0];
+  cur.workspaces = r.rows.map((x: any) => ({ id: x.workspace_id, name: x.workspace_name, org: x.org_name, plan: x.plan, status: x.subscription_status }));
+  return cur;
 }
 
 // ---------- forms ----------
@@ -538,8 +542,25 @@ export default {
       const user = await getUser(req, db);
       if (!user && path === "/") return html(landingPage());
       if (!user) return redirect("/login");
-      const mem = await membership(db, user.id);
+      const mem = await membership(db, user.id, req);
       if (!mem) return html(layout("No workspace", `<p>Your account has no workspace yet. <a href="/signup">Create one</a>.</p>`, user), 403);
+      user._cur_ws = mem.workspace_name; user._ws_count = (mem.workspaces || []).length;
+
+      if (path === "/switch") {
+        if (req.method === "POST") {
+          const f = await formData(req);
+          const ok = (mem.workspaces || []).some((w: any) => w.id === f.workspace_id);
+          if (!ok) return redirect("/switch");
+          return new Response(null, { status: 303, headers: { location: "/", "set-cookie": `cf_ws=${f.workspace_id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${180 * 86400}` } });
+        }
+        const rows = (mem.workspaces || []).map((w: any) => `<tr>
+<td><b>${esc(w.name)}</b><br><span class="mut">${esc(w.org)}</span></td>
+<td>${esc(w.plan)} · ${esc(w.status)}</td>
+<td>${w.id === mem.workspace_id ? `<span class="ok">Current</span>` : `<form method="post"><input type="hidden" name="workspace_id" value="${w.id}"><button>Switch</button></form>`}</td></tr>`).join("");
+        return html(layout("Switch business", `
+<div class="card"><table><tr><th>Business</th><th>Plan</th><th></th></tr>${rows}</table>
+<p class="mut">Each business has its own posts, inbox, reviews and billing.</p></div>`, user));
+      }
 
       if (path === "/") return html(await dashboardPage(db, user, mem));
       if (path === "/static/brand/revup-light.png") return new Response(Uint8Array.from(atob(LOGO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
