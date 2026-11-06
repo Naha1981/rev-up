@@ -882,7 +882,7 @@ var LANDING_BODY = `
   <div class="grid">
     <div class="card"><h3 style="margin-top:0">Starter</h3><p class="plan-price">R499 <span>a month</span></p><p>The Google review booster, social posting with your approval on every word, and your enquiry inbox. Up to 500 AI-drafted replies a month, 1 connected channel.</p></div>
     <div class="card" style="border-color:var(--brand);box-shadow:0 8px 24px rgba(249,115,22,.12)"><h3 style="margin-top:0">Growth</h3><p class="plan-price">R999 <span>a month</span></p><p>Everything in Starter, with room to grow: more social posting, up to 1,000 AI-drafted replies a month and 2 connected channels.</p></div>
-    <div class="card"><h3 style="margin-top:0">Business Pro</h3><p class="plan-price">R1,999 <span>a month</span></p><p>Everything in Growth, plus FrontDesk: a public enquiry form for your website, a shared lead pipeline and AI-drafted follow-ups you approve. Up to 2,500 AI-drafted replies a month and 3 connected channels.</p></div>
+    <div class="card"><h3 style="margin-top:0">Business Pro</h3><p class="plan-price">R1,999 <span>a month</span></p><p>Everything in Growth, plus hands-free auto-posting to your social pages, and FrontDesk: a public enquiry form for your website, a shared lead pipeline and AI-drafted follow-ups you approve. Up to 2,500 AI-drafted replies a month and 3 connected channels.</p></div>
   </div>
   <p class="section-sub" style="font-size:14px;opacity:.7;margin-top:26px;margin-bottom:0">Plans include a monthly AI reply volume. Additional usage may carry charges; any extra usage and its rates are agreed with you before it is activated.</p>
   <div style="text-align:center;margin-top:30px"><a class="btn btn-primary" href="/signup">Get started</a></div>
@@ -2554,14 +2554,18 @@ Reply with JSON only: {"caption": "...", "hashtags": ["#tag", ...]}`;
   }
   throw new Error(lastErr);
 }
-async function groqFollowup(env, business, lead) {
+async function groqFollowup(env, db, ws, business, lead) {
   const models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
+  const pq = await db.query(`SELECT pricing_data FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [ws]);
+  const pricing = JSON.stringify(pq.rows[0]?.pricing_data || {});
   const prompt = `Business: ${business} (South Africa).
 A website visitor sent an enquiry.
 Name: ${lead.name}
 Contact: ${lead.contact}
 Enquiry: ${lead.message}
-Write one short follow-up message the business can send back (max 120 words, warm and professional, plain text, no subject line, prices in ZAR if mentioned). Reply with the message text only.`;
+Known prices for this business (JSON, may be empty): ${pricing}
+Write one short follow-up message the business can send back (max 120 words, warm and professional, plain text, no subject line).
+Hard rules: use ONLY the facts above. Never invent prices, discounts, payment plans, opening hours, addresses or phone numbers. The visitor's own contact detail above is NOT the business's - never quote it back as a way to reach the business. If pricing is asked and not in the known prices, say the business will confirm the exact price directly. Sign off as the business name only. Reply with the message text only.`;
   let lastErr = "no model replied";
   for (const model of models) {
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -2637,7 +2641,7 @@ var GOALS = [
 var PLAN_CARDS = [
   { slug: "starter", name: "Starter", price: 499, feat: "Google review booster + enquiry inbox" },
   { slug: "growth", name: "Growth", price: 999, feat: "Everything in Starter + social posting with approvals" },
-  { slug: "business-pro", name: "Business Pro", price: 1999, feat: "Everything in Growth + FrontDesk lead pipeline and follow-ups" }
+  { slug: "business-pro", name: "Business Pro", price: 1999, feat: "Everything in Growth + hands-free auto-posting, FrontDesk lead pipeline and follow-ups" }
 ];
 function recommendPlan(goals) {
   if (goals.includes("leads")) return "business-pro";
@@ -3780,7 +3784,7 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
       const lr = await db.query(`SELECT * FROM frontdesk_lead WHERE id=$1 AND workspace_id=$2`, [fdraft[1], mem.workspace_id]);
       if (!lr.rows[0]) return redirect("/frontdesk");
       try {
-        const body = await groqFollowup(env, mem.workspace_name, lr.rows[0]);
+        const body = await groqFollowup(env, db, mem.workspace_id, mem.workspace_name, lr.rows[0]);
         await db.query(
           `INSERT INTO frontdesk_followup_draft(id,lead_id,workspace_id,body,status,created_at,updated_at) VALUES($1,$2,$3,$4,'draft',now(),now())`,
           [crypto.randomUUID(), fdraft[1], mem.workspace_id, body]

@@ -101,7 +101,7 @@ const LANDING_BODY = `
   <div class="grid">
     <div class="card"><h3 style="margin-top:0">Starter</h3><p class="plan-price">R499 <span>a month</span></p><p>The Google review booster, social posting with your approval on every word, and your enquiry inbox. Up to 500 AI-drafted replies a month, 1 connected channel.</p></div>
     <div class="card" style="border-color:var(--brand);box-shadow:0 8px 24px rgba(249,115,22,.12)"><h3 style="margin-top:0">Growth</h3><p class="plan-price">R999 <span>a month</span></p><p>Everything in Starter, with room to grow: more social posting, up to 1,000 AI-drafted replies a month and 2 connected channels.</p></div>
-    <div class="card"><h3 style="margin-top:0">Business Pro</h3><p class="plan-price">R1,999 <span>a month</span></p><p>Everything in Growth, plus FrontDesk: a public enquiry form for your website, a shared lead pipeline and AI-drafted follow-ups you approve. Up to 2,500 AI-drafted replies a month and 3 connected channels.</p></div>
+    <div class="card"><h3 style="margin-top:0">Business Pro</h3><p class="plan-price">R1,999 <span>a month</span></p><p>Everything in Growth, plus hands-free auto-posting to your social pages, and FrontDesk: a public enquiry form for your website, a shared lead pipeline and AI-drafted follow-ups you approve. Up to 2,500 AI-drafted replies a month and 3 connected channels.</p></div>
   </div>
   <p class="section-sub" style="font-size:14px;opacity:.7;margin-top:26px;margin-bottom:0">Plans include a monthly AI reply volume. Additional usage may carry charges; any extra usage and its rates are agreed with you before it is activated.</p>
   <div style="text-align:center;margin-top:30px"><a class="btn btn-primary" href="/signup">Get started</a></div>
