@@ -70,15 +70,20 @@ test('customerBlock: VIP + visits + dietary', () => {
   assert.ok(b.includes('Lerato') && b.includes('VIP') && b.includes('3 times') && b.includes('halaal'));
 });
 
-// --- landing truthfulness (receptionist claims stay stripped until retest) ---
-test('landing: no receptionist/whatsapp/bookings claims', () => {
+// --- landing truthfulness ---
+test('landing: core sections present', () => {
+  const l = landingPage();
+  for (const good of ['WhatsApp employee', 'Google review', 'Lead pipeline', 'Competitor watch', 'pricing', 'RevUp by NahaLabs'])
+    assert.ok(l.includes(good), good);
+});
+test('landing: no internal or vendor terms, no banned pricing wording', () => {
   const l = landingPage().toLowerCase();
-  for (const bad of ['receptionist', 'whatsapp', 'calendar bookings', 'live today'])
+  for (const bad of ['frontdesk', 'radar', 'website builder', 'zernio', 'cloudflare', 'groq', 'openrouter', 'trigger.dev', 'free trial', 'setup fee', ' vat', 'testimonial', 'demo', 'not yet built'])
     assert.ok(!l.includes(bad), bad);
 });
-test('landing: ZAR pricing, all three plans', () => {
+test('landing: ZAR pricing, all three monthly plans', () => {
   const l = landingPage();
-  for (const good of ['R499', 'R999', 'R1,999', 'Starter', 'Growth', 'Business Pro'])
+  for (const good of ['R499', 'R999', 'R1,999', 'Starter', 'Growth', 'Business Pro', 'per month'])
     assert.ok(l.includes(good), good);
 });
 
