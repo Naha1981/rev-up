@@ -356,6 +356,7 @@ const GOALS: [string, string][] = [
   ["social", "Keep my Facebook and Instagram posting"],
   ["leads", "Capture website enquiries and follow them up (FrontDesk)"],
 ];
+// PRICING LOCKED by Thabiso 6 Nov 2026 - see PRICING.md. Changes need his explicit approval.
 const PLAN_CARDS: { slug: string; name: string; price: number; feat: string }[] = [
   { slug: "starter", name: "Starter", price: 499, feat: "Google review booster + enquiry inbox" },
   { slug: "growth", name: "Growth", price: 999, feat: "Everything in Starter + social posting with approvals" },
