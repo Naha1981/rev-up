@@ -15,3 +15,9 @@ custom_domain = true
 
 [triggers]
 crons = ["*/15 * * * *"]
+
+[vars]
+# his "Yes data" approval (7 Nov 01:09) wired in as flags: the enquiry-text backup
+# runs only while both are true; remove either to switch the backup off without a deploy
+OPENROUTER_FREE_ONLY = "true"
+OPENROUTER_DATA_USE_APPROVED = "true"

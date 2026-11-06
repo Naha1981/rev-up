@@ -11,8 +11,13 @@ type Fetcher = (url: string, init: any) => Promise<any>;
 
 const GROQ_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
 const OPENROUTER_BODY_EXTRA = {
-  // zero-price guard: only ever free endpoints
-  provider: { max_price: { prompt: 0, completion: 0 } },
+  // zero-price guard: only ever free endpoints; no-training: provider may not collect/store prompts
+  provider: {
+    max_price: { prompt: 0, completion: 0 },
+    require_parameters: true, // only providers that accept every parameter - no silent downgrade
+    data_collection: "deny", // no-training: provider may not collect/store prompts
+    zdr: true, // zero data retention endpoints only
+  },
   reasoning: { enabled: false, exclude: true },
 };
 
@@ -35,9 +40,9 @@ async function oneCall(url: string, key: string, body: any, fetcher: Fetcher): P
 }
 
 export async function freeAiGenerate<T>(
-  env: { GROQ_API_KEY?: string; OPENROUTER_API_KEY?: string },
+  env: { GROQ_API_KEY?: string; OPENROUTER_API_KEY?: string; OPENROUTER_FREE_ONLY?: string; OPENROUTER_DATA_USE_APPROVED?: string },
   prompt: string,
-  opts: { maxTokens: number; temperature?: number },
+  opts: { maxTokens: number; temperature?: number; requireBackupConsent?: boolean },
   parse: (text: string) => T | null,
   fetcher: Fetcher = fetch,
 ): Promise<AiSuccess<T> | null> {
@@ -54,12 +59,14 @@ export async function freeAiGenerate<T>(
   if (env.GROQ_API_KEY) {
     for (const model of GROQ_MODELS) {
       const ok = await attempt("Groq", "https://api.groq.com/openai/v1/chat/completions", env.GROQ_API_KEY,
-        { model, temperature: opts.temperature ?? 0.2, max_tokens: opts.maxTokens, reasoning_effort: "low", messages });
+        { model, temperature: opts.temperature ?? 0.2, max_tokens: opts.maxTokens, reasoning_effort: "low", store: false, messages });
       if (ok) return ok;
     }
   } else attempts.push({ provider: "Groq", status: "missing" });
 
-  if (env.OPENROUTER_API_KEY) {
+  if (opts.requireBackupConsent && !(env.OPENROUTER_FREE_ONLY === "true" && env.OPENROUTER_DATA_USE_APPROVED === "true")) {
+    attempts.push({ provider: "OpenRouter", status: "not-approved" });
+  } else if (env.OPENROUTER_API_KEY) {
     const ok = await attempt("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", env.OPENROUTER_API_KEY,
       { model: "openrouter/free", max_tokens: opts.maxTokens, messages, ...OPENROUTER_BODY_EXTRA });
     if (ok) return ok;

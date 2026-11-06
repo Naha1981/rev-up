@@ -10,7 +10,7 @@ const SANDBOX_ACCOUNT_ID = "6a180a034c7f364ffded3c9c";
 const SANDBOX_SEND_ALLOWLIST = new Set(["27672347593", "27612980377"]);
 const OPT_OUT = new Set(["STOP", "STOP ALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"]);
 const PLAN_ALLOWANCE: Record<string, number> = { starter: 500, growth: 1000, "business-pro": 2500 };
-const MAX_SENDS_HOUR = 60, MAX_SENDS_DAY = 300, MAX_DRAFTS_DAY = 300;
+const MAX_SENDS_HOUR = 60, MAX_SENDS_DAY = 300, MAX_DRAFTS_DAY = 300, MAX_AI_ATTEMPTS_DAY = 100;
 
 const ESCALATION = [
   /\b(speak|talk)\s+to\s+(a\s+)?(person|human|someone|manager|owner)\b/i,
@@ -173,7 +173,19 @@ export async function handleZernioWebhook(db: Pool, env: any, payload: any): Pro
     `Reply with JSON only: {"reply": "...", "intake": {"name": "", "detail": "", "preferred_time": "", "address": "", "policy_number": ""}} ` +
     `(fill only the intake fields the customer actually gave; make detail a short description of what they want - for a restaurant booking use 'Table for N', never a bare number).\n${RULES}`;
 
-  const aiResult = await freeAiGenerate<any>(env, prompt, { maxTokens: 800, temperature: 0.2 }, rejectInventedPrices(prompt, (text) => {
+  // persistent per-business daily AI-attempt cap (his mandate: enquiry-text backup
+  // stays bounded even on free providers). One enquiry = one AI attempt; the count
+  // lives in Postgres so it survives worker restarts. Cap hit: flag for a human, no draft.
+  await db.query(`CREATE TABLE IF NOT EXISTS cf_ai_usage(workspace_id uuid, day date, attempts int NOT NULL DEFAULT 0, PRIMARY KEY(workspace_id, day))`);
+  const usage = await db.query(
+    `INSERT INTO cf_ai_usage(workspace_id, day, attempts) VALUES($1, CURRENT_DATE, 1)
+     ON CONFLICT (workspace_id, day) DO UPDATE SET attempts = cf_ai_usage.attempts + 1
+     RETURNING attempts`, [channel.workspace_id]);
+  if (Number(usage.rows[0].attempts) > MAX_AI_ATTEMPTS_DAY) {
+    await db.query(`UPDATE receptionist_contact SET needs_human=true, updated_at=now() WHERE id=$1 AND NOT needs_human`, [contact.id]);
+    return;
+  }
+  const aiResult = await freeAiGenerate<any>(env, prompt, { maxTokens: 800, temperature: 0.2, requireBackupConsent: true }, rejectInventedPrices(prompt, (text) => {
     const m = text.match(/\{[\s\S]*\}/);
     if (!m) return null;
     try {

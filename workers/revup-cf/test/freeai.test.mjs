@@ -87,7 +87,7 @@ test('zero-price guard and free model on every secondary call', async () => {
   await freeAiGenerate(ENV, PROMPT, { maxTokens: 100 }, parseJson, f);
   const body = JSON.parse(f.calls.find(c => c.url.includes('openrouter')).init.body);
   assert.equal(body.model, 'openrouter/free');
-  assert.deepEqual(body.provider, { max_price: { prompt: 0, completion: 0 } });
+  assert.deepEqual(body.provider, { max_price: { prompt: 0, completion: 0 }, require_parameters: true, data_collection: 'deny', zdr: true });
   // and the primary never gets an OpenRouter-style body, secondary URL is fixed
   assert.ok(f.calls.every(c => c.url.startsWith('https://api.groq.com/') || c.url.startsWith('https://openrouter.ai/')));
 });
@@ -109,4 +109,46 @@ test('no keys configured at all: null with two missing attempts', async () => {
   const f = fakeFetch([]);
   const r = await freeAiGenerate({}, PROMPT, { maxTokens: 100 }, parseJson, f);
   assert.equal(r, null);
+});
+
+test('openrouter call carries zero-price guard AND no-training flag', async () => {
+  const f = fakeFetch([
+    ['groq.com', fail(401)],
+    ['openrouter.ai', okJson({ caption: 'Hi', hashtags: [] })],
+  ]);
+  const r = await freeAiGenerate(ENV, PROMPT, { maxTokens: 100 }, parseJson, f);
+  assert.equal(r.provider, 'OpenRouter');
+  const or = f.calls.find(c => c.url.includes('openrouter.ai'));
+  const body = JSON.parse(or.init.body);
+  assert.equal(body.provider.max_price.prompt, 0);
+  assert.equal(body.provider.max_price.completion, 0);
+  assert.equal(body.provider.data_collection, 'deny');
+  assert.equal(body.provider.require_parameters, true);
+  assert.equal(body.provider.zdr, true);
+});
+
+test('enquiry-data callers: backup is skipped unless consent flags are set', async () => {
+  // flags missing -> OpenRouter never called, attempt recorded as not-approved
+  const f1 = fakeFetch([['groq.com', fail(500)], ['openrouter', okJson({ caption: 'x', hashtags: [] })]]);
+  const r1 = await freeAiGenerate(ENV, PROMPT, { maxTokens: 100, requireBackupConsent: true }, parseJson, f1);
+  assert.equal(r1, null);
+  assert.ok(!f1.calls.some(c => c.url.includes('openrouter')), 'backup must not be called without consent flags');
+  // flags set -> backup runs
+  const envOK = { ...ENV, OPENROUTER_FREE_ONLY: 'true', OPENROUTER_DATA_USE_APPROVED: 'true' };
+  const f2 = fakeFetch([['groq.com', fail(500)], ['openrouter', okJson({ caption: 'x', hashtags: [] })]]);
+  const r2 = await freeAiGenerate(envOK, PROMPT, { maxTokens: 100, requireBackupConsent: true }, parseJson, f2);
+  assert.equal(r2.provider, 'OpenRouter');
+});
+
+test('non-enquiry callers: backup behaviour unchanged by consent flags', async () => {
+  const f = fakeFetch([['groq.com', fail(500)], ['openrouter', okJson({ caption: 'x', hashtags: [] })]]);
+  const r = await freeAiGenerate(ENV, PROMPT, { maxTokens: 100 }, parseJson, f);
+  assert.equal(r.provider, 'OpenRouter');
+});
+
+test('groq calls carry store:false (no server-side prompt storage)', async () => {
+  const f = fakeFetch([['groq.com', okJson({ caption: 'Hi', hashtags: [] })]]);
+  await freeAiGenerate(ENV, PROMPT, { maxTokens: 100 }, parseJson, f);
+  const body = JSON.parse(f.calls.find(c => c.url.includes('groq.com')).init.body);
+  assert.equal(body.store, false);
 });
