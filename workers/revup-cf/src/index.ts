@@ -423,7 +423,7 @@ async function reviewsPage(db: Pool, user: any, mem: any, base: string, msg = ""
   const evRows = events.rows.map((e: any) => `<tr>
 <td>${esc(e.contact_name)}</td><td>${esc(e.step.replace("_", " "))}</td>
 <td>${e.status === "sent" ? `<span class="ok">sent</span>` : e.status === "failed" ? `<span class="bad">failed</span>` : esc(e.status)}</td>
-<td class="mut">${new Date(e.scheduled_for).toLocaleString("en-ZA")}</td>
+<td class="mut">${new Date(e.scheduled_for).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" })}</td>
 <td class="mut">${e.error ? esc(e.error) : ""}</td></tr>`).join("");
   const issues = contacts.rows.filter((c: any) => c.review_status === "issue_flagged");
   const statusLabel: any = { new: "new", check_in_sent: "check-in sent", review_requested: "review asked", clicked: "clicked", unsubscribed: "opted out", issue_flagged: "issue" };
@@ -1256,10 +1256,12 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
         const client = await db.connect();
         try {
           await client.query("BEGIN");
-          const contactId = crypto.randomUUID();
-          await client.query(
+          const cUp = await client.query(
             `INSERT INTO receptionist_contact(id,workspace_id,wa_id,name,tags,needs_human,opted_out,zernio_conversation_id,issue_note,review_status,dietary_notes,is_vip,notes,total_spend,visit_count,created_at,updated_at)
-             VALUES($1,$2,$3,$4,'[]'::jsonb,false,false,'','','new','',false,'',0,0,now(),now())`, [contactId, mem.workspace_id, f.wa_id || "", f.name || ""]);
+             VALUES($1,$2,$3,$4,'[]'::jsonb,false,false,'','','new','',false,'',0,0,now(),now())
+             ON CONFLICT (workspace_id, wa_id) DO UPDATE SET name=EXCLUDED.name, updated_at=now()
+             RETURNING id`, [crypto.randomUUID(), mem.workspace_id, (f.wa_id || "").trim(), (f.name || "").trim()]);
+          const contactId = cUp.rows[0].id;
           const code = [...crypto.getRandomValues(new Uint8Array(6))].map((b) => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[b % 32]).join("");
           await client.query(
             `INSERT INTO receptionist_reviewlink(id,workspace_id,contact_id,short_code,original_url,created_at)
