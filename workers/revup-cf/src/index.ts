@@ -3,6 +3,7 @@
 // Free CPU limits. No vendor names surface in any HTML.
 import { Client, Pool } from "pg";
 import { LOGO_B64, landingPage } from "./landing";
+import { INDUSTRIES, getPreset, industryLabel } from "./presets";
 
 interface Env {
   DATABASE_URL: string;
@@ -37,7 +38,7 @@ function esc(s: any): string {
 }
 function layout(title: string, body: string, user?: any): string {
   const nav = user
-    ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a href="/">Dashboard</a><a href="/posts">Posts</a><a href="/onboarding">Onboarding</a><a href="/reviews">Reviews</a><a href="/inbox">Inbox</a><a href="/approvals">Approvals</a><a href="/billing">Billing</a>${user._cur_ws ? `<a href="/switch" title="Switch business" style="border:1px solid var(--line);border-radius:8px;padding:2px 8px">${esc(user._cur_ws)}${(user._ws_count||0) > 1 ? " &#9662;" : ""}</a>` : ""}<form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>`
+    ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a href="/">Dashboard</a><a href="/analytics">Analytics</a><a href="/radar">Radar</a><a href="/posts">Posts</a><a href="/onboarding">Onboarding</a><a href="/reviews">Reviews</a><a href="/inbox">Inbox</a><a href="/approvals">Approvals</a><a href="/billing">Billing</a>${user._cur_ws ? `<a href="/switch" title="Switch business" style="border:1px solid var(--line);border-radius:8px;padding:2px 8px">${esc(user._cur_ws)}${(user._ws_count||0) > 1 ? " &#9662;" : ""}</a>` : ""}<form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>`
     : `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a class="btn btn-ghost" href="/login">Log in</a><a class="btn btn-primary" href="/signup">Get started</a></div></nav>`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} · RevUp</title><style>
 :root{--brand:#F97316;--brand-dark:#EA580C;--brand-soft:#FFF7ED;--ink:#1C1917;--ink2:#57534E;--ink3:#A8A29E;--line:#E7E5E4;--bg:#FAFAF9}
@@ -274,7 +275,7 @@ async function onboardingPage(db: Pool, user: any, mem: any, msg = ""): Promise<
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <div class="card"><form method="post" action="/onboarding">
 <label>Business name<input name="business_name" value="${esc(b.business_name || mem.org_name)}" required></label>
-<label>Industry<input name="industry" value="${esc(ws.industry || b.industry || "")}" placeholder="restaurant, plumbing, dental…"></label>
+<label>Industry<select name="industry">${INDUSTRIES.map(([v, l]) => `<option value="${v}"${(ws.industry || b.industry || "general") === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>
 <label>Website<input name="website_url" value="${esc(ws.website_url || "")}" placeholder="https://…"></label>
 <label>Google review link<input name="google_review_url" value="${esc(b.google_review_url || "")}" placeholder="https://g.page/r/…"></label>
 <label>Timezone<input name="timezone" value="${esc(ws.timezone || "Africa/Johannesburg")}"></label>
@@ -361,6 +362,52 @@ async function conversationPage(db: Pool, user: any, mem: any, contactId: string
   return html(layout(`Chat: ${esc(c.rows[0].name || c.rows[0].wa_id)}`, `
 <p><a href="/inbox">&larr; all conversations</a></p>
 <div class="card">${bubbles || `<p class="mut">No messages.</p>`}</div>`, user));
+}
+
+async function radarPage(db: Pool, user: any, mem: any, msg: string): Promise<string> {
+  const w = await db.query(`SELECT industry FROM workspaces_workspace WHERE id=$1`, [mem.workspace_id]);
+  const ind = w.rows[0]?.industry || "general";
+  const p = getPreset(ind);
+  const feed = await db.query(
+    `SELECT title, link, source, summary, score, published_at FROM radar_radarfeeditem WHERE workspace_id=$1 ORDER BY published_at DESC NULLS LAST, fetched_at DESC LIMIT 20`, [mem.workspace_id]);
+  const items = feed.rows.map((r: any) => `<tr>
+<td><a href="${esc(r.link)}" target="_blank" rel="noopener">${esc(r.title)}</a><br><span class="mut">${esc((r.summary || "").slice(0, 120))}</span></td>
+<td class="mut">${esc(r.source || "")}</td>
+<td class="mut">${r.published_at ? new Date(r.published_at).toLocaleDateString("en-ZA") : ""}</td></tr>`).join("");
+  return layout("Radar", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+<div class="card"><h2>Your industry</h2>
+<form method="post"><label>Industry<select name="industry">${INDUSTRIES.map(([v, l]) => `<option value="${v}"${ind === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>
+<button>Save</button></form>
+<p class="mut">Tunes your demand radar, reply tone and post ideas.</p></div>
+<div class="card"><h2>Post ideas for ${esc(industryLabel(ind))}</h2>
+<ul>${(p.post_themes || []).map((t: string) => `<li>${esc(t)}</li>`).join("")}</ul>
+${(p.hashtags || []).length ? `<p class="mut">Default hashtags: ${esc(p.hashtags.join(" "))}</p>` : ""}
+<p class="mut">Reply tone: ${esc(p.responder_tone || "warm and professional")}</p></div>
+<div class="card"><h2>Demand signals</h2>
+${feed.rows.length ? `<table><tr><th>Signal</th><th>Source</th><th>When</th></tr>${items}</table>` : `<p class="mut">No signals yet for this business. The radar collects South African news and demand signals for your industry; they appear here as they arrive.</p>`}</div>`, user);
+}
+
+async function analyticsPage(db: Pool, user: any, mem: any): Promise<string> {
+  const [byStatus, links, clicks, contacts, msgsIn, msgsOut, clicksByDay] = await Promise.all([
+    db.query(`SELECT pp.status, count(*) c FROM composer_platform_post pp JOIN composer_post p ON p.id=pp.post_id WHERE p.workspace_id=$1 GROUP BY pp.status ORDER BY c DESC`, [mem.workspace_id]),
+    db.query(`SELECT count(*) c FROM receptionist_reviewlink WHERE workspace_id=$1`, [mem.workspace_id]),
+    db.query(`SELECT count(*) c FROM receptionist_reviewlink WHERE workspace_id=$1 AND clicked_at IS NOT NULL`, [mem.workspace_id]),
+    db.query(`SELECT count(*) c FROM receptionist_contact WHERE workspace_id=$1`, [mem.workspace_id]),
+    db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='inbound'`, [mem.workspace_id]),
+    db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound'`, [mem.workspace_id]),
+    db.query(`SELECT date_trunc('day', clicked_at) d, count(*) c FROM receptionist_reviewlink WHERE workspace_id=$1 AND clicked_at IS NOT NULL GROUP BY 1 ORDER BY 1 DESC LIMIT 14`, [mem.workspace_id]),
+  ]);
+  const statusRows = byStatus.rows.map((r: any) => `<tr><td>${esc(r.status)}</td><td>${r.c}</td></tr>`).join("");
+  const clickRows = clicksByDay.rows.map((r: any) => `<tr><td>${new Date(r.d).toLocaleDateString("en-ZA")}</td><td>${r.c}</td></tr>`).join("");
+  return layout("Analytics", `
+<div class="grid">
+<div class="card"><h2>Review links</h2><p class="stat">${links.rows[0].c}</p><p class="mut">${clicks.rows[0].c} clicked</p></div>
+<div class="card"><h2>Customers</h2><p class="stat">${contacts.rows[0].c}</p><p class="mut">in inbox</p></div>
+<div class="card"><h2>WhatsApp messages</h2><p class="stat">${msgsIn.rows[0].c} in · ${msgsOut.rows[0].c} out</p></div>
+</div>
+<div class="card"><h2>Posts by status</h2>${byStatus.rows.length ? `<table><tr><th>Status</th><th>Count</th></tr>${statusRows}</table>` : `<p class="mut">No posts yet.</p>`}</div>
+<div class="card"><h2>Review-link clicks by day</h2>${clicksByDay.rows.length ? `<table><tr><th>Day</th><th>Clicks</th></tr>${clickRows}</table>` : `<p class="mut">No clicks yet.</p>`}</div>`, user);
 }
 
 async function postsPage(db: Pool, user: any, mem: any): Promise<string> {
@@ -586,6 +633,18 @@ export default {
         }
         return html(await onboardingPage(db, user, mem));
       }
+
+      if (path === "/radar") {
+        if (req.method === "POST") {
+          const f = await formData(req);
+          const ind = (f.industry || "general").trim();
+          await db.query(`UPDATE workspaces_workspace SET industry=$1, updated_at=now() WHERE id=$2`, [ind, mem.workspace_id]);
+          await db.query(`UPDATE receptionist_businessprofile SET industry=$1, updated_at=now() WHERE workspace_id=$2`, [ind, mem.workspace_id]);
+          return redirect("/radar?msg=" + encodeURIComponent("Industry saved - radar, reply tone and post ideas updated."));
+        }
+        return html(await radarPage(db, user, mem, url.searchParams.get("msg") || ""));
+      }
+      if (path === "/analytics") return html(await analyticsPage(db, user, mem));
 
       if (path === "/posts") {
         const msg = url.searchParams.get("msg") || "";
