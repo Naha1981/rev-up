@@ -431,7 +431,8 @@ export default {
               [crypto.randomUUID(), mem.workspace_id, f.business_name || mem.org_name, f.industry || "", f.google_review_url || ""]);
             await client.query("COMMIT");
           } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }
-          return html(await onboardingPage(db, user, mem, "Saved."));
+          if (f.google_review_url) return redirect("/reviews?msg=" + encodeURIComponent("Business profile saved. Now create your first tracked review link below."));
+          return html(await onboardingPage(db, user, mem, "Saved. Add your Google review link to start collecting reviews."));
         }
         return html(await onboardingPage(db, user, mem));
       }
@@ -500,7 +501,7 @@ export default {
       }
 
 
-      if (path === "/reviews") return html(await reviewsPage(db, user, mem, base));
+      if (path === "/reviews") return html(await reviewsPage(db, user, mem, base, url.searchParams.get("msg") || ""));
 
       if (path === "/reviews/destination" && req.method === "POST") {
         const f = await formData(req);
