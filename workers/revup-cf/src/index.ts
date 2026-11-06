@@ -32,7 +32,7 @@ function esc(s: any): string {
 }
 function layout(title: string, body: string, user?: any): string {
   const nav = user
-    ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a href="/">Dashboard</a><a href="/onboarding">Onboarding</a><a href="/reviews">Reviews</a><a href="/approvals">Approvals</a><a href="/billing">Billing</a><form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>`
+    ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a href="/">Dashboard</a><a href="/posts">Posts</a><a href="/onboarding">Onboarding</a><a href="/reviews">Reviews</a><a href="/approvals">Approvals</a><a href="/billing">Billing</a><form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>`
     : `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a class="btn btn-ghost" href="/login">Log in</a><a class="btn btn-primary" href="/signup">Get started</a></div></nav>`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} · RevUp</title><style>
 :root{--brand:#F97316;--brand-dark:#EA580C;--brand-soft:#FFF7ED;--ink:#1C1917;--ink2:#57534E;--ink3:#A8A29E;--line:#E7E5E4;--bg:#FAFAF9}
@@ -219,16 +219,42 @@ async function reviewsPage(db: Pool, user: any, mem: any, base: string, msg = ""
 <td class="mut">${new Date(l.created_at).toLocaleDateString("en-ZA")}</td></tr>`).join("");
   return layout("Reviews", `
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
-${b.google_review_url ? `<p>Google review destination: <a href="${esc(b.google_review_url)}">${esc(b.google_review_url)}</a></p>` : `<p class="warn">No Google review link set — add it in <a href="/onboarding">Onboarding</a> first.</p>`}
-<h2>New review link</h2>
+${b.google_review_url ? `<p>Google review destination: <a href="${esc(b.google_review_url)}">${esc(b.google_review_url)}</a></p>` : `<div class="card" style="border-color:var(--brand)"><h2 style="margin-top:0">First: where should reviews go?</h2><p class="mut">Paste your Google review link (from Google Business Profile → "Ask for reviews"). Every tracked link you create sends customers here.</p><form method="post" action="/reviews/destination"><input name="google_review_url" placeholder="https://g.page/r/…" required><button>Save and continue</button></form></div>`}
+${b.google_review_url ? `<h2>New review link</h2>
 <div class="card"><form method="post" action="/reviews/links">
 <label>Customer name<input name="name" required maxlength="200"></label>
 <label>Customer WhatsApp / phone<input name="wa_id" required maxlength="32" placeholder="27…"></label>
 <button>Create tracked link</button>
 <p class="mut">Send the /r/… link to the customer. It redirects to your Google review page and records the click.</p>
-</form></div>
+</form></div>` : ""}
 <h2>Links</h2>
 <div class="card">${links.rows.length ? `<table><tr><th>Customer</th><th>Link</th><th>Click</th><th>Created</th></tr>${rows}</table>` : `<p class="mut">No review links yet.</p>`}</div>`, user);
+}
+
+
+async function postsPage(db: Pool, user: any, mem: any): Promise<string> {
+  const r = await db.query(
+    `SELECT p.id, p.title, p.caption, p.scheduled_at, p.published_at, p.created_at,
+            string_agg(DISTINCT pp.status, ', ') AS statuses,
+            string_agg(DISTINCT COALESCE(sa.platform, pp.provider), ', ') AS channels
+     FROM composer_post p
+     LEFT JOIN composer_platform_post pp ON pp.post_id=p.id
+     LEFT JOIN social_accounts_social_account sa ON sa.id=pp.social_account_id
+     WHERE p.workspace_id=$1
+     GROUP BY p.id ORDER BY p.created_at DESC LIMIT 100`, [mem.workspace_id]);
+  const rows = r.rows.map((x: any) => {
+    const sts = (x.statuses || "").split(", ").filter(Boolean);
+    const allDraft = sts.length > 0 && sts.every((st: string) => st === "draft");
+    return `<tr>
+<td><b>${esc(x.title || "(untitled)")}</b><br><span class="mut">${esc((x.caption || "").slice(0, 120))}</span></td>
+<td>${sts.map((st: string) => `<span class="pill ${st === "approved" || st === "published" ? "ok" : ""}">${esc(st)}</span> `).join("")}</td>
+<td class="mut">${esc(x.channels || "-")}</td>
+<td class="mut">${x.scheduled_at ? new Date(x.scheduled_at).toLocaleString("en-ZA") : new Date(x.created_at).toLocaleDateString("en-ZA")}</td>
+<td>${allDraft ? `<form class="inline" method="post" action="/posts/${x.id}/submit"><button>Submit for review</button></form>` : ""}</td></tr>`;
+  }).join("");
+  return layout("Posts", `
+<p><a class="btn btn-primary" href="/posts/new">New post</a></p>
+<div class="card">${r.rows.length ? `<table><tr><th>Post</th><th>Status</th><th>Channels</th><th>When</th><th></th></tr>${rows}</table>` : `<p class="mut">No posts yet.</p>`}</div>`, user);
 }
 
 const STATUS_LABELS: Record<string, string> = { approved: "approved", rejected: "rejected", changes_requested: "changes requested" };
@@ -410,7 +436,86 @@ export default {
         return html(await onboardingPage(db, user, mem));
       }
 
+      if (path === "/posts") {
+        const msg = url.searchParams.get("msg") || "";
+        return html((msg ? `<p class="ok">${esc(msg)}</p>` : "") + await postsPage(db, user, mem));
+      }
+
+      if (path === "/posts/new") {
+        if (req.method === "POST") {
+          const f = await formData(req);
+          if (!(f.title || "").trim() && !(f.caption || "").trim()) return redirect("/posts/new");
+          const postId = crypto.randomUUID();
+          const client = await db.connect();
+          try {
+            await client.query("BEGIN");
+            await client.query(
+              `INSERT INTO composer_post(id,title,caption,first_comment,internal_notes,tags,workspace_id,author_id,created_at,updated_at)
+               VALUES($1,$2,$3,'','','{}'::jsonb,$4,$5,now(),now())`,
+              [postId, (f.title || "").trim(), (f.caption || "").trim(), mem.workspace_id, user.id]);
+            // One draft platform post per connected account, like the Django composer.
+            const accs = await client.query(
+              `SELECT id, provider FROM social_accounts_social_account WHERE workspace_id=$1 AND connection_status='connected'`, [mem.workspace_id]);
+            for (const a of accs.rows) {
+              await client.query(
+                `INSERT INTO composer_platform_post(id,platform_post_id,publish_error,retry_count,created_at,updated_at,social_account_id,post_id,platform_extra,status,first_comment_error,first_comment_id,first_comment_retry_count,first_comment_status,last_provider_error,last_provider_status,provider,provider_post_id)
+                 VALUES($1,'','',0,now(),now(),$2,$3,'{}'::jsonb,'draft','','',0,'none','','',$4,'')`,
+                [crypto.randomUUID(), a.id, postId, a.provider || "zernio"]);
+            }
+            await client.query("COMMIT");
+            return redirect("/posts?msg=" + encodeURIComponent("Draft created."));
+          } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }
+        }
+        return html(layout("New post", `
+<div class="card"><form method="post" action="/posts/new">
+<label>Title<input name="title" maxlength="200" placeholder="Internal title"></label>
+<label>Caption<textarea name="caption" rows="5" placeholder="What should go out?"></textarea></label>
+<button>Save draft</button>
+<p class="mut">Creates a draft for every connected channel. Scheduling and publishing run on the current pipeline.</p>
+</form></div>`, user));
+      }
+
+      const sm = /^\/posts\/([0-9a-f-]{36})\/submit$/.exec(path);
+      if (sm && req.method === "POST") {
+        const client = await db.connect();
+        try {
+          await client.query("BEGIN");
+          const cur = await client.query(
+            `SELECT pp.id, pp.status FROM composer_platform_post pp JOIN composer_post p ON p.id=pp.post_id
+             WHERE pp.post_id=$1 AND p.workspace_id=$2 FOR UPDATE OF pp`, [sm[1], mem.workspace_id]);
+          let moved = 0;
+          for (const pp of cur.rows) {
+            if (pp.status !== "draft") continue;
+            await client.query(`UPDATE composer_platform_post SET status='pending_review', updated_at=now() WHERE id=$1`, [pp.id]);
+            moved++;
+          }
+          if (moved) {
+            await client.query(
+              `INSERT INTO approvals_approval_action(id,post_id,platform_post_id,user_id,action,comment,created_at)
+               VALUES($1,$2,NULL,$3,'submitted','',now())`, [crypto.randomUUID(), sm[1], user.id]);
+          }
+          await client.query("COMMIT");
+          return redirect(moved ? "/approvals" : "/posts?msg=" + encodeURIComponent("Nothing to submit (no draft channels)."));
+        } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }
+      }
+
+
       if (path === "/reviews") return html(await reviewsPage(db, user, mem, base));
+
+      if (path === "/reviews/destination" && req.method === "POST") {
+        const f = await formData(req);
+        if (!/^https:\/\//.test(f.google_review_url || "")) return redirect("/reviews");
+        const bp = await db.query(`SELECT 1 FROM receptionist_businessprofile WHERE workspace_id=$1 LIMIT 1`, [mem.workspace_id]);
+        if (bp.rows[0]) {
+          await db.query(`UPDATE receptionist_businessprofile SET google_review_url=$1, updated_at=now() WHERE workspace_id=$2`, [f.google_review_url, mem.workspace_id]);
+        } else {
+          await db.query(
+            `INSERT INTO receptionist_businessprofile(id,workspace_id,business_name,industry,operating_hours,pricing_data,banking_details,payment_link_url,emergency_contact_phone,custom_rules,google_review_url,is_active,review_requests_enabled,service_reminder_days,revenue_mode,created_at,updated_at)
+             VALUES($1,$2,$3,'','{}'::jsonb,'{}'::jsonb,'{}'::jsonb,'','','',$4,true,true,2,'reviews',now(),now())`,
+            [crypto.randomUUID(), mem.workspace_id, mem.org_name, f.google_review_url]);
+        }
+        return redirect("/reviews");
+      }
 
       if (path === "/reviews/links" && req.method === "POST") {
         const f = await formData(req);
