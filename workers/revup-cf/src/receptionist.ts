@@ -1,4 +1,4 @@
-import { freeAiGenerate } from "./freeai";
+import { freeAiGenerate, rejectInventedPrices, FACT_RULES } from "./freeai";
 // WhatsApp receptionist: inbound Zernio webhook -> AI draft -> auto-reply.
 // Bounds (his standing rules): reply only to numbers that messaged first,
 // never cold outbound; sandbox line answers his own numbers only; per-workspace
@@ -19,15 +19,14 @@ const ESCALATION = [
   /\b(emergency|urgent|burst|flooding|no power|sparking)\b/i,
 ];
 
-const RULES =
-  "Rules: reply in under 120 words; plain WhatsApp language; prices in South African rand (R); " +
-  "no emojis; never mention you are an AI unless asked. " +
+export const RULES =
+  "Rules: reply in under 120 words; plain WhatsApp language; prices in South African rand (R); no emojis. " +
   "When the customer sends photos, acknowledge them by count and never describe, diagnose or " +
   "price what might be in them - a person from the team assesses photos. " +
   "IMPORTANT: the business information above is the COMPLETE list of what this business offers. " +
   "If the customer asks about a service, product, price or policy that is not listed there, " +
   "do NOT say yes and do NOT say no - say a person from the team will confirm. " +
-  "If you do not know, say a person will confirm.";
+  "If you do not know, say a person will confirm. " + FACT_RULES;
 
 async function hmacHex(secret: string, body: string): Promise<string> {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
@@ -174,14 +173,14 @@ export async function handleZernioWebhook(db: Pool, env: any, payload: any): Pro
     `Reply with JSON only: {"reply": "...", "intake": {"name": "", "detail": "", "preferred_time": "", "address": "", "policy_number": ""}} ` +
     `(fill only the intake fields the customer actually gave; make detail a short description of what they want - for a restaurant booking use 'Table for N', never a bare number).\n${RULES}`;
 
-  const aiResult = await freeAiGenerate<any>(env, prompt, { maxTokens: 800, temperature: 0.2 }, (text) => {
+  const aiResult = await freeAiGenerate<any>(env, prompt, { maxTokens: 800, temperature: 0.2 }, rejectInventedPrices(prompt, (text) => {
     const m = text.match(/\{[\s\S]*\}/);
     if (!m) return null;
     try {
       const d = JSON.parse(m[0]);
       return d && typeof d === "object" ? d : null;
     } catch { return null; }
-  });
+  }));
   if (!aiResult) return; // all providers unavailable: conversation stays in inbox for a human
   const draft: any = aiResult.value;
   const reply = String(draft.reply || "").trim();

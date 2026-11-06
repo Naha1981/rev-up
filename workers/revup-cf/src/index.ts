@@ -39,7 +39,7 @@ async function sha256hex(s: string): Promise<string> {
 // md5 via spark-md5 — PayFast signatures only; WebCrypto has no md5.
 import SparkMD5 from "spark-md5";
 import { wifiCardPage } from "./wificard";
-import { freeAiGenerate } from "./freeai";
+import { freeAiGenerate, rejectInventedPrices, FACT_RULES } from "./freeai";
 import { QRCODE_LIB } from "./qrcodejs";
 export function md5(input: string): string { return SparkMD5.hash(input); }
 
@@ -246,11 +246,11 @@ async function handlePayfastItn(db: Pool, env: Env, req: Request): Promise<Respo
 }
 
 // ---------- AI drafting (Groq free tier, Django-faithful contract) ----------
-const DRAFT_RULES = "Rules: write for a real local business. NEVER invent statistics, customer testimonials, review counts, awards, or claims the business could not verify. No fake urgency. No 'AI' buzzwords. Plain, warm, specific language. South African English. Keep the caption under 900 characters including hashtags.";
+export const DRAFT_RULES = "Rules: write for a real local business. NEVER invent statistics, customer testimonials, review counts, awards, or claims the business could not verify. No fake urgency. South African English. Keep the caption under 900 characters including hashtags. " + FACT_RULES;
 
 async function draftCaption(env: Env, business: string, topic: string): Promise<{ caption: string; hashtags: string[] }> {
   const prompt = `Business: ${business}.\nWrite one social media post for this business about: ${topic}.\n${DRAFT_RULES}\nReply with JSON only: {"caption": "...", "hashtags": ["#tag", ...]}`;
-  const r = await freeAiGenerate(env, prompt, { maxTokens: 1500, temperature: 0.2 }, (text) => {
+  const r = await freeAiGenerate(env, prompt, { maxTokens: 1500, temperature: 0.2 }, rejectInventedPrices(prompt, (text) => {
     const m = /\{[\s\S]*\}/.exec(text);
     if (!m) return null;
     try {
@@ -259,7 +259,7 @@ async function draftCaption(env: Env, business: string, topic: string): Promise<
       const hashtags = Array.isArray(parsed.hashtags) ? parsed.hashtags.map((h: any) => String(h)) : [];
       return caption ? { caption, hashtags } : null;
     } catch { return null; }
-  });
+  }));
   if (!r) throw new Error("the writing assistant is busy right now");
   return r.value;
 }
@@ -275,11 +275,12 @@ Contact: ${lead.contact}
 Enquiry: ${lead.message}
 Known prices for this business (JSON, may be empty): ${pricing}
 Write one short follow-up message the business can send back (max 120 words, warm and professional, plain text, no subject line).
-Hard rules: use ONLY the facts above. Never invent prices, discounts, payment plans, opening hours, addresses or phone numbers. The visitor's own contact detail above is NOT the business's - never quote it back as a way to reach the business. If pricing is asked and not in the known prices, say the business will confirm the exact price directly. Sign off as the business name only. Reply with the message text only.`;
-  const r = await freeAiGenerate(env, prompt, { maxTokens: 500, temperature: 0.3 }, (text) => {
+${FACT_RULES}
+The visitor's own contact detail above is NOT the business's - never quote it back as a way to reach the business. If pricing is asked and not in the known prices, say the business will confirm the exact price directly. Sign off as the business name only. Reply with the message text only.`;
+  const r = await freeAiGenerate(env, prompt, { maxTokens: 500, temperature: 0.3 }, rejectInventedPrices(prompt, (text) => {
     const v = text.trim();
     return v || null;
-  });
+  }));
   if (!r) throw new Error("the writing assistant is busy right now");
   return r.value;
 }

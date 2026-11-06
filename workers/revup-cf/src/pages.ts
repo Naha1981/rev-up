@@ -1,4 +1,4 @@
-import { freeAiGenerate } from "./freeai";
+import { freeAiGenerate, rejectInventedPrices, FACT_RULES } from "./freeai";
 // RevUp Pages - one-pain-per-page landing pages.
 // Strategy: each ad/campaign speaks to ONE customer pain and links to a page
 // built ONLY around that pain (the Aurivita multi-angle play). Mirror copies
@@ -95,10 +95,11 @@ export async function fetchForMirror(url: string): Promise<string> {
 }
 
 // ---------- generation (Groq, free tier) ----------
-const COPY_RULES = `You write landing page copy for South African small businesses.
+export const COPY_RULES = `You write landing page copy for South African small businesses.
 Rules: plain warm SA English, short sentences, no hype words (no "revolutionary", "game-changing", "unlock"), prices in rand (R) if any, mobile-first so keep headings under 9 words, body text under 60 words per section, bullets under 12 words each.
 The page speaks to ONE customer pain only - every section must tie back to that pain.
-NEVER invent facts: no phone numbers, no prices, no guarantees, no qualifications, no years of experience, no claims the business did not state. Only use details given in this brief. For contact, always point to the button (e.g. "tap the button below"), never write a phone number or email in the copy.
+NEVER invent facts: no phone numbers, no prices, no opening hours, no services not in the brief, no guarantees, no qualifications, no names, no years of experience, no claims the business did not state. Only use details given in this brief. For contact, always point to the button (e.g. "tap the button below"), never write a phone number or email in the copy.
+${FACT_RULES}
 If the brief gives no testimonials, do NOT write fake quotes or claims about what customers say. In a proof section, state plainly how the product works and what the business itself commits to.`;
 
 export async function generateSections(env: any, brief: {
@@ -117,7 +118,7 @@ Write copy for a landing page with these sections in this order: ${skel}.
 Reply with JSON only:
 {"seo_title":"...","sections":[{"type":"hero","heading":"...","body":"...","items":["...","..."]},...]}
 Every section in the list must appear, same order, same type. items may be [] for hero/cta.`;
-  const r = await freeAiGenerate(env, prompt, { maxTokens: 3000, temperature: 0.4 }, (text) => {
+  const r = await freeAiGenerate(env, prompt, { maxTokens: 3000, temperature: 0.4 }, rejectInventedPrices(prompt, (text) => {
     const m = /\{[\s\S]*\}/.exec(text);
     if (!m) return null;
     try {
@@ -133,7 +134,7 @@ Every section in the list must appear, same order, same type. items may be [] fo
       if (!sections.some((sec) => sec.type === "cta")) sections.push({ type: "cta", heading: "Ready when you are", body: "Send a message now and get a straight answer.", items: [] });
       return { seo_title: String(parsed.seo_title || brief.business).slice(0, 120), sections };
     } catch { return null; }
-  });
+  }));
   if (!r) throw new Error("the copywriter is busy right now");
   return r.value;
 }

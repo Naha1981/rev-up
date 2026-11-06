@@ -67,3 +67,63 @@ export async function freeAiGenerate<T>(
 
   return null;
 }
+
+// ---------- shared fact rules for every AI instruction ----------
+// One spine so no call site can drift: only the business's own supplied info,
+// plain simple English, the business's WhatsApp employee voice, no AI mention,
+// no vendor names, ZAR for money. Enforced twice: these instructions shape the
+// draft, and rejectInventedPrices below kills any draft that still invents an amount.
+export const FACT_RULES =
+  "Hard fact rules: use ONLY the facts supplied in this prompt - the business's own information. " +
+  "Never invent or guess prices, discounts, opening hours, dates, services, products, guarantees, " +
+  "qualifications, years of experience, people's names, addresses, phone numbers or any other detail. " +
+  "If a fact is not supplied, leave it out or say the team will confirm - never fill the gap. " +
+  "Money may only be quoted as an amount supplied here, always in South African rand (R). " +
+  "You are the business's WhatsApp employee writing as the business itself: never mention AI, " +
+  "never name any technology vendor, tool or model. Plain, simple English a customer reads in one pass.";
+
+// ---------- invented-price guard ----------
+// A draft may only quote a currency amount that appears in the user's own input
+// (the prompt: business brief, price list, enquiry text). Any other R/$/ZAR/rand
+// amount is treated as invented and the whole draft is rejected - the chain then
+// advances provider or reports unavailable. Reject, never strip: a stripped
+// sentence reads broken and can still mislead.
+
+export function extractAmounts(text: string): string[] {
+  const out = new Set<string>();
+  const add = (raw: string) => {
+    const n = Number(String(raw).replace(/[\s,]/g, ""));
+    if (Number.isFinite(n) && n > 0) out.add(String(n));
+  };
+  let m: RegExpExecArray | null;
+  // symbol-anchored; the lookbehind stops "for 4" / "winner 500" matching as "r 4"
+  const sym = /(?<![A-Za-z0-9])(?:R|ZAR|\$|€|£)\s?(\d[\d\s,]*(?:\.\d{1,2})?)/gi;
+  while ((m = sym.exec(text))) add(m[1]);
+  const word = /(\d[\d,]*(?:\.\d{1,2})?)\s?(?:rand|zar)\b/gi;
+  while ((m = word.exec(text))) add(m[1]);
+  return [...out];
+}
+
+// Amounts the user's own input makes legitimate: symbol-anchored amounts plus
+// bare numbers in price context (JSON price lists like {"whitening": 799},
+// "price 1500", "cost: 80") so a listed price may be quoted back as "R799".
+function promptAllowedAmounts(prompt: string): Set<string> {
+  const allowed = new Set(extractAmounts(prompt));
+  const add = (raw: string) => {
+    const n = Number(String(raw).replace(/[\s,]/g, ""));
+    if (Number.isFinite(n) && n > 0) allowed.add(String(n));
+  };
+  let m: RegExpExecArray | null;
+  const ctx = /(?::|\bprice\b|\bprices\b|\bcost\b|\bfee\b)\s*"?R?\s?(\d[\d,]*(?:\.\d{1,2})?)/gi;
+  while ((m = ctx.exec(prompt))) add(m[1]);
+  return allowed;
+}
+
+export function rejectInventedPrices<T>(prompt: string, parse: (text: string) => T | null): (text: string) => T | null {
+  const allowed = promptAllowedAmounts(prompt);
+  return (text) => {
+    const amounts = extractAmounts(text);
+    if (!amounts.every((a) => allowed.has(a))) return null;
+    return parse(text);
+  };
+}
