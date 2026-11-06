@@ -108,7 +108,7 @@ async function reviewGate(db: Pool, workspaceId: string): Promise<string> {
 
 // Same guarded send path as receptionist replies: draft row first, then the
 // send attempt; failure leaves the draft in the inbox.
-export async function deliver(db: Pool, env: any, workspaceId: string, contact: any, body: string): Promise<void> {
+export async function deliver(db: Pool, env: any, workspaceId: string, contact: any, body: string): Promise<string> {
   const ch = await db.query(`SELECT * FROM receptionist_zerniochannel WHERE workspace_id=$1 LIMIT 1`, [workspaceId]);
   const channel = ch.rows[0];
   if (!channel) throw new Error("No connected WhatsApp number.");
@@ -141,6 +141,7 @@ export async function deliver(db: Pool, env: any, workspaceId: string, contact: 
   const data: any = await resp.json().catch(() => ({}));
   const sentId = String(data?.message?.id || data?.messageId || data?.id || "");
   await db.query(`UPDATE receptionist_message SET is_draft=false, zernio_message_id=$1 WHERE id=$2`, [sentId, outId]);
+  return outId;
 }
 
 export async function sendEvent(db: Pool, env: any, appUrl: string, event: any): Promise<string> {

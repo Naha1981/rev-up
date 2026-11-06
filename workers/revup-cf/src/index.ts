@@ -7,7 +7,7 @@ export { landingPage } from "./landing";
 import { INDUSTRIES, getPreset, industryLabel } from "./presets";
 import { handleZernioWebhook, verifyZernioSignature, validateTenantKey, tenantConnectUrl, tenantConfirmAndBind, tenantWebhookSecret } from "./receptionist";
 import { startPipeline, cancelPending, runDueReviewEvents, resolveIssue, scheduleServiceReminder, runDueServiceReminders } from "./reviews";
-import { waitlistAdd, waitlistExpire, waitlistAction, loyaltySettings, loyaltyAccount, awardForBooking, issueVoucher, redeemVoucher, expireVouchers, quoteCreate, quoteAction } from "./features";
+import { waitlistAdd, waitlistExpire, waitlistAction, loyaltySettings, loyaltyAccount, awardForBooking, issueVoucher, redeemVoucher, expireVouchers, quoteCreate, quoteAction, segmentContacts, campaignCreate, campaignApprove, campaignCancel, runDueCampaigns, attributeBookingToCampaign, campaignStats } from "./features";
 
 interface Env {
   DATABASE_URL: string;
@@ -57,6 +57,7 @@ export function navLinks(user: any): string {
   if (show("receptionist")) h += `<a href="/waitlist">Waitlist</a>`;
   if (show("receptionist")) h += `<a href="/loyalty">Loyalty</a>`;
   if (show("receptionist")) h += `<a href="/quotes">Quotes</a>`;
+  if (show("receptionist")) h += `<a href="/campaigns">Campaigns</a>`;
   if (show("leads", "receptionist")) h += `<a href="/inbox">Inbox</a>`;
   if (show("leads")) h += `<a href="/frontdesk">Leads</a>`;
   if (show("reviews", "leads", "receptionist")) h += `<a href="/approvals">Approvals</a>`;
@@ -463,6 +464,42 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <div class="card">${vouchers.rows.length ? `<table><tr><th>Code</th><th>Customer</th><th>Value</th><th>Status</th><th>Valid</th><th></th></tr>${vRows}</table>` : `<p class="mut">No vouchers issued yet.</p>`}</div>`, user);
 }
 
+
+async function campaignsPage(db: Pool, user: any, mem: any, msg = ""): Promise<string> {
+  const r = await db.query(`SELECT * FROM receptionist_campaign WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 30`, [mem.workspace_id]);
+  const rows: string[] = [];
+  for (const c of r.rows) {
+    const st = await campaignStats(db, c.id);
+    const segLabel: any = { all: "every customer", dormant: "dormant 30+ days", vip: "VIPs" };
+    const fmt = (v: any) => v ? `${v.sent}/${v.total} sent${Number(v.failed) ? `, ${v.failed} failed` : ""}${Number(v.skipped) ? `, ${v.skipped} skipped` : ""} · ${v.bookings} bookings · R${Number(v.revenue).toLocaleString("en-ZA")}` : "";
+    const variantB = c.body_b ? `<br><span class="mut">B: ${fmt(st.b)}</span>` : "";
+    rows.push(`<tr>
+<td><b>${esc(c.name)}</b><br><span class="mut">${segLabel[c.segment] || esc(c.segment)}${c.scheduled_at ? " · " + new Date(c.scheduled_at).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" }) : ""}</span></td>
+<td>${c.status === "sent" ? '<span class="ok">sent</span>' : c.status === "draft" ? "<b>draft</b>" : c.status === "cancelled" ? '<span class="mut">cancelled</span>' : `<span class="pill warn">${esc(c.status)}</span>`}</td>
+<td>${fmt(st.a)}${variantB}</td>
+<td>${c.status === "draft" ? `<form class="inline" method="post" action="/campaigns/${c.id}/approve"><input type="datetime-local" name="when" style="width:auto"><button>Approve & send</button></form>` : ""}
+${["draft", "scheduled"].includes(c.status) ? `<form class="inline" method="post" action="/campaigns/${c.id}/cancel"><button class="link">Cancel</button></form>` : ""}</td></tr>`);
+  }
+  const nAll = (await segmentContacts(db, mem.workspace_id, "all")).length;
+  const nDormant = (await segmentContacts(db, mem.workspace_id, "dormant")).length;
+  const nVip = (await segmentContacts(db, mem.workspace_id, "vip")).length;
+  return layout("Campaigns", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+<div class="card"><h2 style="margin-top:0">New campaign</h2>
+<form method="post" action="/campaigns">
+<label>Name<input name="name" required maxlength="120" placeholder="November win-back"></label>
+<label>Segment<select name="segment">
+<option value="all">Every customer (${nAll})</option>
+<option value="dormant">Dormant - no visit in 30+ days (${nDormant})</option>
+<option value="vip">VIP customers (${nVip})</option>
+</select></label>
+<label>Message<textarea name="body_a" required placeholder="Hi {first name}, ..."></textarea></label>
+<label>B version (optional - half get each)<textarea name="body_b"></textarea></label>
+<button>Save draft</button></form>
+<p class="mut">Use {first name} for the customer's first name. Sends start after you approve; customers who never messaged you or opted out are skipped automatically. Nothing sends itself.</p></div>
+<div class="card">${r.rows.length ? `<table><tr><th>Campaign</th><th>Status</th><th>Delivery</th><th></th></tr>${rows.join("")}</table>` : `<p class="mut">No campaigns yet.</p>`}</div>`, user);
+}
+
 async function quotesPage(db: Pool, user: any, mem: any, msg = ""): Promise<string> {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Johannesburg" });
   const r = await db.query(
@@ -782,6 +819,7 @@ export default {
         await runDueReviewEvents(db, env, "https://revup.nahalabs.co.za");
         await runDueServiceReminders(db, env);
         await expireVouchers(db);
+        await runDueCampaigns(db, env);
         await db.end().catch(() => {});
       })());
     } catch { await db.end().catch(() => {}); }
@@ -1389,6 +1427,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
         if (bact[2] === "done" && b.status === "confirmed") {
           await db.query(`UPDATE receptionist_booking SET status='done' WHERE id=$1`, [b.id]);
           await db.query(`UPDATE receptionist_contact SET visit_count=visit_count+1, last_visit_at=now(), is_vip=(visit_count+1>=5 OR is_vip), updated_at=now() WHERE id=$1`, [b.contact_id]);
+          await attributeBookingToCampaign(db, mem.workspace_id, b);
           const lacc = await awardForBooking(db, mem.workspace_id, b.id, b.contact_id);
           const loyaltyNote = lacc ? ` ${lacc.balance} loyalty points on their card.` : "";
           const evId = await startPipeline(db, mem.workspace_id, b.contact_id, b.id);
@@ -1455,6 +1494,30 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
       if (qact && req.method === "POST") {
         const out = await quoteAction(db, env, mem.workspace_id, qact[1], qact[2]);
         return redirect("/quotes?msg=" + encodeURIComponent(out === "marked sent" ? "Marked sent (WhatsApp too, when the customer is linked and reachable)." : out === "no change" ? "That change does not apply to this quote." : `Quote ${out}.`));
+      }
+
+      if (path === "/campaigns") {
+        if (req.method === "POST") {
+          const f = await formData(req);
+          try {
+            await campaignCreate(db, mem.workspace_id, String(f.name || ""), String(f.segment || ""), String(f.body_a || ""), String(f.body_b || ""));
+            return redirect("/campaigns?msg=" + encodeURIComponent("Draft saved. Approve it when you are ready to send."));
+          } catch (e: any) { return redirect("/campaigns?msg=" + encodeURIComponent(String(e?.message || e))); }
+        }
+        return html(await campaignsPage(db, user, mem, url.searchParams.get("msg") || ""));
+      }
+      const capp = /^\/campaigns\/([0-9a-f-]{36})\/approve$/.exec(path);
+      if (capp && req.method === "POST") {
+        const f = await formData(req);
+        try {
+          await campaignApprove(db, mem.workspace_id, capp[1], String(f.when || ""));
+          return redirect("/campaigns?msg=" + encodeURIComponent("Approved. The send starts within 15 minutes."));
+        } catch (e: any) { return redirect("/campaigns?msg=" + encodeURIComponent(String(e?.message || e))); }
+      }
+      const ccan = /^\/campaigns\/([0-9a-f-]{36})\/cancel$/.exec(path);
+      if (ccan && req.method === "POST") {
+        await campaignCancel(db, mem.workspace_id, ccan[1]);
+        return redirect("/campaigns?msg=" + encodeURIComponent("Cancelled."));
       }
 
       if (path === "/reviews") return html(await reviewsPage(db, user, mem, base, url.searchParams.get("msg") || ""));
