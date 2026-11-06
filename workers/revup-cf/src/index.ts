@@ -58,6 +58,7 @@ export function navLinks(user: any): string {
   h += `<a href="/onboarding">Onboarding</a>`;
   if (show("reviews")) h += `<a href="/reviews">Reviews</a>`;
   if (show("receptionist")) h += `<a href="/receptionist">Receptionist</a>`;
+  if (show("receptionist")) h += `<a href="/assistant">Assistant</a>`;
   if (show("receptionist")) h += `<a href="/bookings">Bookings</a>`;
   if (show("receptionist")) h += `<a href="/waitlist">Waitlist</a>`;
   if (show("receptionist")) h += `<a href="/loyalty">Loyalty</a>`;
@@ -975,6 +976,29 @@ async function handle(req: Request, env: Env): Promise<Response> {
       } finally { await db.end().catch(() => {}); }
     }
 
+    // Owner assistant vault (Business Pro): one-time collection link page.
+    // Token-gated, write-only; the secret is stored AES-256-GCM encrypted and
+    // no route ever returns a stored value.
+    if (path.startsWith("/vault/c/") && req.method === "GET") {
+      const token = path.split("/").pop() || "";
+      if (!/^[A-Za-z0-9-]{20,80}$/.test(token)) return new Response("not found", { status: 404 });
+      const { collectPage } = await import("./assistant");
+      return new Response(collectPage(token), { headers: { "content-type": "text/html" } });
+    }
+    if (path === "/vault/save" && req.method === "POST") {
+      const f = await formData(req);
+      const token = String(f.token || ""), name = String(f.name || "").slice(0, 120), secret = String(f.secret || "");
+      if (!token || !name || !secret) return new Response("missing fields", { status: 400 });
+      const db = pool(env);
+      try {
+        const { consumeVaultLink, storeSecret } = await import("./assistant");
+        const ws = await consumeVaultLink(db, token);
+        if (!ws) return new Response("link used or unknown", { status: 403 });
+        await storeSecret(db, env, ws, name, secret);
+        return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:sans-serif;max-width:26rem;margin:3rem auto">Saved. It is write-only from here: nobody can read it back, not even you. Close this tab.</body>', { headers: { "content-type": "text/html" } });
+      } finally { await db.end().catch(() => {}); }
+    }
+
     // ITN receiver (PayFast server-to-server): triple-verified, activates the plan.
     if (path === "/billing/payfast-itn" && req.method === "POST") {
       const db = pool(env);
@@ -1329,6 +1353,37 @@ ${!ch.rows.length ? `<div class="card" style="border-color:var(--brand)"><h2 sty
 <div class="grid">
 <div class="card"><h2>AI replies this month</h2><p class="stat">${usedM.rows[0].c} / ${lim}</p><p class="mut">on the ${esc(pl)} plan</p></div>
 <div class="card"><h2>Connected numbers</h2>${ch.rows.length ? `<table><tr><th>Number</th><th>Label</th><th>Type</th></tr>${chan}</table>` : `<p class="mut">None yet.</p>`}</div>
+</div>`, user));
+      }
+
+      if (path === "/assistant") {
+        const { getSettings, upsertSettings, assistantCounts } = await import("./assistant");
+        if (mem.plan !== "business-pro") {
+          return html(layout("Assistant", `<div class="card"><h2 style="margin-top:0">Your own assistant</h2>
+<p>Chat with your own assistant on your business WhatsApp: it remembers your rules and decisions, keeps a task log, parks anything that sends, spends or deploys for your Go + Sure, and holds a write-only vault for your secrets.</p>
+<p class="mut">The assistant is part of the Business Pro plan. <a href="/billing">Upgrade in billing -</a></p></div>`, user));
+        }
+        if (req.method === "POST") {
+          const f = await formData(req);
+          const phone = String(f.owner_phone || "").replace(/\D/g, "").slice(0, 32);
+          if (!phone || phone.length < 9) return redirect("/assistant?msg=" + encodeURIComponent("Enter your WhatsApp number with country code, e.g. 27612345678."));
+          await upsertSettings(db, mem.workspace_id, phone, f.enabled === "on");
+          return redirect("/assistant?msg=" + encodeURIComponent("Assistant settings saved."));
+        }
+        const [settings, counts] = await Promise.all([getSettings(db, mem.workspace_id), assistantCounts(db, mem.workspace_id)]);
+        const msg = url.searchParams.get("msg") || "";
+        return html(layout("Assistant", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+<div class="card"><h2 style="margin-top:0">Your own assistant</h2>
+<p>Message your business WhatsApp number from your own phone. The assistant answers only you: it remembers your rules and decisions, keeps a task log, parks anything that sends, spends or deploys until you reply <b>Go + Sure</b>, and holds a write-only vault for your secrets.</p>
+<form method="post" action="/assistant">
+<label>Your WhatsApp number (country code, e.g. 27612345678)<input name="owner_phone" value="${esc(settings?.owner_phone || "")}" maxlength="32" placeholder="27…"></label>
+<label><input type="checkbox" name="enabled" ${!settings || settings.enabled ? "checked" : ""}> Assistant answering</label>
+<button class="btn btn-primary" type="submit">Save</button></form></div>
+<div class="grid">
+<div class="card"><h2>Memories kept</h2><p class="stat">${counts.memories}</p></div>
+<div class="card"><h2>Waiting on Go + Sure</h2><p class="stat">${counts.pending}</p></div>
+<div class="card"><h2>Tasks running</h2><p class="stat">${counts.running}</p></div>
 </div>`, user));
       }
 
