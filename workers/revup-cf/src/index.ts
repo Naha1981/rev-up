@@ -136,7 +136,7 @@ function pfUrl(env: Env, base: string, plan: string, org: any): string {
     ["return_url", `${base}/billing?pf=return`],
     ["cancel_url", `${base}/billing?pf=cancel`],
     ["notify_url", `${base}/billing/payfast-itn`],
-    ["m_payment_id", `${org.payment_reference || "RU"}-cf`],
+    ["m_payment_id", `${org.payment_reference || "RU"}-${plan}`],
     ["amount", amount.toFixed(2)],
     ["item_name", `RevUp ${plan} monthly`],
     ["subscription_type", "1"],
@@ -149,6 +149,43 @@ function pfUrl(env: Env, base: string, plan: string, org: any): string {
   const sig = md5(baseStr + `&passphrase=${enc(env.PF_PASSPHRASE)}`);
   const qs = params.map(([k, v]) => `${k}=${encodeURIComponent(v.trim())}`).join("&");
   return `https://sandbox.payfast.co.za/eng/process?${qs}&signature=${sig}`;
+}
+
+// ---------- payfast ITN ----------
+function pfQuotePlus(v: string): string {
+  return encodeURIComponent(v).replace(/%20/g, "+").replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+}
+
+async function handlePayfastItn(db: Pool, env: Env, req: Request): Promise<Response> {
+  // Django-faithful triple verification: signature (posted order, quote_plus,
+  // passphrase last), PayFast validate-back, then status COMPLETE.
+  const raw = await req.text();
+  const pairs = raw.split("&").filter(Boolean).map((p) => {
+    const i = p.indexOf("=");
+    return [p.slice(0, i), p.slice(i + 1)] as [string, string];
+  });
+  const dec = (v: string) => decodeURIComponent(v.replace(/\+/g, " "));
+  const post: Record<string, string> = {};
+  for (const [k, v] of pairs) post[k] = dec(v);
+  const received = post["signature"] || "";
+  const baseStr = pairs.filter(([k]) => k !== "signature").map(([k, v]) => `${k}=${pfQuotePlus(dec(v).trim())}`).join("&");
+  const ours = md5(baseStr + `&passphrase=${pfQuotePlus(env.PF_PASSPHRASE)}`);
+  if (!received || received !== ours) return new Response("bad signature", { status: 400 });
+  const check = await fetch("https://sandbox.payfast.co.za/eng/query/validate", {
+    method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: raw,
+  });
+  if ((await check.text()).trim() !== "VALID") return new Response("payfast validate-back rejected", { status: 400 });
+  if (post["payment_status"] !== "COMPLETE") return new Response(`status ${post["payment_status"] || "?"}`, { status: 400 });
+  const mpid = post["m_payment_id"] || "";
+  const parts = mpid.split("-");
+  const reference = mpid.startsWith("RU-") ? "RU-" + (parts[1] || "") : "";
+  const plan = parts.slice(2).join("-");
+  if (!reference || !["starter", "growth", "business-pro"].includes(plan)) return new Response("unknown reference", { status: 400 });
+  const r = await db.query(
+    `UPDATE organizations_organization SET plan=$1, subscription_status='active', payfast_token=$2, updated_at=now() WHERE payment_reference=$3`,
+    [plan, post["token"] || "", reference]);
+  if (!r.rowCount) return new Response("unknown reference", { status: 400 });
+  return new Response("OK");
 }
 
 // ---------- pages ----------
@@ -332,9 +369,11 @@ export default {
       } finally { await db.end(); }
     }
 
-    // ITN receiver (PayFast server-to-server). Full ITN validation is pending
-    // cutover work; for now we acknowledge so PayFast stops retrying.
-    if (path === "/billing/payfast-itn" && req.method === "POST") return new Response("OK");
+    // ITN receiver (PayFast server-to-server): triple-verified, activates the plan.
+    if (path === "/billing/payfast-itn" && req.method === "POST") {
+      const db = pool(env);
+      try { return await handlePayfastItn(db, env, req); } finally { await db.end(); }
+    }
 
     if (path === "/signup") {
       if (req.method === "GET") return html(signupPage());
