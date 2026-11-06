@@ -1,3 +1,4 @@
+import { freeAiGenerate } from "./freeai";
 // WhatsApp receptionist: inbound Zernio webhook -> AI draft -> auto-reply.
 // Bounds (his standing rules): reply only to numbers that messaged first,
 // never cold outbound; sandbox line answers his own numbers only; per-workspace
@@ -72,28 +73,6 @@ export function customerBlock(c: any): string {
   if (c.visit_count) lines.push(`They have visited ${c.visit_count} time${c.visit_count === 1 ? "" : "s"} before.`);
   if (c.dietary_notes) lines.push(`Dietary needs: ${c.dietary_notes}`);
   return lines.join("\n");
-}
-
-async function groqDraft(apiKey: string, prompt: string): Promise<string> {
-  let lastErr = "no response";
-  for (const model of ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({ model, temperature: 0.2, max_tokens: 800, reasoning_effort: "low", messages: [{ role: "user", content: prompt }] }),
-        });
-        if (!resp.ok) { lastErr = `groq ${resp.status}`; continue; }
-        const data: any = await resp.json();
-        const content: string = data?.choices?.[0]?.message?.content || "";
-        const m = content.match(/\{.*\}/s);
-        if (m) return m[0];
-        lastErr = "no JSON in reply";
-      } catch (e: any) { lastErr = String(e).slice(0, 120); }
-    }
-  }
-  throw new Error(lastErr);
 }
 
 export async function handleZernioWebhook(db: Pool, env: any, payload: any): Promise<void> {
@@ -195,10 +174,16 @@ export async function handleZernioWebhook(db: Pool, env: any, payload: any): Pro
     `Reply with JSON only: {"reply": "...", "intake": {"name": "", "detail": "", "preferred_time": "", "address": "", "policy_number": ""}} ` +
     `(fill only the intake fields the customer actually gave; make detail a short description of what they want - for a restaurant booking use 'Table for N', never a bare number).\n${RULES}`;
 
-  let draft: any = { reply: "", intake: {} };
-  try {
-    draft = JSON.parse(await groqDraft(env.GROQ_API_KEY, prompt));
-  } catch { return; } // drafting failed: conversation stays in inbox for a human
+  const aiResult = await freeAiGenerate<any>(env, prompt, { maxTokens: 800, temperature: 0.2 }, (text) => {
+    const m = text.match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    try {
+      const d = JSON.parse(m[0]);
+      return d && typeof d === "object" ? d : null;
+    } catch { return null; }
+  });
+  if (!aiResult) return; // all providers unavailable: conversation stays in inbox for a human
+  const draft: any = aiResult.value;
   const reply = String(draft.reply || "").trim();
   if (!reply) return;
 

@@ -1,3 +1,4 @@
+import { freeAiGenerate } from "./freeai";
 // RevUp Pages - one-pain-per-page landing pages.
 // Strategy: each ad/campaign speaks to ONE customer pain and links to a page
 // built ONLY around that pain (the Aurivita multi-angle play). Mirror copies
@@ -116,36 +117,25 @@ Write copy for a landing page with these sections in this order: ${skel}.
 Reply with JSON only:
 {"seo_title":"...","sections":[{"type":"hero","heading":"...","body":"...","items":["...","..."]},...]}
 Every section in the list must appear, same order, same type. items may be [] for hero/cta.`;
-  const models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
-  let lastErr = "no model replied";
-  for (const model of models) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${env.GROQ_API_KEY}` },
-          body: JSON.stringify({ model, temperature: 0.4, max_tokens: 3000, reasoning_effort: "low", messages: [{ role: "user", content: prompt }] }),
-        });
-        if (!resp.ok) { lastErr = `groq ${resp.status}`; continue; }
-        const data: any = await resp.json();
-        const text: string = data?.choices?.[0]?.message?.content || "";
-        const m = /\{[\s\S]*\}/.exec(text);
-        if (!m) { lastErr = "no JSON in reply"; continue; }
-        const parsed = JSON.parse(m[0]);
-        const raw: any[] = Array.isArray(parsed.sections) ? parsed.sections : [];
-        const sections: PageSection[] = raw.slice(0, 14).map((s: any) => ({
-          type: String(s.type || "benefits").slice(0, 20),
-          heading: String(s.heading || "").slice(0, 140),
-          body: String(s.body || "").slice(0, 800),
-          items: Array.isArray(s.items) ? s.items.slice(0, 8).map((x: any) => String(x).slice(0, 140)) : [],
-        })).filter((s: PageSection) => s.heading || s.body);
-        if (!sections.length) { lastErr = "empty sections"; continue; }
-        if (!sections.some((s) => s.type === "cta")) sections.push({ type: "cta", heading: "Ready when you are", body: "Send a message now and get a straight answer.", items: [] });
-        return { seo_title: String(parsed.seo_title || brief.business).slice(0, 120), sections };
-      } catch (e: any) { lastErr = String(e?.message || e); }
-    }
-  }
-  throw new Error(lastErr);
+  const r = await freeAiGenerate(env, prompt, { maxTokens: 3000, temperature: 0.4 }, (text) => {
+    const m = /\{[\s\S]*\}/.exec(text);
+    if (!m) return null;
+    try {
+      const parsed = JSON.parse(m[0]);
+      const raw: any[] = Array.isArray(parsed.sections) ? parsed.sections : [];
+      const sections: PageSection[] = raw.slice(0, 14).map((sec: any) => ({
+        type: String(sec.type || "benefits").slice(0, 20),
+        heading: String(sec.heading || "").slice(0, 140),
+        body: String(sec.body || "").slice(0, 800),
+        items: Array.isArray(sec.items) ? sec.items.slice(0, 8).map((x: any) => String(x).slice(0, 140)) : [],
+      })).filter((sec: PageSection) => sec.heading || sec.body);
+      if (!sections.length) return null;
+      if (!sections.some((sec) => sec.type === "cta")) sections.push({ type: "cta", heading: "Ready when you are", body: "Send a message now and get a straight answer.", items: [] });
+      return { seo_title: String(parsed.seo_title || brief.business).slice(0, 120), sections };
+    } catch { return null; }
+  });
+  if (!r) throw new Error("the copywriter is busy right now");
+  return r.value;
 }
 
 // ---------- public render ----------
