@@ -36,9 +36,25 @@ export function md5(input: string): string { return SparkMD5.hash(input); }
 function esc(s: any): string {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
 }
+function navLinks(user: any): string {
+  const g: string[] = Array.isArray(user._goals) ? user._goals : [];
+  const show = (...need: string[]) => !g.length || need.some((n) => g.includes(n));
+  let h = `<a href="/">Dashboard</a>`;
+  if (show("social")) h += `<a href="/analytics">Analytics</a>`;
+  if (show("reviews")) h += `<a href="/radar">Radar</a>`;
+  if (show("social")) h += `<a href="/posts">Posts</a>`;
+  h += `<a href="/onboarding">Onboarding</a>`;
+  if (show("reviews")) h += `<a href="/reviews">Reviews</a>`;
+  if (show("leads", "receptionist")) h += `<a href="/inbox">Inbox</a>`;
+  if (show("leads")) h += `<a href="/frontdesk">Leads</a>`;
+  if (show("reviews", "leads", "receptionist")) h += `<a href="/approvals">Approvals</a>`;
+  h += `<a href="/billing">Billing</a>`;
+  return h;
+}
+
 function layout(title: string, body: string, user?: any): string {
   const nav = user
-    ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a href="/">Dashboard</a><a href="/analytics">Analytics</a><a href="/radar">Radar</a><a href="/posts">Posts</a><a href="/onboarding">Onboarding</a><a href="/reviews">Reviews</a><a href="/inbox">Inbox</a><a href="/frontdesk">Leads</a><a href="/approvals">Approvals</a><a href="/billing">Billing</a>${user._cur_ws ? `<a href="/switch" title="Switch business" style="border:1px solid var(--line);border-radius:8px;padding:2px 8px">${esc(user._cur_ws)}${(user._ws_count||0) > 1 ? " &#9662;" : ""}</a>` : ""}<form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>`
+    ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links">${navLinks(user)}${user._cur_ws ? `<a href="/switch" title="Switch business" style="border:1px solid var(--line);border-radius:8px;padding:2px 8px">${esc(user._cur_ws)}${(user._ws_count||0) > 1 ? " &#9662;" : ""}</a>` : ""}<form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>`
     : `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a class="btn btn-ghost" href="/login">Log in</a><a class="btn btn-primary" href="/signup">Get started</a></div></nav>`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} · RevUp</title><style>
 :root{--brand:#F97316;--brand-dark:#EA580C;--brand-soft:#FFF7ED;--ink:#1C1917;--ink2:#57534E;--ink3:#A8A29E;--line:#E7E5E4;--bg:#FAFAF9}
@@ -115,7 +131,7 @@ async function membership(db: Pool, userId: string, req?: Request): Promise<any 
   const r = await db.query(
     `SELECT w.id AS workspace_id, w.name AS workspace_name, w.approval_workflow_mode,
             o.id AS org_id, o.name AS org_name, o.plan, o.subscription_status, o.payment_reference,
-            o.trial_started_at, o.activated_at, m.workspace_role
+            o.trial_started_at, o.activated_at, o.goals, m.workspace_role
      FROM members_workspace_membership m
      JOIN workspaces_workspace w ON w.id=m.workspace_id
      JOIN organizations_organization o ON o.id=w.organization_id
@@ -275,7 +291,7 @@ ${err ? `<p class="bad">${esc(err)}</p>` : ""}
 <label>Password<input name="password" type="password" required minlength="8"></label>
 <label>Business name<input name="business" required maxlength="200"></label>
 <button>Create account</button>
-<p class="mut">From R499/month. Pay from day one — your subscription starts after signup.</p>
+<p class="mut">Free trial. Choose the plan that fits you during setup - pay only when your trial ends.</p>
 </form></div>`);
 
 const loginPage = (err = "") => layout("Log in to RevUp", `
@@ -303,20 +319,48 @@ async function dashboardPage(db: Pool, user: any, mem: any): Promise<string> {
 </div>`, user);
 }
 
+const GOALS: [string, string][] = [
+  ["receptionist", "Answer my business WhatsApp day and night"],
+  ["reviews", "Turn happy customers into 5-star Google reviews"],
+  ["social", "Keep my Facebook and Instagram posting"],
+  ["leads", "Capture website enquiries and follow them up (FrontDesk)"],
+];
+const PLAN_CARDS: { slug: string; name: string; price: number; feat: string }[] = [
+  { slug: "starter", name: "Starter", price: 499, feat: "WhatsApp receptionist + Google review booster" },
+  { slug: "growth", name: "Growth", price: 999, feat: "Everything in Starter + social posting with approvals" },
+  { slug: "business-pro", name: "Business Pro", price: 1999, feat: "Everything in Growth + FrontDesk lead pipeline and follow-ups" },
+];
+function recommendPlan(goals: string[]): string {
+  if (goals.includes("leads")) return "business-pro";
+  if (goals.includes("social")) return "growth";
+  return "starter";
+}
+
 async function onboardingPage(db: Pool, user: any, mem: any, msg = ""): Promise<string> {
   const bp = await db.query(`SELECT * FROM receptionist_businessprofile WHERE workspace_id=$1 LIMIT 1`, [mem.workspace_id]);
   const b = bp.rows[0] || {};
   const w = await db.query(`SELECT industry, website_url, timezone FROM workspaces_workspace WHERE id=$1`, [mem.workspace_id]);
   const ws = w.rows[0] || {};
+  const savedGoals: string[] = Array.isArray(b.custom_rules?.goals) ? b.custom_rules.goals : [];
+  const rec = recommendPlan(savedGoals);
+  const cur = mem.plan || rec;
   return layout("Onboarding", `
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <div class="card"><form method="post" action="/onboarding">
+<h2 style="margin-top:0">Your business</h2>
 <label>Business name<input name="business_name" value="${esc(b.business_name || mem.org_name)}" required></label>
 <label>Industry<select name="industry">${INDUSTRIES.map(([v, l]) => `<option value="${v}"${(ws.industry || b.industry || "general") === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>
 <label>Website<input name="website_url" value="${esc(ws.website_url || "")}" placeholder="https://…"></label>
 <label>Google review link<input name="google_review_url" value="${esc(b.google_review_url || "")}" placeholder="https://g.page/r/…"></label>
 <label>Timezone<input name="timezone" value="${esc(ws.timezone || "Africa/Johannesburg")}"></label>
-<button>Save</button>
+<h2>What do you want RevUp to do for you?</h2>
+${GOALS.map(([v, l]) => `<label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" name="goal_${v}"${savedGoals.includes(v) ? " checked" : ""} style="width:auto"> ${l}</label>`).join("")}
+<h2>Choose your plan</h2>
+${PLAN_CARDS.map((p) => `<label style="display:block;border:1px solid ${cur === p.slug ? "var(--brand)" : "var(--line)"};border-radius:12px;padding:12px 14px;margin:8px 0;cursor:pointer;font-weight:400">
+<input type="radio" name="plan" value="${p.slug}"${cur === p.slug ? " checked" : ""} style="width:auto"> <b>${p.name} - R${p.price.toLocaleString("en-ZA")}/month</b>${rec === p.slug ? ` <span class="pill ok">Recommended for you</span>` : ""}<br>
+<span class="mut">${p.feat}</span></label>`).join("")}
+<p class="mut">Your trial starts now - no payment today. You can change plans any time on the billing page.</p>
+<button>Save and continue</button>
 </form></div>`, user);
 }
 
@@ -663,7 +707,7 @@ export default {
       if (!user) return redirect("/login");
       const mem = await membership(db, user.id, req);
       if (!mem) return html(layout("No workspace", `<p>Your account has no workspace yet. <a href="/signup">Create one</a>.</p>`, user), 403);
-      user._cur_ws = mem.workspace_name; user._ws_count = (mem.workspaces || []).length;
+      user._cur_ws = mem.workspace_name; user._ws_count = (mem.workspaces || []).length; user._goals = Array.isArray(mem.goals) ? mem.goals : [];
 
       if (path === "/switch") {
         if (req.method === "POST") {
@@ -687,21 +731,24 @@ export default {
       if (path === "/onboarding") {
         if (req.method === "POST") {
           const f = await formData(req);
+          const goals = GOALS.map(([v]) => v).filter((v) => f["goal_" + v]);
+          const plan = ["starter", "growth", "business-pro"].includes(f.plan || "") ? f.plan! : recommendPlan(goals);
           const client = await db.connect();
           try {
             await client.query("BEGIN");
             await client.query(`UPDATE workspaces_workspace SET industry=$1, website_url=$2, timezone=$3, updated_at=now() WHERE id=$4`,
               [f.industry || "", f.website_url || "", f.timezone || "Africa/Johannesburg", mem.workspace_id]);
+          await client.query(`UPDATE organizations_organization SET plan=$1, goals=$3::jsonb, updated_at=now() WHERE id=$2`, [plan, mem.org_id, JSON.stringify(goals)]);
             await client.query(
               `INSERT INTO receptionist_businessprofile(id,workspace_id,business_name,industry,operating_hours,pricing_data,banking_details,payment_link_url,emergency_contact_phone,custom_rules,google_review_url,is_active,review_requests_enabled,service_reminder_days,revenue_mode,created_at,updated_at)
-               VALUES($1,$2,$3,$4,'{}'::jsonb,'{}'::jsonb,'{}'::jsonb,'','','',$5,true,true,2,'reviews',now(),now())
+               VALUES($1,$2,$3,$4,$6::jsonb,'{}'::jsonb,'{}'::jsonb,'','','',$5,true,true,2,'reviews',now(),now())
                ON CONFLICT (workspace_id) DO UPDATE SET business_name=EXCLUDED.business_name, industry=EXCLUDED.industry,
-                 google_review_url=EXCLUDED.google_review_url, updated_at=now()`,
-              [crypto.randomUUID(), mem.workspace_id, f.business_name || mem.org_name, f.industry || "", f.google_review_url || ""]);
+                 google_review_url=EXCLUDED.google_review_url, custom_rules=EXCLUDED.custom_rules, updated_at=now()`,
+              [crypto.randomUUID(), mem.workspace_id, f.business_name || mem.org_name, f.industry || "", f.google_review_url || "", JSON.stringify({ goals })]);
             await client.query("COMMIT");
           } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }
-          if (f.google_review_url) return redirect("/reviews?msg=" + encodeURIComponent("Business profile saved. Now create your first tracked review link below."));
-          return html(await onboardingPage(db, user, mem, "Saved. Add your Google review link to start collecting reviews."));
+          const planName = PLAN_CARDS.find((p) => p.slug === plan)?.name || plan;
+          return redirect("/?msg=" + encodeURIComponent(`You are on ${planName} - trial started. Add your Google review link under Reviews whenever you are ready.`));
         }
         return html(await onboardingPage(db, user, mem));
       }

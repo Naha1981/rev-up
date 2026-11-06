@@ -7,3 +7,8 @@ workers_dev = true
 [[routes]]
 pattern = "revup-new.nahalabs.co.za"
 custom_domain = true
+
+
+[[routes]]
+pattern = "revup.nahalabs.co.za"
+custom_domain = true
