@@ -1,7 +1,7 @@
 // RevUp on Cloudflare Workers — revenue path. Shares the live Neon DB with the
 // Django app; passwords verify in Postgres (pgcrypto) to stay inside Workers
 // Free CPU limits. No vendor names surface in any HTML.
-import { Pool } from "pg";
+import { Client, Pool } from "pg";
 import { LOGO_B64, landingPage } from "./landing";
 
 interface Env {
@@ -9,11 +9,16 @@ interface Env {
   PF_MERCHANT_ID: string;
   PF_MERCHANT_KEY: string;
   PF_PASSPHRASE: string;
+  GROQ_API_KEY: string;
 }
 
 // ---------- db ----------
 function pool(env: Env) {
-  return new Pool({ connectionString: env.DATABASE_URL, max: 3, connectionTimeoutMillis: 10000, idleTimeoutMillis: 1000 });
+  // Workers close sockets when a request ends, so pooling is per-request (a shared
+  // pool hands out dead clients). idleTimeoutMillis 0 disables the reaper: a 1s
+  // reaper raced mid-request checkout and hung the reconnect. end() must not
+  // throw in finally or it masks the friendly 500 page with a worker exception.
+  return new Pool({ connectionString: env.DATABASE_URL, max: 3, connectionTimeoutMillis: 15000, idleTimeoutMillis: 0 });
 }
 
 // ---------- crypto ----------
@@ -32,7 +37,7 @@ function esc(s: any): string {
 }
 function layout(title: string, body: string, user?: any): string {
   const nav = user
-    ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a href="/">Dashboard</a><a href="/posts">Posts</a><a href="/onboarding">Onboarding</a><a href="/reviews">Reviews</a><a href="/approvals">Approvals</a><a href="/billing">Billing</a><form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>`
+    ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a href="/">Dashboard</a><a href="/posts">Posts</a><a href="/onboarding">Onboarding</a><a href="/reviews">Reviews</a><a href="/inbox">Inbox</a><a href="/approvals">Approvals</a><a href="/billing">Billing</a><form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>`
     : `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a class="btn btn-ghost" href="/login">Log in</a><a class="btn btn-primary" href="/signup">Get started</a></div></nav>`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} · RevUp</title><style>
 :root{--brand:#F97316;--brand-dark:#EA580C;--brand-soft:#FFF7ED;--ink:#1C1917;--ink2:#57534E;--ink3:#A8A29E;--line:#E7E5E4;--bg:#FAFAF9}
@@ -188,6 +193,37 @@ async function handlePayfastItn(db: Pool, env: Env, req: Request): Promise<Respo
   return new Response("OK");
 }
 
+// ---------- AI drafting (Groq free tier, Django-faithful contract) ----------
+const DRAFT_RULES = "Rules: write for a real local business. NEVER invent statistics, customer testimonials, review counts, awards, or claims the business could not verify. No fake urgency. No 'AI' buzzwords. Plain, warm, specific language. South African English. Keep the caption under 900 characters including hashtags.";
+
+async function draftCaption(env: Env, business: string, topic: string): Promise<{ caption: string; hashtags: string[] }> {
+  const models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
+  const prompt = `Business: ${business}.\nWrite one social media post for this business about: ${topic}.\n${DRAFT_RULES}\nReply with JSON only: {"caption": "...", "hashtags": ["#tag", ...]}`;
+  let lastErr = "no model replied";
+  for (const model of models) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${env.GROQ_API_KEY}` },
+          body: JSON.stringify({ model, temperature: 0.2, max_tokens: 1500, reasoning_effort: "low", messages: [{ role: "user", content: prompt }] }),
+        });
+        if (!resp.ok) { lastErr = `groq ${resp.status}`; continue; }
+        const data: any = await resp.json();
+        const text: string = data?.choices?.[0]?.message?.content || "";
+        const m = /\{[\s\S]*\}/.exec(text);
+        if (!m) { lastErr = "no JSON in reply"; continue; }
+        const parsed = JSON.parse(m[0]);
+        const caption = String(parsed.caption || "").trim();
+        const hashtags = Array.isArray(parsed.hashtags) ? parsed.hashtags.map((h: any) => String(h)) : [];
+        if (caption) return { caption, hashtags };
+        lastErr = "empty caption";
+      } catch (e: any) { lastErr = String(e?.message || e); }
+    }
+  }
+  throw new Error(lastErr);
+}
+
 // ---------- pages ----------
 const signupPage = (err = "") => layout("Create your RevUp account", `
 ${err ? `<p class="bad">${esc(err)}</p>` : ""}
@@ -268,6 +304,60 @@ ${b.google_review_url ? `<h2>New review link</h2>
 <div class="card">${links.rows.length ? `<table><tr><th>Customer</th><th>Link</th><th>Click</th><th>Created</th></tr>${rows}</table>` : `<p class="mut">No review links yet.</p>`}</div>`, user);
 }
 
+
+function newPostPage(user: any, mem: any, pre: Record<string, string>, msg = ""): string {
+  return layout("New post", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+<div class="card"><form method="post" action="/posts/draft">
+<label>Topic<input name="topic" maxlength="200" value="${esc(pre.topic || "")}" placeholder="e.g. teeth whitening special this month" required></label>
+<button class="btn-secondary">Draft with AI</button>
+</form></div>
+<div class="card"><form method="post" action="/posts/new">
+<label>Title<input name="title" maxlength="200" value="${esc(pre.title || "")}" placeholder="Internal title"></label>
+<label>Caption<textarea name="caption" rows="6" placeholder="What should go out?">${esc(pre.caption || "")}</textarea></label>
+<button>Save draft</button>
+<p class="mut">Creates a draft for every connected channel. Scheduling and publishing run on the current pipeline.</p>
+</form></div>`, user);
+}
+
+async function inboxPage(db: Pool, user: any, mem: any): Promise<string> {
+  const r = await db.query(
+    `SELECT c.id, c.name, c.wa_id, count(m.id) AS msgs, max(m.created_at) AS last_at,
+            (SELECT body FROM receptionist_message m2 WHERE m2.contact_id=c.id ORDER BY m2.created_at DESC LIMIT 1) AS last_body
+     FROM receptionist_contact c JOIN receptionist_message m ON m.contact_id=c.id
+     WHERE c.workspace_id=$1 GROUP BY c.id ORDER BY last_at DESC NULLS LAST LIMIT 50`, [mem.workspace_id]);
+  const rows = r.rows.map((c: any) => `<tr>
+<td><a href="/inbox/${c.id}">${esc(c.name || c.wa_id)}</a></td>
+<td class="mut">${esc((c.last_body || "").slice(0, 80))}</td>
+<td class="mut">${c.last_at ? new Date(c.last_at).toLocaleString("en-ZA") : ""}</td></tr>`).join("");
+  return layout("Inbox", `
+<div class="card">${r.rows.length ? `<table><tr><th>Customer</th><th>Latest</th><th>When</th></tr>${rows}</table>` : `<p class="mut">No customer conversations yet. When customers WhatsApp the business, they appear here.</p>`}</div>`, user);
+}
+
+async function conversationPage(db: Pool, user: any, mem: any, contactId: string, env: Env): Promise<Response> {
+  // Dedicated client: the shared per-request pool intermittently hangs on
+  // this route's checkout in the Workers runtime (socket closed mid-request).
+  const dc = new Client({ connectionString: env.DATABASE_URL, connectionTimeoutMillis: 15000 });
+  await dc.connect();
+  let c, msgs;
+  try {
+    c = await dc.query(`SELECT * FROM receptionist_contact WHERE id=$1 AND workspace_id=$2`, [contactId, mem.workspace_id]);
+    if (!c.rows[0]) { await dc.end().catch(() => {}); return html(layout("Not found", `<p class="bad">Unknown conversation.</p>`), 404); }
+    msgs = await dc.query(
+      `SELECT direction, sender_type, body, created_at FROM receptionist_message WHERE contact_id=$1 AND workspace_id=$2 ORDER BY created_at ASC LIMIT 200`, [contactId, mem.workspace_id]);
+  } finally { await dc.end().catch(() => {}); }
+  const who: Record<string, string> = { user: "Customer", ai: "Receptionist", human_agent: "You" };
+  const bubbles = msgs.rows.map((m: any) => {
+    const out = m.direction === "outbound";
+    return `<div style="display:flex;justify-content:${out ? "flex-end" : "flex-start"};margin:6px 0">
+<div style="max-width:70%;padding:8px 12px;border-radius:12px;${out ? "background:var(--brand);color:#fff" : "background:#fff;border:1px solid var(--line)"}">
+<div class="mut" style="font-size:11px;${out ? "color:#ffe7d6" : ""}">${esc(who[m.sender_type] || m.sender_type)} · ${new Date(m.created_at).toLocaleString("en-ZA")}</div>
+<div>${esc(m.body)}</div></div></div>`;
+  }).join("");
+  return html(layout(`Chat: ${esc(c.rows[0].name || c.rows[0].wa_id)}`, `
+<p><a href="/inbox">&larr; all conversations</a></p>
+<div class="card">${bubbles || `<p class="mut">No messages.</p>`}</div>`, user));
+}
 
 async function postsPage(db: Pool, user: any, mem: any): Promise<string> {
   const r = await db.query(
@@ -350,7 +440,7 @@ export default {
       try {
         const db = pool(env);
         const r = await db.query("SELECT 1 AS ok");
-        await db.end();
+        await db.end().catch(() => {});
         return json({ ok: true, db: r.rows[0].ok === 1, ts: new Date().toISOString() });
       } catch (e: any) {
         return json({ ok: false, error: String(e) }, 500);
@@ -366,13 +456,13 @@ export default {
           `UPDATE receptionist_reviewlink SET clicked_at=COALESCE(clicked_at, now()) WHERE short_code=$1 RETURNING original_url`, [rm[1]]);
         if (!r.rows[0]) return html(layout("Link not found", `<p class="bad">This review link doesn't exist.</p>`), 404);
         return new Response(null, { status: 302, headers: { location: r.rows[0].original_url } });
-      } finally { await db.end(); }
+      } finally { await db.end().catch(() => {}); }
     }
 
     // ITN receiver (PayFast server-to-server): triple-verified, activates the plan.
     if (path === "/billing/payfast-itn" && req.method === "POST") {
       const db = pool(env);
-      try { return await handlePayfastItn(db, env, req); } finally { await db.end(); }
+      try { return await handlePayfastItn(db, env, req); } finally { await db.end().catch(() => {}); }
     }
 
     if (path === "/signup") {
@@ -412,7 +502,7 @@ export default {
         return new Response(null, { status: 303, headers: { location: "/onboarding", "set-cookie": sessionCookie(token) } });
       } catch (e: any) {
         return html(signupPage("Signup failed: " + String(e).slice(0, 200)), 500);
-      } finally { await db.end(); }
+      } finally { await db.end().catch(() => {}); }
     }
 
     if (path === "/login") {
@@ -430,14 +520,14 @@ export default {
         if (!ok) return html(loginPage("Wrong email or password."), 401);
         const token = await newSession(db, row.id, req);
         return new Response(null, { status: 303, headers: { location: "/", "set-cookie": sessionCookie(token) } });
-      } finally { await db.end(); }
+      } finally { await db.end().catch(() => {}); }
     }
 
     if (path === "/logout" && req.method === "POST") {
       const m = /(?:^|;\s*)cf_session=([a-f0-9]{64})/.exec(req.headers.get("cookie") || "");
       const db = pool(env);
       if (m) await db.query(`DELETE FROM cf_sessions WHERE token_hash=$1`, [await sha256hex(m[1])]);
-      await db.end();
+      await db.end().catch(() => {});
       return new Response(null, { status: 303, headers: { location: "/login", "set-cookie": "cf_session=; Path=/; Max-Age=0" } });
     }
 
@@ -506,14 +596,26 @@ export default {
             return redirect("/posts?msg=" + encodeURIComponent("Draft created."));
           } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }
         }
-        return html(layout("New post", `
-<div class="card"><form method="post" action="/posts/new">
-<label>Title<input name="title" maxlength="200" placeholder="Internal title"></label>
-<label>Caption<textarea name="caption" rows="5" placeholder="What should go out?"></textarea></label>
-<button>Save draft</button>
-<p class="mut">Creates a draft for every connected channel. Scheduling and publishing run on the current pipeline.</p>
-</form></div>`, user));
+        return html(newPostPage(user, mem, {}, url.searchParams.get("msg") || ""));
       }
+
+      if (path === "/posts/draft" && req.method === "POST") {
+        const f = await formData(req);
+        const topic = (f.topic || "").trim();
+        if (!topic) return html(newPostPage(user, mem, f, "Tell me the topic first."));
+        try {
+          const business = mem.org_name || "local business";
+          const d = await draftCaption(env, business, topic);
+          const caption = d.caption + (d.hashtags.length ? "\n\n" + d.hashtags.join(" ") : "");
+          return html(newPostPage(user, mem, { ...f, caption }, "Drafted - edit anything before saving."));
+        } catch (e: any) {
+          return html(newPostPage(user, mem, f, "Drafting failed (" + String(e?.message || e) + ") - write it manually or try again."));
+        }
+      }
+
+      if (path === "/inbox") return html(await inboxPage(db, user, mem));
+      const cm = /^\/inbox\/([0-9a-f-]{36})$/.exec(path);
+      if (cm) return conversationPage(db, user, mem, cm[1], env);
 
       const sm = /^\/posts\/([0-9a-f-]{36})\/submit$/.exec(path);
       if (sm && req.method === "POST") {
@@ -619,6 +721,6 @@ export default {
       return html(layout("Not found", `<p class="bad">Nothing here yet.</p>`, user), 404);
     } catch (e: any) {
       return html(layout("Error", `<p class="bad">${esc(String(e).slice(0, 300))}</p>`), 500);
-    } finally { await db.end(); }
+    } finally { await db.end().catch(() => {}); }
   },
 };
