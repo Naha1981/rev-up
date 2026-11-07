@@ -51,29 +51,32 @@ function esc(s: any): string {
 export function navLinks(user: any): string {
   const g: string[] = Array.isArray(user._goals) ? user._goals : [];
   const show = (...need: string[]) => !g.length || need.some((n) => g.includes(n));
+  // Daily work stays on the bar; everything else sits under More.
   let h = `<a href="/">Dashboard</a>`;
-  if (show("social")) h += `<a href="/analytics">Analytics</a>`;
-  if (show("reviews")) h += `<a href="/radar">Radar</a>`;
-  if (show("social")) h += `<a href="/posts">Posts</a>`;
-  if (show("social")) h += `<a href="/team">Team</a>`;
-  if (show("social")) h += `<a href="/media">Media</a>`;
-  h += `<a href="/onboarding">Onboarding</a>`;
-  if (show("reviews")) h += `<a href="/reviews">Reviews</a>`;
-  if (show("receptionist")) h += `<a href="/receptionist">Receptionist</a>`;
-  if (show("receptionist")) h += `<a href="/assistant">Assistant</a>`;
-  if (show("receptionist")) h += `<a href="/bookings">Bookings</a>`;
-  if (show("receptionist")) h += `<a href="/waitlist">Waitlist</a>`;
-  if (show("receptionist")) h += `<a href="/loyalty">Loyalty</a>`;
-  if (show("receptionist")) h += `<a href="/quotes">Quotes</a>`;
-  if (show("receptionist")) h += `<a href="/campaigns">Campaigns</a>`;
-  if (show("receptionist", "social", "leads")) h += `<a href="/pages">Pages</a>`;
-  if (show("receptionist")) h += `<a href="/competitors">Competitors</a>`;
-  if (show("receptionist")) h += `<a href="/support">Support</a>`;
-  if (show("receptionist")) h += `<a href="/wifi-card">WiFi Card</a>`;
   if (show("leads", "receptionist")) h += `<a href="/inbox">Inbox</a>`;
   if (show("leads")) h += `<a href="/frontdesk">Leads</a>`;
   if (show("reviews", "leads", "receptionist")) h += `<a href="/approvals">Approvals</a>`;
-  h += `<a href="/billing">Billing</a>`;
+  if (show("social")) h += `<a href="/posts">Posts</a>`;
+  if (show("social")) h += `<a href="/team">Team</a>`;
+  if (show("reviews")) h += `<a href="/reviews">Reviews</a>`;
+  if (show("receptionist")) h += `<a href="/receptionist">Receptionist</a>`;
+  let more = "";
+  if (show("social")) more += `<a href="/analytics">Analytics</a>`;
+  if (show("reviews")) more += `<a href="/radar">Radar</a>`;
+  if (show("social")) more += `<a href="/media">Media</a>`;
+  more += `<a href="/onboarding">Onboarding</a>`;
+  if (show("receptionist")) more += `<a href="/assistant">Assistant</a>`;
+  if (show("receptionist")) more += `<a href="/bookings">Bookings</a>`;
+  if (show("receptionist")) more += `<a href="/waitlist">Waitlist</a>`;
+  if (show("receptionist")) more += `<a href="/loyalty">Loyalty</a>`;
+  if (show("receptionist")) more += `<a href="/quotes">Quotes</a>`;
+  if (show("receptionist")) more += `<a href="/campaigns">Campaigns</a>`;
+  if (show("receptionist", "social", "leads")) more += `<a href="/pages">Pages</a>`;
+  if (show("receptionist")) more += `<a href="/competitors">Competitors</a>`;
+  if (show("receptionist")) more += `<a href="/support">Support</a>`;
+  if (show("receptionist")) more += `<a href="/wifi-card">WiFi Card</a>`;
+  more += `<a href="/billing">Billing</a>`;
+  h += `<details class="nav-more"><summary>More</summary><div class="nav-more-panel">${more}</div></details>`;
   return h;
 }
 
@@ -92,6 +95,16 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:16px 0
 .nav-links{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
 .nav-links a{color:var(--ink2);font-size:14px;font-weight:500}
 .nav-links a:hover{color:var(--ink);text-decoration:none}
+.nav-more{position:relative}
+.nav-more summary{list-style:none;cursor:pointer;color:var(--ink2);font-size:14px;font-weight:500;display:flex;align-items:center;gap:4px;user-select:none}
+.nav-more summary::-webkit-details-marker{display:none}
+.nav-more summary::after{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg) translateY(-2px)}
+.nav-more summary:hover{color:var(--ink)}
+.nav-more[open] summary{color:var(--ink)}
+.nav-more-panel{position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid var(--line);border-radius:12px;padding:8px;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,0.06);z-index:50;display:grid;gap:2px}
+.nav-more-panel a{display:block;padding:6px 12px;border-radius:8px;white-space:nowrap;color:var(--ink2)}
+.nav-more-panel a:hover{background:var(--bg);color:var(--ink);text-decoration:none}
+@media (max-width:640px){.nav-more-panel{left:0;right:auto}}
 .btn{display:inline-block;padding:10px 20px;border-radius:10px;font-weight:500;font-size:15px;text-decoration:none;transition:background .15s;border:0;cursor:pointer}
 .btn-primary{background:var(--brand);color:#fff}
 .btn-primary:hover{background:var(--brand-dark);text-decoration:none}
