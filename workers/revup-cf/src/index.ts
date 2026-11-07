@@ -40,6 +40,7 @@ async function sha256hex(s: string): Promise<string> {
 import SparkMD5 from "spark-md5";
 import { wifiCardPage } from "./wificard";
 import { freeAiGenerate, rejectInventedPrices, FACT_RULES } from "./freeai";
+import { ensureSocialTeamSchema, teamPage, runResearcher, producePiece } from "./socialteam";
 import { QRCODE_LIB } from "./qrcodejs";
 export function md5(input: string): string { return SparkMD5.hash(input); }
 
@@ -54,10 +55,12 @@ export function navLinks(user: any): string {
   if (show("social")) h += `<a href="/analytics">Analytics</a>`;
   if (show("reviews")) h += `<a href="/radar">Radar</a>`;
   if (show("social")) h += `<a href="/posts">Posts</a>`;
+  if (show("social")) h += `<a href="/team">Team</a>`;
   if (show("social")) h += `<a href="/media">Media</a>`;
   h += `<a href="/onboarding">Onboarding</a>`;
   if (show("reviews")) h += `<a href="/reviews">Reviews</a>`;
   if (show("receptionist")) h += `<a href="/receptionist">Receptionist</a>`;
+  if (show("receptionist")) h += `<a href="/assistant">Assistant</a>`;
   if (show("receptionist")) h += `<a href="/bookings">Bookings</a>`;
   if (show("receptionist")) h += `<a href="/waitlist">Waitlist</a>`;
   if (show("receptionist")) h += `<a href="/loyalty">Loyalty</a>`;
@@ -74,7 +77,7 @@ export function navLinks(user: any): string {
   return h;
 }
 
-function layout(title: string, body: string, user?: any): string {
+export function layout(title: string, body: string, user?: any): string {
   const nav = user
     ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links">${navLinks(user)}${user._cur_ws ? `<a href="/switch" title="Switch business" style="border:1px solid var(--line);border-radius:8px;padding:2px 8px">${esc(user._cur_ws)}${(user._ws_count||0) > 1 ? " &#9662;" : ""}</a>` : ""}<form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>`
     : `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a class="btn btn-ghost" href="/login">Log in</a><a class="btn btn-primary" href="/signup">Get started</a></div></nav>`;
@@ -975,6 +978,29 @@ async function handle(req: Request, env: Env): Promise<Response> {
       } finally { await db.end().catch(() => {}); }
     }
 
+    // Owner assistant vault (Business Pro): one-time collection link page.
+    // Token-gated, write-only; the secret is stored AES-256-GCM encrypted and
+    // no route ever returns a stored value.
+    if (path.startsWith("/vault/c/") && req.method === "GET") {
+      const token = path.split("/").pop() || "";
+      if (!/^[A-Za-z0-9-]{20,80}$/.test(token)) return new Response("not found", { status: 404 });
+      const { collectPage } = await import("./assistant");
+      return new Response(collectPage(token), { headers: { "content-type": "text/html" } });
+    }
+    if (path === "/vault/save" && req.method === "POST") {
+      const f = await formData(req);
+      const token = String(f.token || ""), name = String(f.name || "").slice(0, 120), secret = String(f.secret || "");
+      if (!token || !name || !secret) return new Response("missing fields", { status: 400 });
+      const db = pool(env);
+      try {
+        const { consumeVaultLink, storeSecret } = await import("./assistant");
+        const ws = await consumeVaultLink(db, token);
+        if (!ws) return new Response("link used or unknown", { status: 403 });
+        await storeSecret(db, env, ws, name, secret);
+        return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:sans-serif;max-width:26rem;margin:3rem auto">Saved. It is write-only from here: nobody can read it back, not even you. Close this tab.</body>', { headers: { "content-type": "text/html" } });
+      } finally { await db.end().catch(() => {}); }
+    }
+
     // ITN receiver (PayFast server-to-server): triple-verified, activates the plan.
     if (path === "/billing/payfast-itn" && req.method === "POST") {
       const db = pool(env);
@@ -1332,6 +1358,37 @@ ${!ch.rows.length ? `<div class="card" style="border-color:var(--brand)"><h2 sty
 </div>`, user));
       }
 
+      if (path === "/assistant") {
+        const { getSettings, upsertSettings, assistantCounts } = await import("./assistant");
+        if (mem.plan !== "business-pro") {
+          return html(layout("Assistant", `<div class="card"><h2 style="margin-top:0">Your own assistant</h2>
+<p>Chat with your own assistant on your business WhatsApp: it remembers your rules and decisions, keeps a task log, parks anything that sends, spends or deploys for your Go + Sure, and holds a write-only vault for your secrets.</p>
+<p class="mut">The assistant is part of the Business Pro plan. <a href="/billing">Upgrade in billing -</a></p></div>`, user));
+        }
+        if (req.method === "POST") {
+          const f = await formData(req);
+          const phone = String(f.owner_phone || "").replace(/\D/g, "").slice(0, 32);
+          if (!phone || phone.length < 9) return redirect("/assistant?msg=" + encodeURIComponent("Enter your WhatsApp number with country code, e.g. 27612345678."));
+          await upsertSettings(db, mem.workspace_id, phone, f.enabled === "on");
+          return redirect("/assistant?msg=" + encodeURIComponent("Assistant settings saved."));
+        }
+        const [settings, counts] = await Promise.all([getSettings(db, mem.workspace_id), assistantCounts(db, mem.workspace_id)]);
+        const msg = url.searchParams.get("msg") || "";
+        return html(layout("Assistant", `
+${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+<div class="card"><h2 style="margin-top:0">Your own assistant</h2>
+<p>Message your business WhatsApp number from your own phone. The assistant answers only you: it remembers your rules and decisions, keeps a task log, parks anything that sends, spends or deploys until you reply <b>Go + Sure</b>, and holds a write-only vault for your secrets.</p>
+<form method="post" action="/assistant">
+<label>Your WhatsApp number (country code, e.g. 27612345678)<input name="owner_phone" value="${esc(settings?.owner_phone || "")}" maxlength="32" placeholder="27…"></label>
+<label><input type="checkbox" name="enabled" ${!settings || settings.enabled ? "checked" : ""}> Assistant answering</label>
+<button class="btn btn-primary" type="submit">Save</button></form></div>
+<div class="grid">
+<div class="card"><h2>Memories kept</h2><p class="stat">${counts.memories}</p></div>
+<div class="card"><h2>Waiting on Go + Sure</h2><p class="stat">${counts.pending}</p></div>
+<div class="card"><h2>Tasks running</h2><p class="stat">${counts.running}</p></div>
+</div>`, user));
+      }
+
       if (path === "/") return html(await dashboardPage(db, user, mem, url.searchParams.get("msg") || ""));
       if (path === "/static/brand/revup-light.png") return new Response(Uint8Array.from(atob(LOGO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
 
@@ -1523,6 +1580,90 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
         } catch (e: any) {
           return html(newPostPage(user, mem, f, "Drafting failed (" + String(e?.message || e) + ") - write it manually or try again."));
         }
+      }
+
+      if (path === "/team") {
+        await ensureSocialTeamSchema(db);
+        return html(layout("Your social media team", await teamPage(db, mem.workspace_id, url.searchParams.get("msg") || ""), user));
+      }
+
+      if (path === "/team/research" && req.method === "POST") {
+        await ensureSocialTeamSchema(db);
+        try {
+          const bp = await db.query(`SELECT business_name, industry FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [mem.workspace_id]);
+          const business = bp.rows[0]?.business_name || mem.org_name || "local business";
+          const industry = bp.rows[0]?.industry || "";
+          const existing = await db.query(`SELECT title FROM socialteam_idea WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 40`, [mem.workspace_id]);
+          const ideas = await runResearcher(env, business, industry, existing.rows.map((r: any) => r.title));
+          for (const i of ideas) {
+            await db.query(`INSERT INTO socialteam_idea(id, workspace_id, title, angle, rationale) VALUES($1,$2,$3,$4,$5)`,
+              [crypto.randomUUID(), mem.workspace_id, i.title, i.angle, i.rationale]);
+          }
+          return redirect("/team?msg=" + encodeURIComponent("Your Researcher brought " + ideas.length + " fresh ideas."));
+        } catch (e: any) {
+          return redirect("/team?msg=" + encodeURIComponent("Research failed (" + String(e?.message || e) + ") - try again shortly."));
+        }
+      }
+
+      const ideaWrite = /^\/team\/idea\/([0-9a-f-]{36})\/write$/.exec(path);
+      if (ideaWrite && req.method === "POST") {
+        await ensureSocialTeamSchema(db);
+        const ir = await db.query(`SELECT id, title, angle, rationale, status FROM socialteam_idea WHERE id=$1 AND workspace_id=$2`, [ideaWrite[1], mem.workspace_id]);
+        const idea = ir.rows[0];
+        if (!idea || idea.status !== "fresh") return redirect("/team");
+        try {
+          const bp = await db.query(`SELECT business_name FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [mem.workspace_id]);
+          const business = bp.rows[0]?.business_name || mem.org_name || "local business";
+          const pieceId = crypto.randomUUID();
+          await db.query(`INSERT INTO socialteam_piece(id, workspace_id, idea_id) VALUES($1,$2,$3)`, [pieceId, mem.workspace_id, idea.id]);
+          await producePiece(env, db, mem.workspace_id, pieceId, business, idea);
+          await db.query(`UPDATE socialteam_idea SET status='used', updated_at=now() WHERE id=$1`, [idea.id]);
+          return redirect("/team?msg=" + encodeURIComponent("Written and checked - ready for your eye below."));
+        } catch (e: any) {
+          return redirect("/team?msg=" + encodeURIComponent("Writing failed (" + String(e?.message || e) + ") - try again shortly."));
+        }
+      }
+
+      const ideaPark = /^\/team\/idea\/([0-9a-f-]{36})\/park$/.exec(path);
+      if (ideaPark && req.method === "POST") {
+        await db.query(`UPDATE socialteam_idea SET status='parked', updated_at=now() WHERE id=$1 AND workspace_id=$2`, [ideaPark[1], mem.workspace_id]);
+        return redirect("/team");
+      }
+
+      const pieceSend = /^\/team\/piece\/([0-9a-f-]{36})\/send$/.exec(path);
+      if (pieceSend && req.method === "POST") {
+        // Hands the checked post to the composer and straight into the owner's
+        // approvals queue - the owner makes the final decision there.
+        const pr = await db.query(`SELECT id, caption, hashtags, status FROM socialteam_piece WHERE id=$1 AND workspace_id=$2`, [pieceSend[1], mem.workspace_id]);
+        const piece = pr.rows[0];
+        if (!piece || (piece.status !== "ready" && piece.status !== "returned")) return redirect("/team");
+        const tags = Array.isArray(piece.hashtags) ? piece.hashtags.join(" ") : "";
+        const caption = piece.caption + (tags ? "\n\n" + tags : "");
+        const client = await db.connect();
+        try {
+          await client.query("BEGIN");
+          const postId = crypto.randomUUID();
+          await client.query(
+            `INSERT INTO composer_post(id,title,caption,first_comment,internal_notes,tags,workspace_id,author_id,media_id,created_at,updated_at)
+             VALUES($1,$2,$3,'','','{}'::jsonb,$4,$5,NULL,now(),now())`,
+            [postId, "From your social media team", caption, mem.workspace_id, user.id]);
+          const accs = await client.query(
+            `SELECT id, provider FROM social_accounts_social_account WHERE workspace_id=$1 AND connection_status='connected'`, [mem.workspace_id]);
+          let moved = 0;
+          for (const a of accs.rows) {
+            await client.query(
+              `INSERT INTO composer_platform_post(id,platform_post_id,publish_error,retry_count,created_at,updated_at,social_account_id,post_id,platform_extra,status,first_comment_error,first_comment_id,first_comment_retry_count,first_comment_status,last_provider_error,last_provider_status,provider,provider_post_id)
+               VALUES($1,'','',0,now(),now(),$2,$3,'{}'::jsonb,'pending_review','','',0,'none','','',$4,'')`,
+              [crypto.randomUUID(), a.id, postId, a.provider || "zernio"]);
+            moved++;
+          }
+          await client.query(
+            `INSERT INTO approvals_approval_action(id,post_id,platform_post_id,user_id,action,comment,created_at)
+             VALUES($1,$2,NULL,$3,'submitted','from the social media team',now())`, [crypto.randomUUID(), postId, user.id]);
+          await client.query(`UPDATE socialteam_piece SET status='sent_for_approval', updated_at=now() WHERE id=$1`, [piece.id]);
+          await client.query("COMMIT");
+          return redirect(moved ? "/approvals" : "/team?msg=" + encodeURIComponent("Saved as a post draft - connect a social account to send it for approval."));
+        } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }
       }
 
       if (path === "/inbox") return html(await inboxPage(db, user, mem));

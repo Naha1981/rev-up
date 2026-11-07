@@ -131,6 +131,16 @@ export async function handleZernioWebhook(db: Pool, env: any, payload: any): Pro
     return;
   }
 
+  // Owner assistant (Business Pro): the owner's own number talks to the
+  // assistant, not the customer receptionist. Fully handled there when it matches.
+  {
+    const { maybeHandleAssistant } = await import("./assistant");
+    if (await maybeHandleAssistant(db, env, {
+      workspaceId: channel.workspace_id, waId, body, contactId: contact.id,
+      zernioMessageId: zid, channel, businessName: String(profile.business_name || ""),
+    })) return;
+  }
+
   // A negative reply right after a check-in or review ask flags the customer
   // for personal follow-up (Google policy: never suppress the ask itself).
   if (["check_in_sent", "review_requested"].includes(contact.review_status || "")) {
@@ -235,30 +245,39 @@ export async function handleZernioWebhook(db: Pool, env: any, payload: any): Pro
     }
   } catch { /* industry board record is best-effort */ }
 
-  // send guard: reply-only, sandbox allowlist, send budget
+  const sent = await sendChannelMessage(db, env, channel, contact.id, waId, reply);
+  if (!sent.ok) return; // draft stays for retry/inbox
+  await db.query(`UPDATE receptionist_message SET is_draft=false, zernio_message_id=$1 WHERE id=$2`, [sent.messageId, outId]);
+}
+
+// Shared WhatsApp send: reply-only guards, sandbox allowlist, per-workspace
+// send budget, tenant key first (a workspace with its own messaging account
+// sends on ITS key and plan). Used by the receptionist and the owner assistant.
+export async function sendChannelMessage(db: Pool, env: any, channel: any, contactId: string, waId: string, text: string): Promise<{ ok: boolean; messageId: string }> {
   const sandbox = channel.is_sandbox || channel.zernio_account_id === SANDBOX_ACCOUNT_ID;
-  if (sandbox && !SANDBOX_SEND_ALLOWLIST.has(waId)) return; // draft stays for the inbox
+  if (sandbox && !SANDBOX_SEND_ALLOWLIST.has(waId)) return { ok: false, messageId: "" };
   const sentHour = await db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND is_draft=false AND created_at >= now() - interval '1 hour'`, [channel.workspace_id]);
   const sentDay = await db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND is_draft=false AND created_at >= now() - interval '1 day'`, [channel.workspace_id]);
-  if (Number(sentHour.rows[0].c) >= MAX_SENDS_HOUR || Number(sentDay.rows[0].c) >= MAX_SENDS_DAY) return;
-  if (!contact.zernio_conversation_id) return;
+  if (Number(sentHour.rows[0].c) >= MAX_SENDS_HOUR || Number(sentDay.rows[0].c) >= MAX_SENDS_DAY) return { ok: false, messageId: "" };
+  const cq = await db.query(`SELECT zernio_conversation_id FROM receptionist_contact WHERE id=$1`, [contactId]);
+  const convId = cq.rows[0]?.zernio_conversation_id;
+  if (!convId) return { ok: false, messageId: "" };
 
   // a workspace with its own messaging account sends on ITS key and plan
   const connQ = await db.query(`SELECT api_key, status FROM receptionist_tenantmessagingconnection WHERE workspace_id=$1 LIMIT 1`, [channel.workspace_id]);
   const conn = connQ.rows[0];
-  if (conn && conn.status === "needs_attention") return; // hold drafts until they reconnect
+  if (conn && conn.status === "needs_attention") return { ok: false, messageId: "" }; // hold drafts until they reconnect
   const sendKey = conn && conn.status === "connected" && conn.api_key ? conn.api_key : env.ZERNIO_API_KEY;
 
   const base = env.ZERNIO_BASE_URL || "https://zernio.com/api/v1";
-  const resp = await fetch(`${base}/inbox/conversations/${contact.zernio_conversation_id}/messages`, {
+  const resp = await fetch(`${base}/inbox/conversations/${convId}/messages`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${sendKey}` },
-    body: JSON.stringify({ accountId: channel.zernio_account_id, message: reply }),
+    body: JSON.stringify({ accountId: channel.zernio_account_id, message: text }),
   });
-  if (!resp.ok) return; // draft stays for retry/inbox
+  if (!resp.ok) return { ok: false, messageId: "" }; // draft stays for retry/inbox
   const data: any = await resp.json().catch(() => ({}));
-  const sentId = String(data?.message?.id || data?.messageId || data?.id || "");
-  await db.query(`UPDATE receptionist_message SET is_draft=false, zernio_message_id=$1 WHERE id=$2`, [sentId, outId]);
+  return { ok: true, messageId: String(data?.message?.id || data?.messageId || data?.id || "") };
 }
 
 // ---------- tenant self-serve WhatsApp connect (their own messaging account) ----------

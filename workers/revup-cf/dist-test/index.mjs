@@ -40,6 +40,163 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
+// src/presets.ts
+function getPreset(industry) {
+  const k = (industry || "general").trim();
+  return PRESETS[k] || PRESETS[ALIAS[k]] || PRESETS[k.replace(/-/g, "_")] || PRESETS.general;
+}
+function industryLabel(k) {
+  const f = INDUSTRIES.find(([v]) => v === k);
+  return f ? f[1] : PRESETS[k]?.label || k || "General local service";
+}
+var INDUSTRIES, PRESETS, ALIAS;
+var init_presets = __esm({
+  "src/presets.ts"() {
+    INDUSTRIES = [["plumber", "Plumbing"], ["electrician", "Electrical"], ["security", "Security"], ["solar", "Solar / inverters"], ["auto-workshop", "Auto workshop"], ["panel-beater", "Panel beater / body shop"], ["auto-electrician", "Auto electrician"], ["mobile-mechanic", "Mobile mechanic"], ["towing", "Towing / roadside"], ["hvac", "Aircon / refrigeration"], ["roofing", "Roofing / waterproofing"], ["gates-access", "Gates / fencing / access control"], ["pest-control", "Pest control"], ["property-maintenance", "Property maintenance"], ["container-transport", "Container transport"], ["pool", "Pool services"], ["aesthetics", "Aesthetics / cosmetic clinic"], ["real-estate", "Real estate"], ["property-management", "Property management"], ["legal", "Law firm"], ["financial-broker", "Financial / insurance broker"], ["funeral", "Funeral services"], ["dental", "Dental practice"], ["restaurant", "Restaurant / cafe / takeaway"], ["catering", "Catering / food truck"], ["trades", "Trades (general building & repairs)"], ["general", "General local service"]];
+    PRESETS = {
+      "general": { "label": "General / other", "radar_keywords": [], "post_themes": ["Industry news with a local angle", "Customer questions answered", "Behind-the-scenes"], "hashtags": [], "responder_tone": "warm and professional", "responder_questions": [], "responder_faqs": [] },
+      "restaurant": { "label": "Restaurants & Food", "radar_keywords": ["restaurant", "food", "menu", "chef", "eatery", "takeaway", "braai", "cuisine", "dining", "coffee", "bakery", "catering", "halaal", "vegan"], "post_themes": ["Today's specials and limited-time dishes", "Behind the pass: meet the kitchen", "Customer favourites and reviews", "Weekend and payday promos", "Local food culture and events"], "hashtags": ["#JoburgEats", "#SAFoodie"], "responder_tone": "warm and welcoming", "responder_questions": ["Would you like a table, and for how many people?", "Is this for today or another day - and what time suits you?", "Any dietary needs we should know about (halaal, vegetarian, allergies)?"], "responder_faqs": ["Do I need to book, or can I walk in?", "What's on the menu today?", "Do you deliver or offer collection?"] },
+      "real_estate": { "label": "Real Estate", "radar_keywords": ["property", "housing", "bond", "mortgage", "transfer", "estate", "rental", "conveyancing", "suburb"], "post_themes": ["Rate moves and what they mean for buyers", "Suburb spotlight", "Listing marketing tips", "First-time buyer guidance"], "hashtags": ["#PropertySA", "#RealEstateSA"], "responder_tone": "warm and professional", "responder_questions": ["What price range are you working with?", "Are you pre-approved for a bond, or buying cash?", "Would a weekday late afternoon or a Saturday morning suit you better?"], "responder_faqs": ["Is the property still available?", "Can I book a viewing?", "What are the transfer costs?"] },
+      "dental": { "label": "Dentists & Clinics", "radar_keywords": ["dental", "dentist", "clinic", "healthcare", "medical aid", "teeth", "oral", "health"], "post_themes": ["Oral health tips patients actually read", "Medical aid and payment options", "New treatment announcements", "School-holiday checkup reminders"], "hashtags": ["#DentalCareSA", "#HealthySmile"], "responder_tone": "caring and reassuring", "responder_questions": ["Is this for a check-up, or is something bothering you?", "Do you have medical aid, and if so which one?", "Would a morning or afternoon appointment suit you better?"], "responder_faqs": ["Do you accept my medical aid?", "How do I book an appointment?", "Do you see children?"] },
+      "auto": { "label": "Car Dealers", "radar_keywords": ["car", "vehicle", "auto", "dealership", "bakkie", "sedan", "suv", "fuel", "petrol", "diesel"], "post_themes": ["Fuel price moves and what they mean for buyers", "New stock announcements", "Finance and trade-in explainers", "Weekend test-drive invites"], "hashtags": ["#CarsSA", "#AutoDealer"], "responder_tone": "helpful and energetic", "responder_questions": ["What's your budget range?", "Are you trading in, and do you need finance?", "When suits you for a test drive - weekday or Saturday?"], "responder_faqs": ["Is this vehicle still in stock?", "Can I book a test drive?", "Do you take trade-ins?"] },
+      "panel_beater": { "label": "Panel Beaters & Body Shops", "radar_keywords": ["panel beater", "panel beating", "body shop", "spray paint", "dent repair", "scratch repair", "accident repair", "bumper", "hail damage", "insurance claim"], "post_themes": ["Before-and-after repair transformations", "How the insurance claim process works", "Hail and dent season readiness", "What a proper respray involves"], "hashtags": ["#PanelBeaterSA", "#AutoBodySA"], "responder_tone": "reassuring and practical", "responder_questions": ["Can you send photos of the damage?", "What is the make, model and year of the vehicle?", "Is this going through insurance, or is it a private repair?"], "responder_faqs": ["How do I get a quote for the damage?", "Do you work with my insurance?", "How long will the repair take?"] },
+      "auto_electrician": { "label": "Auto Electricians", "radar_keywords": ["auto electrician", "auto electrical", "car battery", "alternator", "starter motor", "wiring", "ecu", "immobiliser", "car alarm", "central locking"], "post_themes": ["Warning lights and what they mean", "Battery care in winter and summer", "Common electrical faults by make", "When a rewire beats another patch"], "hashtags": ["#AutoElectricianSA", "#CarElectrical"], "responder_tone": "clear and methodical", "responder_questions": ["What is the make, model and year of the vehicle?", "What is it doing - any warning lights, or does it fail to start?", "Is the vehicle with you, or stranded somewhere?"], "responder_faqs": ["Can you diagnose a warning light?", "Do you replace batteries and alternators?", "Can you come to the vehicle?"] },
+      "funeral": { "label": "Funeral Services", "radar_keywords": ["funeral", "memorial", "burial", "cremation", "tombstone", "hearse", "mourning", "condolences", "funeral cover", "undertaker"], "post_themes": ["What to do first when a death occurs", "Planning ahead: what families should know", "Cover plans explained in plain language", "Honouring a loved one: memorial ideas", "Supporting grieving families in our community"], "hashtags": ["#FuneralServicesSA", "#GriefSupport"], "responder_tone": "compassionate and unhurried", "responder_questions": ["Is this about arrangements needed now, or planning ahead?", "Do you have a policy or cover plan with us - and the policy number, if so?", "What is the best number to call you back on?"], "responder_faqs": ["What cover plans do you offer, and what do they cost per month?", "What do we do first when a death occurs?", "How do we claim on a policy?"] },
+      "plumber": { "label": "Plumbing", "radar_keywords": ["plumber", "geyser", "burst pipe", "drain", "leak", "blocked", "tap", "sewer"], "post_themes": ["Geyser failures before winter - what to check", "Burst pipe? What to do in the first 10 minutes", "Water-saving fixes that cut your bill", "Emergency call-out vs booked job - what costs what"], "hashtags": ["#PlumberSA", "#GeyserHelp"], "responder_tone": "calm and practical", "responder_questions": ["Where is the problem - and is water still running?", "Is this an emergency or can it wait for a booked slot?", "Which suburb are you in?"], "responder_faqs": ["Do you charge a call-out fee?", "How much to replace a geyser?", "Are you available after hours?"] },
+      "electrician": { "label": "Electrical", "radar_keywords": ["electrician", "electrical", "power trip", "db board", "coc", "compliance certificate", "wiring", "lights"], "post_themes": ["Load-shedding prep: what a healthy DB board looks like", "Why your power keeps tripping", "Compliance certificates when selling your home", "Safe generator and inverter connections"], "hashtags": ["#ElectricianSA", "#PowerTrip"], "responder_tone": "reassuring and safety-first", "responder_questions": ["Is there any burning smell or exposed wiring? If yes, switch off at the main breaker.", "Which area are you in?", "Is the whole house out or one circuit?"], "responder_faqs": ["Do you issue COC certificates?", "How much is a call-out?", "Can you connect an inverter?"] },
+      "security": { "label": "Security", "radar_keywords": ["security", "alarm", "cctv", "armed response", "access control", "electric fence", "beams", "guarding"], "post_themes": ["Holiday security checklist for your home", "Alarm systems vs CCTV - what actually deters", "How armed response times really work", "Gate motor and beam maintenance"], "hashtags": ["#SecuritySA", "#HomeSafety"], "responder_tone": "alert and trustworthy", "responder_questions": ["Is this for a home or business?", "Do you need a new install or a repair/upgrade?", "Which suburb or complex?"], "responder_faqs": ["Do you do free assessments?", "What does armed response cost monthly?", "Can you take over an existing alarm?"] },
+      "solar": { "label": "Solar / inverters", "radar_keywords": ["solar", "inverter", "battery", "panels", "load shedding", "eskom", "backup power", "pv"], "post_themes": ["What size inverter does your home actually need", "Solar payback periods in SA right now", "Battery care through load-shedding cycles", "Eskom tariff hikes vs going solar"], "hashtags": ["#SolarSA", "#LoadShedding"], "responder_tone": "knowledgeable and straight-talking", "responder_questions": ["What is your average monthly electricity bill?", "Do you want backup only or full solar?", "House or business premises?"], "responder_faqs": ["How much does a basic backup system cost?", "How long does installation take?", "Do you offer finance?"] },
+      "mobile-mechanic": { "label": "Mobile mechanic", "radar_keywords": ["mobile mechanic", "car service", "breakdown", "battery", "brakes", "car won't start", "roadside"], "post_themes": ["Your car won't start - the 3 most common causes", "Why mobile servicing beats sitting in a workshop queue", "Brake warning signs you should never ignore", "Pre-holiday vehicle checks"], "hashtags": ["#MobileMechanic", "#CarServiceSA"], "responder_tone": "helpful and down-to-earth", "responder_questions": ["What make, model and year is the vehicle?", "Where is the vehicle parked right now?", "Does it start, or is it completely dead?"], "responder_faqs": ["Do you come to my home or work?", "What does a basic service cost?", "Do you charge for diagnostics?"] },
+      "towing": { "label": "Towing / roadside", "radar_keywords": ["towing", "tow truck", "breakdown", "accident", "roadside assist", "flat tyre", "recovery"], "post_themes": ["What to do right after a breakdown on the N1", "Flat tyre on the highway - stay safe first", "How towing fees work and what insurance covers", "Why response time matters more than price"], "hashtags": ["#TowingSA", "#RoadsideAssist"], "responder_tone": "fast, calm and reassuring", "responder_questions": ["Where exactly is the vehicle - nearest landmark or pin?", "Is anyone injured or in danger?", "What vehicle is it and can it roll?"], "responder_faqs": ["How much to tow within town?", "Do you work with my insurance?", "How long until a truck reaches me?"] },
+      "hvac": { "label": "Aircon / refrigeration", "radar_keywords": ["aircon", "air conditioning", "hvac", "refrigeration", "cold room", "regas", "split unit"], "post_themes": ["Summer is coming - book your aircon service now", "Why your aircon is blowing warm air", "Cold room care for restaurants and butcheries", "Inverter aircons vs older units on your bill"], "hashtags": ["#AirconSA", "#HVac"], "responder_tone": "efficient and friendly", "responder_questions": ["Service, repair or new installation?", "What type of unit and roughly how old?", "Home or business?"], "responder_faqs": ["How much is an aircon service?", "Do you regas units?", "Can you supply and install?"] },
+      "roofing": { "label": "Roofing / waterproofing", "radar_keywords": ["roof", "roofing", "waterproofing", "leak", "gutters", "thatch", "ibr", "torch-on"], "post_themes": ["Rain season checklist: find leaks before they find you", "Waterproofing flat roofs - what lasts and what fails", "Gutter cleaning before the storms", "IBr vs tile vs thatch - honest pros and cons"], "hashtags": ["#RoofingSA", "#Waterproofing"], "responder_tone": "solid and dependable", "responder_questions": ["Where is the leak or problem area?", "What type of roof do you have?", "Can you share a photo?"], "responder_faqs": ["Do you guarantee waterproofing work?", "How much per square metre?", "Do you do free quotes?"] },
+      "gates-access": { "label": "Gates / fencing / access control", "radar_keywords": ["gate motor", "electric gate", "fencing", "access control", "intercom", "palisade", "centurion"], "post_themes": ["Gate motor battery care during load shedding", "Palisade vs clear-view fencing for your property", "Access control for complexes and offices", "Why gates fail after power surges"], "hashtags": ["#GateMotors", "#FencingSA"], "responder_tone": "prompt and security-minded", "responder_questions": ["Is the gate stuck open or closed right now?", "What motor brand do you have?", "Home, complex or business?"], "responder_faqs": ["Do you repair Centurion motors?", "How much is a new gate motor installed?", "Do you do intercoms?"] },
+      "pest-control": { "label": "Pest control", "radar_keywords": ["pest control", "termites", "cockroaches", "rats", "fumigation", "ants", "bed bugs"], "post_themes": ["Termite season in SA - early signs in your home", "Why cockroaches come back after shop sprays", "Bed bugs: what actually gets rid of them", "Rodent proofing before winter"], "hashtags": ["#PestControlSA", "#Fumigation"], "responder_tone": "discreet and thorough", "responder_questions": ["What pest are you seeing and where?", "How big is the property?", "Any kids or pets we should plan around?"], "responder_faqs": ["Is treatment safe for children and pets?", "How much for a once-off treatment?", "Do you guarantee the work?"] },
+      "property-maintenance": { "label": "Property maintenance", "radar_keywords": ["maintenance", "handyman", "repairs", "painting", "complex maintenance", "facilities"], "post_themes": ["The maintenance schedule every complex needs", "Small repairs that stop big insurance claims", "Painting season: prep work that makes it last", "One call, whole-list handyman days"], "hashtags": ["#PropertyMaintenance", "#HandymanSA"], "responder_tone": "reliable and organised", "responder_questions": ["What is on the repair list?", "Is this a once-off or ongoing maintenance?", "Home, complex or office park?"], "responder_faqs": ["Do you charge per job or per day?", "Do you do complex contracts?", "Can I send photos for a quote?"] },
+      "container-transport": { "label": "Container transport", "radar_keywords": ["container", "transport", "logistics", "freight", "shipping container", "haulage", "delivery"], "post_themes": ["Container transport rates - what drives the price", "Port delays and how to plan around them", "Buying vs hiring containers for storage", "Cross-border freight basics for small importers"], "hashtags": ["#LogisticsSA", "#ContainerTransport"], "responder_tone": "direct and dependable", "responder_questions": ["What size container and what route?", "One trip or regular loads?", "Any crane or side-loader needs on site?"], "responder_faqs": ["What does a 6m container move cost?", "Do you do cross-border?", "How far ahead must I book?"] },
+      "pool": { "label": "Pool services", "radar_keywords": ["pool", "pool pump", "green pool", "pool cleaning", "marbelite", "pool repairs"], "post_themes": ["Green pool rescue - the 5-day turnaround", "Winter pool care that saves you money", "Pump and filter basics every owner should know", "Heating options to stretch your swim season"], "hashtags": ["#PoolServicesSA", "#PoolCare"], "responder_tone": "friendly and knowledgeable", "responder_questions": ["Weekly service or a once-off cleanup?", "Roughly what size is the pool?", "Is the water green right now?"], "responder_faqs": ["How much is a weekly pool service?", "Do you repair pumps?", "Can you fix a green pool?"] },
+      "aesthetics": { "label": "Aesthetics / cosmetic clinic", "radar_keywords": ["aesthetics", "botox", "fillers", "skin clinic", "laser", "facial", "anti-ageing"], "post_themes": ["What a first consultation actually involves", "Skincare routines that work in the SA climate", "Laser vs peels - honest guidance", "Safe treatments only: questions to ask any clinic"], "hashtags": ["#AestheticsSA", "#SkinClinic"], "responder_tone": "warm, discreet and professional", "responder_questions": ["Which treatment are you interested in?", "Is this your first visit to an aesthetics clinic?", "Would you like a consultation first?"], "responder_faqs": ["How much is a consultation?", "Are treatments done by a doctor?", "Do you have before-and-after photos?"] },
+      "property-management": { "label": "Property management", "radar_keywords": ["property management", "rental", "levy", "body corporate", "tenant", "sectional title", "landlord"], "post_themes": ["Levy increases explained plainly", "How good management protects your property value", "Tenant vetting that prevents problems", "AGM season: what owners should ask"], "hashtags": ["#PropertyManagement", "#RentalsSA"], "responder_tone": "professional and organised", "responder_questions": ["Complex, single rental or portfolio?", "How many units?", "Are you an owner, trustee or landlord?"], "responder_faqs": ["What do your management fees cover?", "Do you handle maintenance?", "How do you screen tenants?"] },
+      "legal": { "label": "Law firm", "radar_keywords": ["lawyer", "attorney", "legal", "contract", "estate", "conveyancing", "litigation", "deceased estate"], "post_themes": ["Why every adult needs a will - plainly explained", "Buying a house? What conveyancing actually covers", "Contracts: the clauses that cost people money", "What to bring to a first legal consultation"], "hashtags": ["#AttorneysSA", "#LegalAdvice"], "responder_tone": "measured and trustworthy", "responder_questions": ["What area of law does this involve?", "Is the matter urgent?", "Have you worked with an attorney before?"], "responder_faqs": ["What does a consultation cost?", "Do you do free first meetings?", "Which areas of law do you cover?"] },
+      "financial-broker": { "label": "Financial / insurance broker", "radar_keywords": ["insurance", "broker", "medical aid", "life cover", "short-term", "funeral cover", "investment"], "post_themes": ["Insurance reviews: why January matters", "Medical aid vs hospital plan - the real difference", "Life cover milestones: marriage, kids, bond", "Short-term insurance: what your premium actually buys"], "hashtags": ["#InsuranceSA", "#FinancialAdvice"], "responder_tone": "clear and trustworthy", "responder_questions": ["What cover are you looking at - life, medical, car, home?", "Are you reviewing existing cover or starting fresh?", "When did you last compare your policies?"], "responder_faqs": ["Do you charge for advice?", "Which providers do you work with?", "Can you beat my current premium?"] },
+      "catering": { "label": "Catering / food truck", "radar_keywords": ["catering", "food truck", "events catering", "platters", "wedding catering", "spit braai"], "post_themes": ["Wedding catering: what to book first", "Spit braai season is here", "Corporate platters that actually impress", "Food truck Fridays - where to find us"], "hashtags": ["#CateringSA", "#SpitBraai"], "responder_tone": "warm and appetising", "responder_questions": ["What event and how many guests?", "What date and venue?", "Any dietary requirements?"], "responder_faqs": ["How much per person?", "Do you cater for halaal or vegetarian guests?", "How far ahead must we book?"] },
+      "trades": { "label": "Trades (general building & repairs)", "radar_keywords": ["builder", "renovation", "building", "repairs", "construction", "alterations", "paving"], "post_themes": ["Renovations: the order of work that saves money", "NHBRC and why it matters for your build", "Small jobs welcome - why that matters", "Planning permission basics for additions"], "hashtags": ["#BuildersSA", "#Renovations"], "responder_tone": "straightforward and capable", "responder_questions": ["What work do you need done?", "Do you have plans or need them drawn?", "What is your rough budget range?"], "responder_faqs": ["Do you do small jobs?", "Are you NHBRC registered?", "How do your quotes work?"] }
+    };
+    ALIAS = { "auto-workshop": "auto", "real-estate": "real_estate" };
+  }
+});
+
+// src/freeai.ts
+async function oneCall(url, key, body, fetcher) {
+  try {
+    const r = await fetcher(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + String(key).trim() },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(1e4)
+    });
+    if (!r.ok) return { status: r.status };
+    const d = await r.json();
+    const text = d?.choices?.[0]?.message?.content || "";
+    if (!text.trim()) return { status: "empty" };
+    return { text };
+  } catch {
+    return { status: "unavailable" };
+  }
+}
+async function freeAiGenerate(env, prompt, opts, parse, fetcher = fetch) {
+  const attempts = [];
+  const messages = [{ role: "user", content: prompt }];
+  const attempt = async (provider, url, key, body) => {
+    const r = await oneCall(url, key, body, fetcher);
+    if ("status" in r) {
+      attempts.push({ provider, status: r.status });
+      return null;
+    }
+    const value = parse(r.text);
+    if (value === null || value === void 0) {
+      attempts.push({ provider, status: "invalid" });
+      return null;
+    }
+    return { value, provider, attempts };
+  };
+  if (env.GROQ_API_KEY) {
+    for (const model of GROQ_MODELS) {
+      const ok = await attempt(
+        "Groq",
+        "https://api.groq.com/openai/v1/chat/completions",
+        env.GROQ_API_KEY,
+        { model, temperature: opts.temperature ?? 0.2, max_tokens: opts.maxTokens, reasoning_effort: "low", store: false, messages }
+      );
+      if (ok) return ok;
+    }
+  } else attempts.push({ provider: "Groq", status: "missing" });
+  if (opts.requireBackupConsent && !(env.OPENROUTER_FREE_ONLY === "true" && env.OPENROUTER_DATA_USE_APPROVED === "true")) {
+    attempts.push({ provider: "OpenRouter", status: "not-approved" });
+  } else if (env.OPENROUTER_API_KEY) {
+    const ok = await attempt(
+      "OpenRouter",
+      "https://openrouter.ai/api/v1/chat/completions",
+      env.OPENROUTER_API_KEY,
+      { model: "openrouter/free", max_tokens: opts.maxTokens, messages, ...OPENROUTER_BODY_EXTRA }
+    );
+    if (ok) return ok;
+  } else attempts.push({ provider: "OpenRouter", status: "missing" });
+  return null;
+}
+function extractAmounts(text) {
+  const out = /* @__PURE__ */ new Set();
+  const add = (raw) => {
+    const n = Number(String(raw).replace(/[\s,]/g, ""));
+    if (Number.isFinite(n) && n > 0) out.add(String(n));
+  };
+  let m;
+  const sym = /(?<![A-Za-z0-9])(?:R|ZAR|\$|€|£)\s?(\d[\d\s,]*(?:\.\d{1,2})?)/gi;
+  while (m = sym.exec(text)) add(m[1]);
+  const word = /(\d[\d,]*(?:\.\d{1,2})?)\s?(?:rand|zar)\b/gi;
+  while (m = word.exec(text)) add(m[1]);
+  return [...out];
+}
+function promptAllowedAmounts(prompt) {
+  const allowed = new Set(extractAmounts(prompt));
+  const add = (raw) => {
+    const n = Number(String(raw).replace(/[\s,]/g, ""));
+    if (Number.isFinite(n) && n > 0) allowed.add(String(n));
+  };
+  let m;
+  const ctx = /(?::|\bprice\b|\bprices\b|\bcost\b|\bfee\b)\s*"?R?\s?(\d[\d,]*(?:\.\d{1,2})?)/gi;
+  while (m = ctx.exec(prompt)) add(m[1]);
+  return allowed;
+}
+function rejectInventedPrices(prompt, parse) {
+  const allowed = promptAllowedAmounts(prompt);
+  return (text) => {
+    const amounts = extractAmounts(text);
+    if (!amounts.every((a) => allowed.has(a))) return null;
+    return parse(text);
+  };
+}
+var GROQ_MODELS, OPENROUTER_BODY_EXTRA, FACT_RULES;
+var init_freeai = __esm({
+  "src/freeai.ts"() {
+    GROQ_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
+    OPENROUTER_BODY_EXTRA = {
+      // zero-price guard: only ever free endpoints; no-training: provider may not collect/store prompts
+      provider: {
+        max_price: { prompt: 0, completion: 0 },
+        require_parameters: true,
+        // only providers that accept every parameter - no silent downgrade
+        data_collection: "deny",
+        // no-training: provider may not collect/store prompts
+        zdr: true
+        // zero data retention endpoints only
+      },
+      reasoning: { enabled: false, exclude: true }
+    };
+    FACT_RULES = "Hard fact rules: use ONLY the facts supplied in this prompt - the business's own information. Never invent or guess prices, discounts, opening hours, dates, services, products, guarantees, qualifications, years of experience, people's names, addresses, phone numbers or any other detail. If a fact is not supplied, leave it out or say the team will confirm - never fill the gap. Money may only be quoted as an amount supplied here, always in South African rand (R). You are the business's WhatsApp employee writing as the business itself: never mention AI, never name any technology vendor, tool or model. Plain, simple English a customer reads in one pass.";
+  }
+});
+
 // src/reviews.ts
 var reviews_exports = {};
 __export(reviews_exports, {
@@ -342,6 +499,717 @@ var init_reviews = __esm({
     ];
     firstName = (c) => (c.name || "").trim().split(" ")[0] || "there";
     businessName = (p, ws) => p?.business_name || "" || ws;
+  }
+});
+
+// src/assistant.ts
+var assistant_exports = {};
+__export(assistant_exports, {
+  assistantCounts: () => assistantCounts,
+  collectPage: () => collectPage,
+  consumeVaultLink: () => consumeVaultLink,
+  ensureAssistantTables: () => ensureAssistantTables,
+  finishTask: () => finishTask,
+  getSettings: () => getSettings,
+  handleAssistantMessage: () => handleAssistantMessage,
+  isActionIntent: () => isActionIntent,
+  isApprovalReply: () => isApprovalReply,
+  isMemoryQuery: () => isMemoryQuery,
+  isRuleCapture: () => isRuleCapture,
+  isTasksQuery: () => isTasksQuery,
+  isVaultRequest: () => isVaultRequest,
+  keywords: () => keywords,
+  loadRules: () => loadRules,
+  maybeHandleAssistant: () => maybeHandleAssistant,
+  openSecret: () => openSecret,
+  recall: () => recall,
+  remember: () => remember,
+  runningTasks: () => runningTasks,
+  sealSecret: () => sealSecret,
+  startTask: () => startTask,
+  storeSecret: () => storeSecret,
+  upsertSettings: () => upsertSettings
+});
+async function ensureAssistantTables(db) {
+  if (tablesReady) return;
+  await db.query(`CREATE TABLE IF NOT EXISTS assistant_setting(
+    workspace_id uuid PRIMARY KEY,
+    owner_phone text NOT NULL DEFAULT '',
+    enabled boolean NOT NULL DEFAULT true,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now())`);
+  await db.query(`CREATE TABLE IF NOT EXISTS assistant_memory(
+    id bigserial PRIMARY KEY,
+    workspace_id uuid NOT NULL,
+    kind text NOT NULL,
+    text text NOT NULL,
+    source_message_id text,
+    created_at timestamptz NOT NULL DEFAULT now())`);
+  await db.query(`CREATE INDEX IF NOT EXISTS assistant_memory_ws_kind_idx ON assistant_memory(workspace_id, kind)`);
+  await db.query(`CREATE TABLE IF NOT EXISTS assistant_approval(
+    id bigserial PRIMARY KEY,
+    workspace_id uuid NOT NULL,
+    action text NOT NULL,
+    detail text,
+    status text NOT NULL DEFAULT 'pending',
+    requested_at timestamptz NOT NULL DEFAULT now(),
+    resolved_at timestamptz)`);
+  await db.query(`CREATE TABLE IF NOT EXISTS assistant_task(
+    id bigserial PRIMARY KEY,
+    workspace_id uuid NOT NULL,
+    kind text NOT NULL,
+    detail text,
+    status text NOT NULL DEFAULT 'running',
+    started_at timestamptz NOT NULL DEFAULT now(),
+    finished_at timestamptz)`);
+  await db.query(`CREATE TABLE IF NOT EXISTS assistant_vault_secret(
+    id bigserial PRIMARY KEY,
+    workspace_id uuid NOT NULL,
+    name text NOT NULL,
+    ciphertext text NOT NULL,
+    iv text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE(workspace_id, name))`);
+  await db.query(`CREATE TABLE IF NOT EXISTS assistant_vault_link(
+    token text PRIMARY KEY,
+    workspace_id uuid NOT NULL,
+    used boolean NOT NULL DEFAULT false,
+    created_at timestamptz NOT NULL DEFAULT now())`);
+  tablesReady = true;
+}
+async function loadRules(db, ws) {
+  const r = await db.query(`SELECT text FROM assistant_memory WHERE workspace_id=$1 AND kind='rule' ORDER BY id ASC`, [ws]);
+  return r.rows.map((x) => x.text);
+}
+function keywords(text) {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w)).slice(0, 8);
+}
+async function recall(db, ws, question, limit = 10) {
+  const words = keywords(question);
+  if (!words.length) return [];
+  const likes = words.map((w) => `%${w}%`);
+  const r = await db.query(
+    `SELECT id, kind, text, created_at FROM assistant_memory WHERE workspace_id=$1 AND (${words.map((_, i) => `text ILIKE $${i + 2}`).join(" OR ")}) ORDER BY created_at DESC LIMIT ${limit}`,
+    [ws, ...likes]
+  );
+  return r.rows;
+}
+async function remember(db, ws, kind, text, sourceMessageId) {
+  const clean = text.trim();
+  if (!clean) return;
+  const existing = await db.query(`SELECT id FROM assistant_memory WHERE workspace_id=$1 AND kind=$2 AND text=$3 LIMIT 1`, [ws, kind, clean]);
+  if (existing.rows.length) return;
+  await db.query(`INSERT INTO assistant_memory(workspace_id, kind, text, source_message_id) VALUES($1,$2,$3,$4)`, [ws, kind, clean, sourceMessageId ?? null]);
+}
+async function startTask(db, ws, kind, detail) {
+  const r = await db.query(`INSERT INTO assistant_task(workspace_id, kind, detail) VALUES($1,$2,$3) RETURNING id`, [ws, kind, detail]);
+  return r.rows[0].id;
+}
+async function finishTask(db, id, status, detail) {
+  if (detail) await db.query(`UPDATE assistant_task SET status=$2, detail=detail || ' | ' || $3::text, finished_at=now() WHERE id=$1`, [id, status, detail]);
+  else await db.query(`UPDATE assistant_task SET status=$2, finished_at=now() WHERE id=$1`, [id, status]);
+}
+async function runningTasks(db, ws, excludeId) {
+  const r = await db.query(
+    `SELECT id, kind, detail, status, started_at FROM assistant_task WHERE workspace_id=$1 AND status='running' AND ($2::bigint IS NULL OR id <> $2) ORDER BY started_at DESC LIMIT 10`,
+    [ws, excludeId ?? null]
+  );
+  return r.rows;
+}
+async function masterKey(env) {
+  if (!env.VAULT_MASTER_KEY) throw new Error("VAULT_MASTER_KEY missing");
+  const raw = Uint8Array.from(atob(env.VAULT_MASTER_KEY), (c) => c.charCodeAt(0));
+  return crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+async function sealSecret(env, plaintext) {
+  const key = await masterKey(env);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const buf = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plaintext));
+  return { ciphertext: btoa(String.fromCharCode(...new Uint8Array(buf))), iv: btoa(String.fromCharCode(...iv)) };
+}
+async function openSecret(env, ciphertext, iv) {
+  const key = await masterKey(env);
+  const buf = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: Uint8Array.from(atob(iv), (c) => c.charCodeAt(0)) },
+    key,
+    Uint8Array.from(atob(ciphertext), (c) => c.charCodeAt(0))
+  );
+  return new TextDecoder().decode(buf);
+}
+async function storeSecret(db, env, ws, name, plaintext) {
+  const { ciphertext, iv } = await sealSecret(env, plaintext);
+  await db.query(
+    `INSERT INTO assistant_vault_secret(workspace_id, name, ciphertext, iv) VALUES($1,$2,$3,$4)
+     ON CONFLICT (workspace_id, name) DO UPDATE SET ciphertext=$3, iv=$4`,
+    [ws, name, ciphertext, iv]
+  );
+}
+async function consumeVaultLink(db, token) {
+  const r = await db.query(`SELECT token, workspace_id, used FROM assistant_vault_link WHERE token=$1`, [token]);
+  const row = r.rows[0];
+  if (!row || row.used) return null;
+  await db.query(`UPDATE assistant_vault_link SET used=true WHERE token=$1`, [token]);
+  return String(row.workspace_id);
+}
+function collectPage(token) {
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>RevUp Vault</title>
+<style>body{font-family:-apple-system,sans-serif;max-width:26rem;margin:3rem auto;padding:0 1rem}input,button{font-size:1rem;padding:.6rem;width:100%;margin:.3rem 0;box-sizing:border-box}button{background:#000;color:#fff;border:0;border-radius:.5rem}</style></head>
+<body><h2>Save a secret</h2><p>Write-only vault. It is stored encrypted and never shown in chat, ever.</p>
+<form method="POST" action="/vault/save"><input type="hidden" name="token" value="${token}">
+<input name="name" placeholder="Name (e.g. SomeService login)" required>
+<input name="secret" type="password" placeholder="The secret" required>
+<button type="submit">Save to vault</button></form></body></html>`;
+}
+async function handleAssistantMessage(db, env, ws, businessName2, contactId, text, sourceMessageId, fetcher, excludeTaskId) {
+  await ensureAssistantTables(db);
+  const name = businessName2 ? `${businessName2} assistant` : "your business assistant";
+  if (isTasksQuery(text)) {
+    const running = await runningTasks(db, ws, excludeTaskId);
+    if (!running.length) return { reply: "Nothing running right now. Ask me to do something and it shows up here." };
+    const lines = running.map((t) => `- #${t.id} ${t.kind}: ${t.detail ?? ""} (started ${sast(t.started_at)})`);
+    return { reply: `Running now:
+${lines.join("\n")}` };
+  }
+  if (isMemoryQuery(text)) {
+    const hits = await recall(db, ws, text, 8);
+    if (!hits.length) return { reply: "I have nothing stored on that yet. Tell me once and I keep it." };
+    const lines = hits.map((m) => `- [${m.kind}] ${m.text}`);
+    return { reply: `What I remember:
+${lines.join("\n")}` };
+  }
+  if (isVaultRequest(text)) {
+    if (!env.VAULT_MASTER_KEY) return { reply: "The vault is not set up on this deployment yet." };
+    const token = crypto.randomUUID();
+    await db.query(`INSERT INTO assistant_vault_link(token, workspace_id) VALUES($1,$2)`, [token, ws]);
+    const base = env.WORKER_URL || "https://revup.nahalabs.co.za";
+    return { reply: `Open this one-time link to save it into your vault (never in chat): ${base}/vault/c/${token}` };
+  }
+  if (isApprovalReply(text)) {
+    const pending = await db.query(`SELECT id, action FROM assistant_approval WHERE workspace_id=$1 AND status='pending' ORDER BY id ASC LIMIT 1`, [ws]);
+    if (!pending.rows.length) return { reply: "Nothing waiting on your Go + Sure right now." };
+    await db.query(`UPDATE assistant_approval SET status='approved', resolved_at=now() WHERE id=$1`, [pending.rows[0].id]);
+    await remember(db, ws, "decision", `Approved with Go + Sure: ${pending.rows[0].action}`, sourceMessageId);
+    return { reply: `Go + Sure noted. #${pending.rows[0].id} is approved and queued: ${pending.rows[0].action}` };
+  }
+  if (isRuleCapture(text)) {
+    const cleaned = text.replace(/^(new rule|rule)\s*[:\-]\s*/i, "").trim();
+    await remember(db, ws, /^(new rule|rule)\s*[:\-]/i.test(text.trim()) ? "rule" : "preference", cleaned, sourceMessageId);
+    return { reply: "Stored. It is loaded before every answer from now on.", storedMemory: cleaned };
+  }
+  if (isActionIntent(text)) {
+    const r = await db.query(`INSERT INTO assistant_approval(workspace_id, action, detail) VALUES($1,$2,$3) RETURNING id`, [ws, text.slice(0, 120), text]);
+    const id = r.rows[0].id;
+    return { reply: `That one sends/spends/deploys, so it waits for you. Reply "Go + Sure" and I do it.
+
+Queued #${id}: ${text.slice(0, 200)}`, approvalId: id };
+  }
+  const hist = await db.query(
+    `SELECT direction, body FROM receptionist_message WHERE contact_id=$1 AND body IS NOT NULL AND body <> '' ORDER BY created_at DESC LIMIT 20`,
+    [contactId]
+  );
+  const history = hist.rows.reverse().map((h) => `${h.direction === "inbound" ? "Owner" : "Assistant"}: ${h.body}`);
+  const [rules, memories] = await Promise.all([loadRules(db, ws), recall(db, ws, text)]);
+  const prompt = [
+    `You are ${name}, the business owner's own assistant on WhatsApp. The owner is in South Africa (SAST).`,
+    "CORE RULES (always):",
+    ...CORE_RULES.map((r) => `- ${r}`),
+    rules.length ? "THEIR RULES (always enforce):" : "",
+    ...rules.map((r) => `- ${r}`),
+    memories.length ? "MEMORY relevant to this message:" : "",
+    ...memories.map((m) => `- [${m.kind}] ${m.text}`),
+    history.length ? "Recent conversation:\n" + history.join("\n") : "",
+    `Owner: ${text}`
+  ].filter(Boolean).join("\n");
+  const ai = await freeAiGenerate(
+    env,
+    prompt,
+    { maxTokens: 800, temperature: 0.4, requireBackupConsent: true },
+    rejectInventedPrices(prompt, (t) => t.trim() || null),
+    fetcher
+  );
+  if (!ai) return { reply: "My AI is unavailable right now and the backup is either off or down. Try me again in a few minutes." };
+  let stored;
+  try {
+    const extract = await freeAiGenerate(
+      env,
+      `From the user message, extract at most one durable fact, rule, decision, person or project worth remembering long-term. Reply as JSON {"kind":"rule|decision|person|project|preference|fact","text":"..."} or {"skip":true}. Never extract questions, greetings or one-off requests.
+
+User message: ${text}`,
+      { maxTokens: 200, temperature: 0.1, requireBackupConsent: true },
+      (t) => {
+        const m = t.match(/\{[\s\S]*\}/);
+        if (!m) return null;
+        try {
+          return JSON.parse(m[0]);
+        } catch {
+          return null;
+        }
+      },
+      fetcher
+    );
+    const parsed = extract?.value;
+    if (parsed && !parsed.skip && parsed.text && parsed.kind && ["rule", "decision", "person", "project", "preference", "fact"].includes(parsed.kind)) {
+      await remember(db, ws, parsed.kind, String(parsed.text).slice(0, 500), sourceMessageId);
+      stored = String(parsed.text).slice(0, 500);
+    }
+  } catch {
+  }
+  return { reply: ai.value, provider: ai.provider, storedMemory: stored };
+}
+async function maybeHandleAssistant(db, env, c) {
+  await ensureAssistantTables(db);
+  const s = await db.query(`SELECT owner_phone, enabled FROM assistant_setting WHERE workspace_id=$1`, [c.workspaceId]);
+  const setting = s.rows[0];
+  if (!setting || !setting.enabled || !setting.owner_phone) return false;
+  if (String(setting.owner_phone).replace(/\D/g, "") !== c.waId.replace(/\D/g, "")) return false;
+  const org = await db.query(`SELECT o.plan FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [c.workspaceId]);
+  if ((org.rows[0]?.plan || "starter") !== "business-pro") return false;
+  const taskId = await startTask(db, c.workspaceId, "message", `Reply to owner: ${c.body.slice(0, 80)}`);
+  try {
+    await db.query(`CREATE TABLE IF NOT EXISTS cf_ai_usage(workspace_id uuid, day date, attempts int NOT NULL DEFAULT 0, PRIMARY KEY(workspace_id, day))`);
+    await db.query(
+      `INSERT INTO cf_ai_usage(workspace_id, day, attempts) VALUES($1, CURRENT_DATE, 1)
+       ON CONFLICT (workspace_id, day) DO UPDATE SET attempts = cf_ai_usage.attempts + 1`,
+      [c.workspaceId]
+    );
+    const result = await handleAssistantMessage(db, env, c.workspaceId, c.businessName, c.contactId, c.body, c.zernioMessageId || void 0, void 0, taskId);
+    const outId = crypto.randomUUID();
+    await db.query(
+      `INSERT INTO receptionist_message(id,direction,sender_type,body,zernio_message_id,is_draft,created_at,contact_id,workspace_id,media_urls)
+       VALUES($1,'outbound','assistant',$2,'',true,now(),$3,$4,'[]'::jsonb)`,
+      [outId, result.reply, c.contactId, c.workspaceId]
+    );
+    const { sendChannelMessage: sendChannelMessage2 } = await Promise.resolve().then(() => (init_receptionist(), receptionist_exports));
+    const sent = await sendChannelMessage2(db, env, c.channel, c.contactId, c.waId, result.reply);
+    if (sent.ok) await db.query(`UPDATE receptionist_message SET is_draft=false, zernio_message_id=$1 WHERE id=$2`, [sent.messageId, outId]);
+    await finishTask(db, taskId, "done");
+    return true;
+  } catch (e) {
+    await finishTask(db, taskId, "failed", String(e).slice(0, 200));
+    return true;
+  }
+}
+async function getSettings(db, ws) {
+  await ensureAssistantTables(db);
+  const r = await db.query(`SELECT owner_phone, enabled FROM assistant_setting WHERE workspace_id=$1`, [ws]);
+  return r.rows[0] || null;
+}
+async function upsertSettings(db, ws, ownerPhone, enabled) {
+  await ensureAssistantTables(db);
+  const phone = ownerPhone.replace(/\D/g, "").slice(0, 32);
+  await db.query(
+    `INSERT INTO assistant_setting(workspace_id, owner_phone, enabled, updated_at) VALUES($1,$2,$3,now())
+     ON CONFLICT (workspace_id) DO UPDATE SET owner_phone=$2, enabled=$3, updated_at=now()`,
+    [ws, phone, enabled]
+  );
+}
+async function assistantCounts(db, ws) {
+  await ensureAssistantTables(db);
+  const [m, a, t] = await Promise.all([
+    db.query(`SELECT count(*) c FROM assistant_memory WHERE workspace_id=$1`, [ws]),
+    db.query(`SELECT count(*) c FROM assistant_approval WHERE workspace_id=$1 AND status='pending'`, [ws]),
+    db.query(`SELECT count(*) c FROM assistant_task WHERE workspace_id=$1 AND status='running'`, [ws])
+  ]);
+  return { memories: Number(m.rows[0].c), pending: Number(a.rows[0].c), running: Number(t.rows[0].c) };
+}
+var tablesReady, isRuleCapture, isMemoryQuery, isTasksQuery, isVaultRequest, isApprovalReply, isActionIntent, CORE_RULES, STOP, sast;
+var init_assistant = __esm({
+  "src/assistant.ts"() {
+    init_freeai();
+    tablesReady = false;
+    isRuleCapture = (t) => /^(new rule|rule)\s*[:\-]/i.test(t.trim()) || /\b(remember this|never forget|from now on)\b/i.test(t);
+    isMemoryQuery = (t) => /\bwhat do you (remember|know)\b/i.test(t);
+    isTasksQuery = (t) => /\b(what are you (running|doing)|running tasks|task log|show tasks)\b/i.test(t);
+    isVaultRequest = (t) => /\b(save|store|add)\b.*\b(secret|password|api key|token)\b|\bvault\b/i.test(t);
+    isApprovalReply = (t) => /^(go|sure|go sure|go\s*\+\s*sure|yes go)[.! ]*$/i.test(t.trim());
+    isActionIntent = (t) => /\b(send|email|message|pay|buy|book|deploy|publish|post|schedule)\b/i.test(t) && !isApprovalReply(t) && !isMemoryQuery(t) && !isTasksQuery(t);
+    CORE_RULES = [
+      "Never invent facts. If memory is empty on something, say so plainly.",
+      "Never print a vault secret or any stored credential, in any form.",
+      "Research and drafts need no approval. Anything that sends, spends or deploys waits for the owner's Go + Sure.",
+      "Short plain answers. The owner reads on a phone.",
+      "If the owner said it once, remember it. Never make them repeat themselves."
+    ];
+    STOP = /* @__PURE__ */ new Set(["the", "a", "an", "and", "or", "to", "of", "in", "on", "for", "is", "it", "my", "me", "i", "you", "your", "what", "do", "does", "about", "this", "that", "with", "are", "was", "be", "how", "who", "when", "where", "can", "could", "please"]);
+    sast = (d) => new Date(d).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  }
+});
+
+// src/receptionist.ts
+var receptionist_exports = {};
+__export(receptionist_exports, {
+  RULES: () => RULES,
+  customerBlock: () => customerBlock,
+  handleZernioWebhook: () => handleZernioWebhook,
+  industryBrief: () => industryBrief,
+  profileBlock: () => profileBlock,
+  sendChannelMessage: () => sendChannelMessage,
+  tenantConfirmAndBind: () => tenantConfirmAndBind,
+  tenantConnectUrl: () => tenantConnectUrl,
+  tenantWebhookSecret: () => tenantWebhookSecret,
+  validateTenantKey: () => validateTenantKey,
+  verifyZernioSignature: () => verifyZernioSignature
+});
+async function hmacHex(secret, body) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function verifyZernioSignature(secret, body, signature) {
+  if (!secret || !signature) return false;
+  const expected = await hmacHex(secret, body);
+  if (expected.length !== signature.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
+  return diff === 0;
+}
+function industryBrief(industry) {
+  const p = getPreset(industry || "general");
+  const label = p.label || "local service";
+  let s = `You are the WhatsApp receptionist for a ${label} business in South Africa. Tone: ${p.responder_tone || "warm and professional"}.`;
+  const qs = p.responder_questions || [];
+  if (qs.length) s += ` When the customer wants to book or buy, gather: ${qs.join(" ")}`;
+  const faqs = p.responder_faqs || [];
+  if (faqs.length) s += ` Common customer questions: ${faqs.join(" ")}`;
+  return s;
+}
+function profileBlock(p) {
+  const lines = [`Business: ${p.business_name || ""}`];
+  if (p.operating_hours && Object.keys(p.operating_hours).length) lines.push(`Operating hours: ${JSON.stringify(p.operating_hours)}`);
+  if (p.pricing_data && Object.keys(p.pricing_data).length) lines.push(`Price list (ZAR): ${JSON.stringify(p.pricing_data)}`);
+  if (p.call_out_fee != null) lines.push(`Call-out fee: R${p.call_out_fee}`);
+  if (p.payment_link_url) lines.push("Payments are taken by secure link; share it only when a customer is ready to pay.");
+  if (p.custom_rules && Object.keys(p.custom_rules).length) lines.push(`Standing rules from the owner: ${JSON.stringify(p.custom_rules)}`);
+  return lines.join("\n");
+}
+function customerBlock(c) {
+  if (!c) return "";
+  const lines = [];
+  if (c.name) lines.push(`Customer name: ${c.name}`);
+  if (c.is_vip) lines.push("This customer is a VIP - treat them especially well.");
+  if (c.visit_count) lines.push(`They have visited ${c.visit_count} time${c.visit_count === 1 ? "" : "s"} before.`);
+  if (c.dietary_notes) lines.push(`Dietary needs: ${c.dietary_notes}`);
+  return lines.join("\n");
+}
+async function handleZernioWebhook(db, env, payload) {
+  if ((payload.event || "") !== "message.received") return;
+  const message = payload.message || {};
+  const account = message.account || payload.account || {};
+  const accountId = account.accountId || account._id || "";
+  if (!accountId) return;
+  const ch = await db.query(`SELECT * FROM receptionist_zerniochannel WHERE zernio_account_id=$1 LIMIT 1`, [accountId]);
+  const channel = ch.rows[0];
+  if (!channel) return;
+  const pr = await db.query(`SELECT * FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [channel.workspace_id]);
+  const profile = pr.rows[0];
+  if (!profile) return;
+  const direction = message.direction || (message.fromMe ? "outbound" : "inbound");
+  if (!["inbound", "incoming"].includes(direction)) return;
+  let sender = message.sender || {};
+  if (typeof sender === "string") sender = { id: sender };
+  const waId = String(sender.phoneNumber || "").replace(/^\+/, "") || String(sender.id || "").split("@")[0].replace(/^\+/, "");
+  let body = String(message.text || message.body || "").trim();
+  const media = (message.attachments || []).map((a) => typeof a === "string" ? a : a.url || a.mediaUrl || a.link || a.src || "").filter(Boolean).slice(0, 10);
+  if (!waId || !body && !media.length) return;
+  if (!body && media.length) body = `[${media.length} photo${media.length === 1 ? "" : "s"} received]`;
+  const conv = payload.conversation || {};
+  const convId = String(conv.id || conv.conversationId || "");
+  const senderName = sender.name || conv.participantName || "";
+  const zid = String(message._id || message.id || "");
+  let contact;
+  const cr = await db.query(`SELECT * FROM receptionist_contact WHERE workspace_id=$1 AND wa_id=$2 LIMIT 1`, [channel.workspace_id, waId]);
+  if (cr.rows[0]) {
+    contact = cr.rows[0];
+    if (convId && contact.zernio_conversation_id !== convId)
+      await db.query(`UPDATE receptionist_contact SET zernio_conversation_id=$1, updated_at=now() WHERE id=$2`, [convId, contact.id]);
+  } else {
+    const id = crypto.randomUUID();
+    const ins = await db.query(
+      `INSERT INTO receptionist_contact(id,workspace_id,wa_id,name,tags,needs_human,opted_out,zernio_conversation_id,issue_note,review_status,dietary_notes,is_vip,notes,total_spend,visit_count,created_at,updated_at)
+       VALUES($1,$2,$3,$4,'[]'::jsonb,false,false,$5,'','new','',false,'',0,0,now(),now()) RETURNING *`,
+      [id, channel.workspace_id, waId.slice(0, 32), String(senderName).slice(0, 120), convId]
+    );
+    contact = ins.rows[0];
+  }
+  if (zid) {
+    const dup = await db.query(`SELECT 1 FROM receptionist_message WHERE workspace_id=$1 AND zernio_message_id=$2 LIMIT 1`, [channel.workspace_id, zid]);
+    if (dup.rows[0]) return;
+  }
+  await db.query(
+    `INSERT INTO receptionist_message(id,direction,sender_type,body,zernio_message_id,is_draft,created_at,contact_id,workspace_id,media_urls)
+     VALUES($1,'inbound','user',$2,$3,false,now(),$4,$5,$6::jsonb)`,
+    [crypto.randomUUID(), body, zid, contact.id, channel.workspace_id, JSON.stringify(media)]
+  );
+  if (OPT_OUT.has(body.trim().toUpperCase())) {
+    const { unsubscribeContact: unsubscribeContact2 } = await Promise.resolve().then(() => (init_reviews(), reviews_exports));
+    await unsubscribeContact2(db, contact.id);
+    return;
+  }
+  {
+    const { maybeHandleAssistant: maybeHandleAssistant2 } = await Promise.resolve().then(() => (init_assistant(), assistant_exports));
+    if (await maybeHandleAssistant2(db, env, {
+      workspaceId: channel.workspace_id,
+      waId,
+      body,
+      contactId: contact.id,
+      zernioMessageId: zid,
+      channel,
+      businessName: String(profile.business_name || "")
+    })) return;
+  }
+  if (["check_in_sent", "review_requested"].includes(contact.review_status || "")) {
+    const { looksNegative: looksNegative2, flagIssue: flagIssue2 } = await Promise.resolve().then(() => (init_reviews(), reviews_exports));
+    if (looksNegative2(body)) {
+      await flagIssue2(db, channel.workspace_id, contact.id, body);
+      return;
+    }
+  }
+  const org = await db.query(`SELECT o.plan, o.id FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [channel.workspace_id]);
+  const plan = org.rows[0]?.plan || "starter";
+  const allowance = PLAN_ALLOWANCE[plan] ?? 500;
+  const used = await db.query(
+    `SELECT count(*) c FROM receptionist_message m JOIN workspaces_workspace w ON w.id=m.workspace_id
+     WHERE w.organization_id=$1 AND m.direction='outbound' AND m.sender_type='ai' AND m.is_draft=false AND m.created_at >= date_trunc('month', now())`,
+    [org.rows[0]?.id]
+  );
+  if (Number(used.rows[0].c) >= allowance) {
+    await db.query(`UPDATE receptionist_contact SET needs_human=true, updated_at=now() WHERE id=$1 AND NOT needs_human`, [contact.id]);
+    return;
+  }
+  const todayDrafts = await db.query(
+    `SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND sender_type='ai' AND created_at >= now() - interval '1 day'`,
+    [channel.workspace_id]
+  );
+  if (Number(todayDrafts.rows[0].c) >= MAX_DRAFTS_DAY) {
+    await db.query(`UPDATE receptionist_contact SET needs_human=true, updated_at=now() WHERE id=$1 AND NOT needs_human`, [contact.id]);
+    return;
+  }
+  const hist = await db.query(`SELECT sender_type, body FROM receptionist_message WHERE contact_id=$1 ORDER BY created_at DESC LIMIT 12`, [contact.id]);
+  const transcript = hist.rows.reverse().map((m) => `${m.sender_type === "user" ? "Customer" : "Receptionist"}: ${m.body}`).join("\n");
+  const now = (/* @__PURE__ */ new Date()).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg", weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+  const incoming = media.length ? `[Customer sent ${media.length} photo${media.length === 1 ? "" : "s"}] ${body}`.trim() : body;
+  const prompt = `Today is ${now}, South Africa time.
+${industryBrief(profile.industry || "general")}
+${profileBlock(profile)}
+` + (customerBlock(contact) ? customerBlock(contact) + "\n" : "") + `
+Conversation so far:
+${transcript}
+
+Reply with JSON only: {"reply": "...", "intake": {"name": "", "detail": "", "preferred_time": "", "address": "", "policy_number": ""}} (fill only the intake fields the customer actually gave; make detail a short description of what they want - for a restaurant booking use 'Table for N', never a bare number).
+${RULES}`;
+  await db.query(`CREATE TABLE IF NOT EXISTS cf_ai_usage(workspace_id uuid, day date, attempts int NOT NULL DEFAULT 0, PRIMARY KEY(workspace_id, day))`);
+  const usage = await db.query(
+    `INSERT INTO cf_ai_usage(workspace_id, day, attempts) VALUES($1, CURRENT_DATE, 1)
+     ON CONFLICT (workspace_id, day) DO UPDATE SET attempts = cf_ai_usage.attempts + 1
+     RETURNING attempts`,
+    [channel.workspace_id]
+  );
+  if (Number(usage.rows[0].attempts) > MAX_AI_ATTEMPTS_DAY) {
+    await db.query(`UPDATE receptionist_contact SET needs_human=true, updated_at=now() WHERE id=$1 AND NOT needs_human`, [contact.id]);
+    return;
+  }
+  const aiResult = await freeAiGenerate(env, prompt, { maxTokens: 800, temperature: 0.2, requireBackupConsent: true }, rejectInventedPrices(prompt, (text) => {
+    const m = text.match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    try {
+      const d = JSON.parse(m[0]);
+      return d && typeof d === "object" ? d : null;
+    } catch {
+      return null;
+    }
+  }));
+  if (!aiResult) return;
+  const draft = aiResult.value;
+  const reply = String(draft.reply || "").trim();
+  if (!reply) return;
+  const escalate = ESCALATION.some((re) => re.test(incoming));
+  if (escalate) await db.query(`UPDATE receptionist_contact SET needs_human=true, updated_at=now() WHERE id=$1 AND NOT needs_human`, [contact.id]);
+  const outId = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO receptionist_message(id,direction,sender_type,body,zernio_message_id,is_draft,created_at,contact_id,workspace_id,media_urls)
+     VALUES($1,'outbound','ai',$2,'',true,now(),$3,$4,'[]'::jsonb)`,
+    [outId, reply, contact.id, channel.workspace_id]
+  );
+  const intake = draft.intake || {};
+  let detail = String(intake.detail || "").trim();
+  const preferred = String(intake.preferred_time || "").trim();
+  const industry = String(profile.industry || "general");
+  if (industry === "restaurant" && /^\d+$/.test(detail)) detail = `Table for ${detail}`;
+  if (detail || preferred) {
+    try {
+      await db.query(
+        `INSERT INTO receptionist_booking(id,service,preferred_time,status,notes,created_at,contact_id,workspace_id,duration_minutes,google_event_id,value)
+        VALUES($1,$2,$3,'requested','',now(),$4,$5,60,'',0)`,
+        [crypto.randomUUID(), detail.slice(0, 200), preferred.slice(0, 200), contact.id, channel.workspace_id]
+      );
+    } catch {
+    }
+  }
+  const inName = String(intake.name || "").trim();
+  const inAddress = String(intake.address || "").trim();
+  const inPolicy = String(intake.policy_number || "").trim();
+  try {
+    if (industry === "funeral" && (inName || detail || inPolicy)) {
+      await db.query(`INSERT INTO receptionist_funeralclaim(id,deceased_name,claimant_name,policy_number,status,notes,created_at,contact_id,workspace_id)
+        VALUES($1,$2,$3,$4,'new','',now(),$5,$6)`, [crypto.randomUUID(), detail.slice(0, 200), inName.slice(0, 200), inPolicy.slice(0, 64), contact.id, channel.workspace_id]);
+    } else if (industry === "dental" && (inName || detail)) {
+      await db.query(`INSERT INTO receptionist_dentalappointment(id,patient_name,reason,status,created_at,contact_id,workspace_id)
+        VALUES($1,$2,$3,'new',now(),$4,$5)`, [crypto.randomUUID(), inName.slice(0, 200), detail.slice(0, 300), contact.id, channel.workspace_id]);
+    } else if (industry === "trades" && (detail || inAddress)) {
+      await db.query(`INSERT INTO receptionist_tradedispatch(id,job_type,address,urgent,status,created_at,contact_id,workspace_id)
+        VALUES($1,$2,$3,false,'new',now(),$4,$5)`, [crypto.randomUUID(), detail.slice(0, 120), inAddress.slice(0, 300), contact.id, channel.workspace_id]);
+    }
+  } catch {
+  }
+  const sent = await sendChannelMessage(db, env, channel, contact.id, waId, reply);
+  if (!sent.ok) return;
+  await db.query(`UPDATE receptionist_message SET is_draft=false, zernio_message_id=$1 WHERE id=$2`, [sent.messageId, outId]);
+}
+async function sendChannelMessage(db, env, channel, contactId, waId, text) {
+  const sandbox = channel.is_sandbox || channel.zernio_account_id === SANDBOX_ACCOUNT_ID;
+  if (sandbox && !SANDBOX_SEND_ALLOWLIST.has(waId)) return { ok: false, messageId: "" };
+  const sentHour = await db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND is_draft=false AND created_at >= now() - interval '1 hour'`, [channel.workspace_id]);
+  const sentDay = await db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND is_draft=false AND created_at >= now() - interval '1 day'`, [channel.workspace_id]);
+  if (Number(sentHour.rows[0].c) >= MAX_SENDS_HOUR || Number(sentDay.rows[0].c) >= MAX_SENDS_DAY) return { ok: false, messageId: "" };
+  const cq = await db.query(`SELECT zernio_conversation_id FROM receptionist_contact WHERE id=$1`, [contactId]);
+  const convId = cq.rows[0]?.zernio_conversation_id;
+  if (!convId) return { ok: false, messageId: "" };
+  const connQ = await db.query(`SELECT api_key, status FROM receptionist_tenantmessagingconnection WHERE workspace_id=$1 LIMIT 1`, [channel.workspace_id]);
+  const conn = connQ.rows[0];
+  if (conn && conn.status === "needs_attention") return { ok: false, messageId: "" };
+  const sendKey = conn && conn.status === "connected" && conn.api_key ? conn.api_key : env.ZERNIO_API_KEY;
+  const base = env.ZERNIO_BASE_URL || "https://zernio.com/api/v1";
+  const resp = await fetch(`${base}/inbox/conversations/${convId}/messages`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${sendKey}` },
+    body: JSON.stringify({ accountId: channel.zernio_account_id, message: text })
+  });
+  if (!resp.ok) return { ok: false, messageId: "" };
+  const data = await resp.json().catch(() => ({}));
+  return { ok: true, messageId: String(data?.message?.id || data?.messageId || data?.id || "") };
+}
+async function zget(apiKey, path) {
+  const resp = await fetch(ZBASE + path, { headers: { authorization: `Bearer ${apiKey}` } });
+  if (!resp.ok) {
+    const e = new Error("zernio " + resp.status);
+    e.status = resp.status;
+    throw e;
+  }
+  return resp.json();
+}
+async function zpost(apiKey, path, body) {
+  const resp = await fetch(ZBASE + path, { method: "POST", headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (!resp.ok) {
+    const e = new Error("zernio " + resp.status);
+    e.status = resp.status;
+    throw e;
+  }
+  return resp.json();
+}
+async function validateTenantKey(apiKey, workspaceId, workspaceName) {
+  try {
+    await zget(apiKey, "/accounts");
+    const byExt = await zget(apiKey, `/profiles?externalId=${encodeURIComponent(workspaceId)}`).catch(() => ({}));
+    let profile = (byExt.profiles || [])[0] || byExt.profile;
+    if (!profile) {
+      const all = await zget(apiKey, "/profiles");
+      const profiles = all.profiles || [];
+      if (profiles.length === 1) profile = profiles[0];
+    }
+    if (!profile) {
+      const made = await zpost(apiKey, "/profiles", { name: workspaceName.slice(0, 80), externalId: workspaceId });
+      profile = made.profile;
+    }
+    return { profileId: String(profile?._id || profile?.id || ""), error: "" };
+  } catch (e) {
+    if (e.status === 401 || e.status === 403) return { profileId: "", error: "That key was not accepted. Copy the full key from your messaging account and paste it again." };
+    if (e.status === 402) return { profileId: "", error: "Your messaging plan covers 2 numbers. Add a card in your messaging account to connect more." };
+    return { profileId: "", error: "Could not reach the messaging service. Please try again." };
+  }
+}
+async function tenantConnectUrl(apiKey, profileId, redirectUrl) {
+  const data = await zget(apiKey, `/connect/whatsapp?profileId=${encodeURIComponent(profileId)}&redirect_url=${encodeURIComponent(redirectUrl)}`);
+  const url = data.authUrl || data.data?.authUrl;
+  if (!url) throw new Error("no authUrl");
+  return url;
+}
+async function tenantConfirmAndBind(db, conn, profileId, accountId, webhookUrl) {
+  const accounts = await zget(conn.api_key, `/accounts?profileId=${encodeURIComponent(profileId)}&platform=whatsapp`);
+  const list = accounts.accounts || [];
+  const match = list.find((a) => String(a._id || a.id) === accountId);
+  if (!match) return { ok: false, msg: "That number was not found on your messaging account. Please try again." };
+  const secret = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  let webhookId = "", webhookOk = false;
+  try {
+    const hook = await zpost(conn.api_key, "/webhooks/settings", {
+      name: "revup-" + conn.workspace_id,
+      url: webhookUrl,
+      secret,
+      events: ["message.received", "message.delivered", "message.read", "account.disconnected"],
+      profileIds: [profileId]
+    });
+    webhookId = String(hook.webhook?._id || hook.webhook?.id || "");
+    if (webhookId) {
+      const t = await zpost(conn.api_key, "/webhooks/test", { webhookId });
+      webhookOk = !!t.success;
+    }
+  } catch {
+  }
+  const phone = String(match.username || match.phoneNumber || "").replace(/^\+/, "");
+  await db.query(
+    `UPDATE receptionist_tenantmessagingconnection SET account_id=$1, phone_number=$2, webhook_id=$3, webhook_secret=$4, status='connected', last_error=$5, updated_at=now() WHERE workspace_id=$6`,
+    [accountId, phone, webhookId, webhookId ? secret : "", webhookOk ? "" : "Webhook check did not pass yet - replies may be delayed.", conn.workspace_id]
+  );
+  const ex = await db.query(`SELECT id FROM receptionist_zerniochannel WHERE workspace_id=$1`, [conn.workspace_id]);
+  if (ex.rows[0]) {
+    await db.query(
+      `UPDATE receptionist_zerniochannel SET zernio_account_id=$1, zernio_profile_id=$2, phone_number=$3, label=$4, is_sandbox=false WHERE workspace_id=$5`,
+      [accountId, profileId, phone, match.name || "WhatsApp", conn.workspace_id]
+    );
+  } else {
+    await db.query(
+      `INSERT INTO receptionist_zerniochannel(id,workspace_id,zernio_account_id,zernio_profile_id,phone_number,label,is_sandbox,connected_at)
+       VALUES($1,$2,$3,$4,$5,$6,false,now())`,
+      [crypto.randomUUID(), conn.workspace_id, accountId, profileId, phone, match.name || "WhatsApp"]
+    );
+  }
+  return { ok: true, msg: webhookOk ? "WhatsApp connected. Your receptionist is live on your number." : "Connected, but the delivery check did not pass yet - replies may be delayed." };
+}
+async function tenantWebhookSecret(db, payload) {
+  const account = payload?.message?.account || payload?.account || {};
+  const accountId = account.accountId || account._id || payload?.accountId || "";
+  const profileId = account.profileId || payload?.profileId || "";
+  if (accountId) {
+    const r = await db.query(`SELECT webhook_secret FROM receptionist_tenantmessagingconnection WHERE account_id=$1 AND webhook_secret<>'' LIMIT 1`, [accountId]);
+    if (r.rows[0]) return r.rows[0].webhook_secret;
+  }
+  if (profileId) {
+    const r = await db.query(`SELECT webhook_secret FROM receptionist_tenantmessagingconnection WHERE profile_id=$1 AND webhook_secret<>'' LIMIT 1`, [profileId]);
+    if (r.rows[0]) return r.rows[0].webhook_secret;
+  }
+  return "";
+}
+var SANDBOX_ACCOUNT_ID, SANDBOX_SEND_ALLOWLIST, OPT_OUT, PLAN_ALLOWANCE, MAX_SENDS_HOUR, MAX_SENDS_DAY, MAX_DRAFTS_DAY, MAX_AI_ATTEMPTS_DAY, ESCALATION, RULES, ZBASE;
+var init_receptionist = __esm({
+  "src/receptionist.ts"() {
+    init_freeai();
+    init_presets();
+    SANDBOX_ACCOUNT_ID = "6a180a034c7f364ffded3c9c";
+    SANDBOX_SEND_ALLOWLIST = /* @__PURE__ */ new Set(["27672347593", "27612980377"]);
+    OPT_OUT = /* @__PURE__ */ new Set(["STOP", "STOP ALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"]);
+    PLAN_ALLOWANCE = { starter: 500, growth: 1e3, "business-pro": 2500 };
+    MAX_SENDS_HOUR = 60;
+    MAX_SENDS_DAY = 300;
+    MAX_DRAFTS_DAY = 300;
+    MAX_AI_ATTEMPTS_DAY = 100;
+    ESCALATION = [
+      /\b(speak|talk)\s+to\s+(a\s+)?(person|human|someone|manager|owner)\b/i,
+      /\b(complaint|sue|lawyer|attorney|refund)\b/i,
+      /\b(died|death|passed away|deceased)\b/i,
+      /\b(emergency|urgent|burst|flooding|no power|sparking)\b/i
+    ];
+    RULES = "Rules: reply in under 120 words; plain WhatsApp language; prices in South African rand (R); no emojis. When the customer sends photos, acknowledge them by count and never describe, diagnose or price what might be in them - a person from the team assesses photos. IMPORTANT: the business information above is the COMPLETE list of what this business offers. If the customer asks about a service, product, price or policy that is not listed there, do NOT say yes and do NOT say no - say a person from the team will confirm. If you do not know, say a person will confirm. " + FACT_RULES;
+    ZBASE = "https://zernio.com/api/v1";
   }
 });
 
@@ -924,398 +1792,14 @@ function landingPage() {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RevUp by NahaLabs</title><style>${LANDING_STYLE}</style></head><body>${LANDING_BODY}</body></html>`;
 }
 
-// src/presets.ts
-var INDUSTRIES = [["plumber", "Plumbing"], ["electrician", "Electrical"], ["security", "Security"], ["solar", "Solar / inverters"], ["auto-workshop", "Auto workshop"], ["panel-beater", "Panel beater / body shop"], ["auto-electrician", "Auto electrician"], ["mobile-mechanic", "Mobile mechanic"], ["towing", "Towing / roadside"], ["hvac", "Aircon / refrigeration"], ["roofing", "Roofing / waterproofing"], ["gates-access", "Gates / fencing / access control"], ["pest-control", "Pest control"], ["property-maintenance", "Property maintenance"], ["container-transport", "Container transport"], ["pool", "Pool services"], ["aesthetics", "Aesthetics / cosmetic clinic"], ["real-estate", "Real estate"], ["property-management", "Property management"], ["legal", "Law firm"], ["financial-broker", "Financial / insurance broker"], ["funeral", "Funeral services"], ["dental", "Dental practice"], ["restaurant", "Restaurant / cafe / takeaway"], ["catering", "Catering / food truck"], ["trades", "Trades (general building & repairs)"], ["general", "General local service"]];
-var PRESETS = {
-  "general": { "label": "General / other", "radar_keywords": [], "post_themes": ["Industry news with a local angle", "Customer questions answered", "Behind-the-scenes"], "hashtags": [], "responder_tone": "warm and professional", "responder_questions": [], "responder_faqs": [] },
-  "restaurant": { "label": "Restaurants & Food", "radar_keywords": ["restaurant", "food", "menu", "chef", "eatery", "takeaway", "braai", "cuisine", "dining", "coffee", "bakery", "catering", "halaal", "vegan"], "post_themes": ["Today's specials and limited-time dishes", "Behind the pass: meet the kitchen", "Customer favourites and reviews", "Weekend and payday promos", "Local food culture and events"], "hashtags": ["#JoburgEats", "#SAFoodie"], "responder_tone": "warm and welcoming", "responder_questions": ["Would you like a table, and for how many people?", "Is this for today or another day - and what time suits you?", "Any dietary needs we should know about (halaal, vegetarian, allergies)?"], "responder_faqs": ["Do I need to book, or can I walk in?", "What's on the menu today?", "Do you deliver or offer collection?"] },
-  "real_estate": { "label": "Real Estate", "radar_keywords": ["property", "housing", "bond", "mortgage", "transfer", "estate", "rental", "conveyancing", "suburb"], "post_themes": ["Rate moves and what they mean for buyers", "Suburb spotlight", "Listing marketing tips", "First-time buyer guidance"], "hashtags": ["#PropertySA", "#RealEstateSA"], "responder_tone": "warm and professional", "responder_questions": ["What price range are you working with?", "Are you pre-approved for a bond, or buying cash?", "Would a weekday late afternoon or a Saturday morning suit you better?"], "responder_faqs": ["Is the property still available?", "Can I book a viewing?", "What are the transfer costs?"] },
-  "dental": { "label": "Dentists & Clinics", "radar_keywords": ["dental", "dentist", "clinic", "healthcare", "medical aid", "teeth", "oral", "health"], "post_themes": ["Oral health tips patients actually read", "Medical aid and payment options", "New treatment announcements", "School-holiday checkup reminders"], "hashtags": ["#DentalCareSA", "#HealthySmile"], "responder_tone": "caring and reassuring", "responder_questions": ["Is this for a check-up, or is something bothering you?", "Do you have medical aid, and if so which one?", "Would a morning or afternoon appointment suit you better?"], "responder_faqs": ["Do you accept my medical aid?", "How do I book an appointment?", "Do you see children?"] },
-  "auto": { "label": "Car Dealers", "radar_keywords": ["car", "vehicle", "auto", "dealership", "bakkie", "sedan", "suv", "fuel", "petrol", "diesel"], "post_themes": ["Fuel price moves and what they mean for buyers", "New stock announcements", "Finance and trade-in explainers", "Weekend test-drive invites"], "hashtags": ["#CarsSA", "#AutoDealer"], "responder_tone": "helpful and energetic", "responder_questions": ["What's your budget range?", "Are you trading in, and do you need finance?", "When suits you for a test drive - weekday or Saturday?"], "responder_faqs": ["Is this vehicle still in stock?", "Can I book a test drive?", "Do you take trade-ins?"] },
-  "panel_beater": { "label": "Panel Beaters & Body Shops", "radar_keywords": ["panel beater", "panel beating", "body shop", "spray paint", "dent repair", "scratch repair", "accident repair", "bumper", "hail damage", "insurance claim"], "post_themes": ["Before-and-after repair transformations", "How the insurance claim process works", "Hail and dent season readiness", "What a proper respray involves"], "hashtags": ["#PanelBeaterSA", "#AutoBodySA"], "responder_tone": "reassuring and practical", "responder_questions": ["Can you send photos of the damage?", "What is the make, model and year of the vehicle?", "Is this going through insurance, or is it a private repair?"], "responder_faqs": ["How do I get a quote for the damage?", "Do you work with my insurance?", "How long will the repair take?"] },
-  "auto_electrician": { "label": "Auto Electricians", "radar_keywords": ["auto electrician", "auto electrical", "car battery", "alternator", "starter motor", "wiring", "ecu", "immobiliser", "car alarm", "central locking"], "post_themes": ["Warning lights and what they mean", "Battery care in winter and summer", "Common electrical faults by make", "When a rewire beats another patch"], "hashtags": ["#AutoElectricianSA", "#CarElectrical"], "responder_tone": "clear and methodical", "responder_questions": ["What is the make, model and year of the vehicle?", "What is it doing - any warning lights, or does it fail to start?", "Is the vehicle with you, or stranded somewhere?"], "responder_faqs": ["Can you diagnose a warning light?", "Do you replace batteries and alternators?", "Can you come to the vehicle?"] },
-  "funeral": { "label": "Funeral Services", "radar_keywords": ["funeral", "memorial", "burial", "cremation", "tombstone", "hearse", "mourning", "condolences", "funeral cover", "undertaker"], "post_themes": ["What to do first when a death occurs", "Planning ahead: what families should know", "Cover plans explained in plain language", "Honouring a loved one: memorial ideas", "Supporting grieving families in our community"], "hashtags": ["#FuneralServicesSA", "#GriefSupport"], "responder_tone": "compassionate and unhurried", "responder_questions": ["Is this about arrangements needed now, or planning ahead?", "Do you have a policy or cover plan with us - and the policy number, if so?", "What is the best number to call you back on?"], "responder_faqs": ["What cover plans do you offer, and what do they cost per month?", "What do we do first when a death occurs?", "How do we claim on a policy?"] },
-  "plumber": { "label": "Plumbing", "radar_keywords": ["plumber", "geyser", "burst pipe", "drain", "leak", "blocked", "tap", "sewer"], "post_themes": ["Geyser failures before winter - what to check", "Burst pipe? What to do in the first 10 minutes", "Water-saving fixes that cut your bill", "Emergency call-out vs booked job - what costs what"], "hashtags": ["#PlumberSA", "#GeyserHelp"], "responder_tone": "calm and practical", "responder_questions": ["Where is the problem - and is water still running?", "Is this an emergency or can it wait for a booked slot?", "Which suburb are you in?"], "responder_faqs": ["Do you charge a call-out fee?", "How much to replace a geyser?", "Are you available after hours?"] },
-  "electrician": { "label": "Electrical", "radar_keywords": ["electrician", "electrical", "power trip", "db board", "coc", "compliance certificate", "wiring", "lights"], "post_themes": ["Load-shedding prep: what a healthy DB board looks like", "Why your power keeps tripping", "Compliance certificates when selling your home", "Safe generator and inverter connections"], "hashtags": ["#ElectricianSA", "#PowerTrip"], "responder_tone": "reassuring and safety-first", "responder_questions": ["Is there any burning smell or exposed wiring? If yes, switch off at the main breaker.", "Which area are you in?", "Is the whole house out or one circuit?"], "responder_faqs": ["Do you issue COC certificates?", "How much is a call-out?", "Can you connect an inverter?"] },
-  "security": { "label": "Security", "radar_keywords": ["security", "alarm", "cctv", "armed response", "access control", "electric fence", "beams", "guarding"], "post_themes": ["Holiday security checklist for your home", "Alarm systems vs CCTV - what actually deters", "How armed response times really work", "Gate motor and beam maintenance"], "hashtags": ["#SecuritySA", "#HomeSafety"], "responder_tone": "alert and trustworthy", "responder_questions": ["Is this for a home or business?", "Do you need a new install or a repair/upgrade?", "Which suburb or complex?"], "responder_faqs": ["Do you do free assessments?", "What does armed response cost monthly?", "Can you take over an existing alarm?"] },
-  "solar": { "label": "Solar / inverters", "radar_keywords": ["solar", "inverter", "battery", "panels", "load shedding", "eskom", "backup power", "pv"], "post_themes": ["What size inverter does your home actually need", "Solar payback periods in SA right now", "Battery care through load-shedding cycles", "Eskom tariff hikes vs going solar"], "hashtags": ["#SolarSA", "#LoadShedding"], "responder_tone": "knowledgeable and straight-talking", "responder_questions": ["What is your average monthly electricity bill?", "Do you want backup only or full solar?", "House or business premises?"], "responder_faqs": ["How much does a basic backup system cost?", "How long does installation take?", "Do you offer finance?"] },
-  "mobile-mechanic": { "label": "Mobile mechanic", "radar_keywords": ["mobile mechanic", "car service", "breakdown", "battery", "brakes", "car won't start", "roadside"], "post_themes": ["Your car won't start - the 3 most common causes", "Why mobile servicing beats sitting in a workshop queue", "Brake warning signs you should never ignore", "Pre-holiday vehicle checks"], "hashtags": ["#MobileMechanic", "#CarServiceSA"], "responder_tone": "helpful and down-to-earth", "responder_questions": ["What make, model and year is the vehicle?", "Where is the vehicle parked right now?", "Does it start, or is it completely dead?"], "responder_faqs": ["Do you come to my home or work?", "What does a basic service cost?", "Do you charge for diagnostics?"] },
-  "towing": { "label": "Towing / roadside", "radar_keywords": ["towing", "tow truck", "breakdown", "accident", "roadside assist", "flat tyre", "recovery"], "post_themes": ["What to do right after a breakdown on the N1", "Flat tyre on the highway - stay safe first", "How towing fees work and what insurance covers", "Why response time matters more than price"], "hashtags": ["#TowingSA", "#RoadsideAssist"], "responder_tone": "fast, calm and reassuring", "responder_questions": ["Where exactly is the vehicle - nearest landmark or pin?", "Is anyone injured or in danger?", "What vehicle is it and can it roll?"], "responder_faqs": ["How much to tow within town?", "Do you work with my insurance?", "How long until a truck reaches me?"] },
-  "hvac": { "label": "Aircon / refrigeration", "radar_keywords": ["aircon", "air conditioning", "hvac", "refrigeration", "cold room", "regas", "split unit"], "post_themes": ["Summer is coming - book your aircon service now", "Why your aircon is blowing warm air", "Cold room care for restaurants and butcheries", "Inverter aircons vs older units on your bill"], "hashtags": ["#AirconSA", "#HVac"], "responder_tone": "efficient and friendly", "responder_questions": ["Service, repair or new installation?", "What type of unit and roughly how old?", "Home or business?"], "responder_faqs": ["How much is an aircon service?", "Do you regas units?", "Can you supply and install?"] },
-  "roofing": { "label": "Roofing / waterproofing", "radar_keywords": ["roof", "roofing", "waterproofing", "leak", "gutters", "thatch", "ibr", "torch-on"], "post_themes": ["Rain season checklist: find leaks before they find you", "Waterproofing flat roofs - what lasts and what fails", "Gutter cleaning before the storms", "IBr vs tile vs thatch - honest pros and cons"], "hashtags": ["#RoofingSA", "#Waterproofing"], "responder_tone": "solid and dependable", "responder_questions": ["Where is the leak or problem area?", "What type of roof do you have?", "Can you share a photo?"], "responder_faqs": ["Do you guarantee waterproofing work?", "How much per square metre?", "Do you do free quotes?"] },
-  "gates-access": { "label": "Gates / fencing / access control", "radar_keywords": ["gate motor", "electric gate", "fencing", "access control", "intercom", "palisade", "centurion"], "post_themes": ["Gate motor battery care during load shedding", "Palisade vs clear-view fencing for your property", "Access control for complexes and offices", "Why gates fail after power surges"], "hashtags": ["#GateMotors", "#FencingSA"], "responder_tone": "prompt and security-minded", "responder_questions": ["Is the gate stuck open or closed right now?", "What motor brand do you have?", "Home, complex or business?"], "responder_faqs": ["Do you repair Centurion motors?", "How much is a new gate motor installed?", "Do you do intercoms?"] },
-  "pest-control": { "label": "Pest control", "radar_keywords": ["pest control", "termites", "cockroaches", "rats", "fumigation", "ants", "bed bugs"], "post_themes": ["Termite season in SA - early signs in your home", "Why cockroaches come back after shop sprays", "Bed bugs: what actually gets rid of them", "Rodent proofing before winter"], "hashtags": ["#PestControlSA", "#Fumigation"], "responder_tone": "discreet and thorough", "responder_questions": ["What pest are you seeing and where?", "How big is the property?", "Any kids or pets we should plan around?"], "responder_faqs": ["Is treatment safe for children and pets?", "How much for a once-off treatment?", "Do you guarantee the work?"] },
-  "property-maintenance": { "label": "Property maintenance", "radar_keywords": ["maintenance", "handyman", "repairs", "painting", "complex maintenance", "facilities"], "post_themes": ["The maintenance schedule every complex needs", "Small repairs that stop big insurance claims", "Painting season: prep work that makes it last", "One call, whole-list handyman days"], "hashtags": ["#PropertyMaintenance", "#HandymanSA"], "responder_tone": "reliable and organised", "responder_questions": ["What is on the repair list?", "Is this a once-off or ongoing maintenance?", "Home, complex or office park?"], "responder_faqs": ["Do you charge per job or per day?", "Do you do complex contracts?", "Can I send photos for a quote?"] },
-  "container-transport": { "label": "Container transport", "radar_keywords": ["container", "transport", "logistics", "freight", "shipping container", "haulage", "delivery"], "post_themes": ["Container transport rates - what drives the price", "Port delays and how to plan around them", "Buying vs hiring containers for storage", "Cross-border freight basics for small importers"], "hashtags": ["#LogisticsSA", "#ContainerTransport"], "responder_tone": "direct and dependable", "responder_questions": ["What size container and what route?", "One trip or regular loads?", "Any crane or side-loader needs on site?"], "responder_faqs": ["What does a 6m container move cost?", "Do you do cross-border?", "How far ahead must I book?"] },
-  "pool": { "label": "Pool services", "radar_keywords": ["pool", "pool pump", "green pool", "pool cleaning", "marbelite", "pool repairs"], "post_themes": ["Green pool rescue - the 5-day turnaround", "Winter pool care that saves you money", "Pump and filter basics every owner should know", "Heating options to stretch your swim season"], "hashtags": ["#PoolServicesSA", "#PoolCare"], "responder_tone": "friendly and knowledgeable", "responder_questions": ["Weekly service or a once-off cleanup?", "Roughly what size is the pool?", "Is the water green right now?"], "responder_faqs": ["How much is a weekly pool service?", "Do you repair pumps?", "Can you fix a green pool?"] },
-  "aesthetics": { "label": "Aesthetics / cosmetic clinic", "radar_keywords": ["aesthetics", "botox", "fillers", "skin clinic", "laser", "facial", "anti-ageing"], "post_themes": ["What a first consultation actually involves", "Skincare routines that work in the SA climate", "Laser vs peels - honest guidance", "Safe treatments only: questions to ask any clinic"], "hashtags": ["#AestheticsSA", "#SkinClinic"], "responder_tone": "warm, discreet and professional", "responder_questions": ["Which treatment are you interested in?", "Is this your first visit to an aesthetics clinic?", "Would you like a consultation first?"], "responder_faqs": ["How much is a consultation?", "Are treatments done by a doctor?", "Do you have before-and-after photos?"] },
-  "property-management": { "label": "Property management", "radar_keywords": ["property management", "rental", "levy", "body corporate", "tenant", "sectional title", "landlord"], "post_themes": ["Levy increases explained plainly", "How good management protects your property value", "Tenant vetting that prevents problems", "AGM season: what owners should ask"], "hashtags": ["#PropertyManagement", "#RentalsSA"], "responder_tone": "professional and organised", "responder_questions": ["Complex, single rental or portfolio?", "How many units?", "Are you an owner, trustee or landlord?"], "responder_faqs": ["What do your management fees cover?", "Do you handle maintenance?", "How do you screen tenants?"] },
-  "legal": { "label": "Law firm", "radar_keywords": ["lawyer", "attorney", "legal", "contract", "estate", "conveyancing", "litigation", "deceased estate"], "post_themes": ["Why every adult needs a will - plainly explained", "Buying a house? What conveyancing actually covers", "Contracts: the clauses that cost people money", "What to bring to a first legal consultation"], "hashtags": ["#AttorneysSA", "#LegalAdvice"], "responder_tone": "measured and trustworthy", "responder_questions": ["What area of law does this involve?", "Is the matter urgent?", "Have you worked with an attorney before?"], "responder_faqs": ["What does a consultation cost?", "Do you do free first meetings?", "Which areas of law do you cover?"] },
-  "financial-broker": { "label": "Financial / insurance broker", "radar_keywords": ["insurance", "broker", "medical aid", "life cover", "short-term", "funeral cover", "investment"], "post_themes": ["Insurance reviews: why January matters", "Medical aid vs hospital plan - the real difference", "Life cover milestones: marriage, kids, bond", "Short-term insurance: what your premium actually buys"], "hashtags": ["#InsuranceSA", "#FinancialAdvice"], "responder_tone": "clear and trustworthy", "responder_questions": ["What cover are you looking at - life, medical, car, home?", "Are you reviewing existing cover or starting fresh?", "When did you last compare your policies?"], "responder_faqs": ["Do you charge for advice?", "Which providers do you work with?", "Can you beat my current premium?"] },
-  "catering": { "label": "Catering / food truck", "radar_keywords": ["catering", "food truck", "events catering", "platters", "wedding catering", "spit braai"], "post_themes": ["Wedding catering: what to book first", "Spit braai season is here", "Corporate platters that actually impress", "Food truck Fridays - where to find us"], "hashtags": ["#CateringSA", "#SpitBraai"], "responder_tone": "warm and appetising", "responder_questions": ["What event and how many guests?", "What date and venue?", "Any dietary requirements?"], "responder_faqs": ["How much per person?", "Do you cater for halaal or vegetarian guests?", "How far ahead must we book?"] },
-  "trades": { "label": "Trades (general building & repairs)", "radar_keywords": ["builder", "renovation", "building", "repairs", "construction", "alterations", "paving"], "post_themes": ["Renovations: the order of work that saves money", "NHBRC and why it matters for your build", "Small jobs welcome - why that matters", "Planning permission basics for additions"], "hashtags": ["#BuildersSA", "#Renovations"], "responder_tone": "straightforward and capable", "responder_questions": ["What work do you need done?", "Do you have plans or need them drawn?", "What is your rough budget range?"], "responder_faqs": ["Do you do small jobs?", "Are you NHBRC registered?", "How do your quotes work?"] }
-};
-var ALIAS = { "auto-workshop": "auto", "real-estate": "real_estate" };
-function getPreset(industry) {
-  const k = (industry || "general").trim();
-  return PRESETS[k] || PRESETS[ALIAS[k]] || PRESETS[k.replace(/-/g, "_")] || PRESETS.general;
-}
-function industryLabel(k) {
-  const f = INDUSTRIES.find(([v]) => v === k);
-  return f ? f[1] : PRESETS[k]?.label || k || "General local service";
-}
-
-// src/receptionist.ts
-var SANDBOX_ACCOUNT_ID = "6a180a034c7f364ffded3c9c";
-var SANDBOX_SEND_ALLOWLIST = /* @__PURE__ */ new Set(["27672347593", "27612980377"]);
-var OPT_OUT = /* @__PURE__ */ new Set(["STOP", "STOP ALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"]);
-var PLAN_ALLOWANCE = { starter: 500, growth: 1e3, "business-pro": 2500 };
-var MAX_SENDS_HOUR = 60;
-var MAX_SENDS_DAY = 300;
-var MAX_DRAFTS_DAY = 300;
-var ESCALATION = [
-  /\b(speak|talk)\s+to\s+(a\s+)?(person|human|someone|manager|owner)\b/i,
-  /\b(complaint|sue|lawyer|attorney|refund)\b/i,
-  /\b(died|death|passed away|deceased)\b/i,
-  /\b(emergency|urgent|burst|flooding|no power|sparking)\b/i
-];
-var RULES = "Rules: reply in under 120 words; plain WhatsApp language; prices in South African rand (R); no emojis; never mention you are an AI unless asked. When the customer sends photos, acknowledge them by count and never describe, diagnose or price what might be in them - a person from the team assesses photos. IMPORTANT: the business information above is the COMPLETE list of what this business offers. If the customer asks about a service, product, price or policy that is not listed there, do NOT say yes and do NOT say no - say a person from the team will confirm. If you do not know, say a person will confirm.";
-async function hmacHex(secret, body) {
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
-  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-async function verifyZernioSignature(secret, body, signature) {
-  if (!secret || !signature) return false;
-  const expected = await hmacHex(secret, body);
-  if (expected.length !== signature.length) return false;
-  let diff = 0;
-  for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
-  return diff === 0;
-}
-function industryBrief(industry) {
-  const p = getPreset(industry || "general");
-  const label = p.label || "local service";
-  let s = `You are the WhatsApp receptionist for a ${label} business in South Africa. Tone: ${p.responder_tone || "warm and professional"}.`;
-  const qs = p.responder_questions || [];
-  if (qs.length) s += ` When the customer wants to book or buy, gather: ${qs.join(" ")}`;
-  const faqs = p.responder_faqs || [];
-  if (faqs.length) s += ` Common customer questions: ${faqs.join(" ")}`;
-  return s;
-}
-function profileBlock(p) {
-  const lines = [`Business: ${p.business_name || ""}`];
-  if (p.operating_hours && Object.keys(p.operating_hours).length) lines.push(`Operating hours: ${JSON.stringify(p.operating_hours)}`);
-  if (p.pricing_data && Object.keys(p.pricing_data).length) lines.push(`Price list (ZAR): ${JSON.stringify(p.pricing_data)}`);
-  if (p.call_out_fee != null) lines.push(`Call-out fee: R${p.call_out_fee}`);
-  if (p.payment_link_url) lines.push("Payments are taken by secure link; share it only when a customer is ready to pay.");
-  if (p.custom_rules && Object.keys(p.custom_rules).length) lines.push(`Standing rules from the owner: ${JSON.stringify(p.custom_rules)}`);
-  return lines.join("\n");
-}
-function customerBlock(c) {
-  if (!c) return "";
-  const lines = [];
-  if (c.name) lines.push(`Customer name: ${c.name}`);
-  if (c.is_vip) lines.push("This customer is a VIP - treat them especially well.");
-  if (c.visit_count) lines.push(`They have visited ${c.visit_count} time${c.visit_count === 1 ? "" : "s"} before.`);
-  if (c.dietary_notes) lines.push(`Dietary needs: ${c.dietary_notes}`);
-  return lines.join("\n");
-}
-async function groqDraft(apiKey, prompt) {
-  let lastErr = "no response";
-  for (const model of ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({ model, temperature: 0.2, max_tokens: 800, reasoning_effort: "low", messages: [{ role: "user", content: prompt }] })
-        });
-        if (!resp.ok) {
-          lastErr = `groq ${resp.status}`;
-          continue;
-        }
-        const data = await resp.json();
-        const content = data?.choices?.[0]?.message?.content || "";
-        const m = content.match(/\{.*\}/s);
-        if (m) return m[0];
-        lastErr = "no JSON in reply";
-      } catch (e) {
-        lastErr = String(e).slice(0, 120);
-      }
-    }
-  }
-  throw new Error(lastErr);
-}
-async function handleZernioWebhook(db, env, payload) {
-  if ((payload.event || "") !== "message.received") return;
-  const message = payload.message || {};
-  const account = message.account || payload.account || {};
-  const accountId = account.accountId || account._id || "";
-  if (!accountId) return;
-  const ch = await db.query(`SELECT * FROM receptionist_zerniochannel WHERE zernio_account_id=$1 LIMIT 1`, [accountId]);
-  const channel = ch.rows[0];
-  if (!channel) return;
-  const pr = await db.query(`SELECT * FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [channel.workspace_id]);
-  const profile = pr.rows[0];
-  if (!profile) return;
-  const direction = message.direction || (message.fromMe ? "outbound" : "inbound");
-  if (!["inbound", "incoming"].includes(direction)) return;
-  let sender = message.sender || {};
-  if (typeof sender === "string") sender = { id: sender };
-  const waId = String(sender.phoneNumber || "").replace(/^\+/, "") || String(sender.id || "").split("@")[0].replace(/^\+/, "");
-  let body = String(message.text || message.body || "").trim();
-  const media = (message.attachments || []).map((a) => typeof a === "string" ? a : a.url || a.mediaUrl || a.link || a.src || "").filter(Boolean).slice(0, 10);
-  if (!waId || !body && !media.length) return;
-  if (!body && media.length) body = `[${media.length} photo${media.length === 1 ? "" : "s"} received]`;
-  const conv = payload.conversation || {};
-  const convId = String(conv.id || conv.conversationId || "");
-  const senderName = sender.name || conv.participantName || "";
-  const zid = String(message._id || message.id || "");
-  let contact;
-  const cr = await db.query(`SELECT * FROM receptionist_contact WHERE workspace_id=$1 AND wa_id=$2 LIMIT 1`, [channel.workspace_id, waId]);
-  if (cr.rows[0]) {
-    contact = cr.rows[0];
-    if (convId && contact.zernio_conversation_id !== convId)
-      await db.query(`UPDATE receptionist_contact SET zernio_conversation_id=$1, updated_at=now() WHERE id=$2`, [convId, contact.id]);
-  } else {
-    const id = crypto.randomUUID();
-    const ins = await db.query(
-      `INSERT INTO receptionist_contact(id,workspace_id,wa_id,name,tags,needs_human,opted_out,zernio_conversation_id,issue_note,review_status,dietary_notes,is_vip,notes,total_spend,visit_count,created_at,updated_at)
-       VALUES($1,$2,$3,$4,'[]'::jsonb,false,false,$5,'','new','',false,'',0,0,now(),now()) RETURNING *`,
-      [id, channel.workspace_id, waId.slice(0, 32), String(senderName).slice(0, 120), convId]
-    );
-    contact = ins.rows[0];
-  }
-  if (zid) {
-    const dup = await db.query(`SELECT 1 FROM receptionist_message WHERE workspace_id=$1 AND zernio_message_id=$2 LIMIT 1`, [channel.workspace_id, zid]);
-    if (dup.rows[0]) return;
-  }
-  await db.query(
-    `INSERT INTO receptionist_message(id,direction,sender_type,body,zernio_message_id,is_draft,created_at,contact_id,workspace_id,media_urls)
-     VALUES($1,'inbound','user',$2,$3,false,now(),$4,$5,$6::jsonb)`,
-    [crypto.randomUUID(), body, zid, contact.id, channel.workspace_id, JSON.stringify(media)]
-  );
-  if (OPT_OUT.has(body.trim().toUpperCase())) {
-    const { unsubscribeContact: unsubscribeContact2 } = await Promise.resolve().then(() => (init_reviews(), reviews_exports));
-    await unsubscribeContact2(db, contact.id);
-    return;
-  }
-  if (["check_in_sent", "review_requested"].includes(contact.review_status || "")) {
-    const { looksNegative: looksNegative2, flagIssue: flagIssue2 } = await Promise.resolve().then(() => (init_reviews(), reviews_exports));
-    if (looksNegative2(body)) {
-      await flagIssue2(db, channel.workspace_id, contact.id, body);
-      return;
-    }
-  }
-  const org = await db.query(`SELECT o.plan, o.id FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [channel.workspace_id]);
-  const plan = org.rows[0]?.plan || "starter";
-  const allowance = PLAN_ALLOWANCE[plan] ?? 500;
-  const used = await db.query(
-    `SELECT count(*) c FROM receptionist_message m JOIN workspaces_workspace w ON w.id=m.workspace_id
-     WHERE w.organization_id=$1 AND m.direction='outbound' AND m.sender_type='ai' AND m.is_draft=false AND m.created_at >= date_trunc('month', now())`,
-    [org.rows[0]?.id]
-  );
-  if (Number(used.rows[0].c) >= allowance) {
-    await db.query(`UPDATE receptionist_contact SET needs_human=true, updated_at=now() WHERE id=$1 AND NOT needs_human`, [contact.id]);
-    return;
-  }
-  const todayDrafts = await db.query(
-    `SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND sender_type='ai' AND created_at >= now() - interval '1 day'`,
-    [channel.workspace_id]
-  );
-  if (Number(todayDrafts.rows[0].c) >= MAX_DRAFTS_DAY) {
-    await db.query(`UPDATE receptionist_contact SET needs_human=true, updated_at=now() WHERE id=$1 AND NOT needs_human`, [contact.id]);
-    return;
-  }
-  const hist = await db.query(`SELECT sender_type, body FROM receptionist_message WHERE contact_id=$1 ORDER BY created_at DESC LIMIT 12`, [contact.id]);
-  const transcript = hist.rows.reverse().map((m) => `${m.sender_type === "user" ? "Customer" : "Receptionist"}: ${m.body}`).join("\n");
-  const now = (/* @__PURE__ */ new Date()).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg", weekday: "long", day: "2-digit", month: "long", year: "numeric" });
-  const incoming = media.length ? `[Customer sent ${media.length} photo${media.length === 1 ? "" : "s"}] ${body}`.trim() : body;
-  const prompt = `Today is ${now}, South Africa time.
-${industryBrief(profile.industry || "general")}
-${profileBlock(profile)}
-` + (customerBlock(contact) ? customerBlock(contact) + "\n" : "") + `
-Conversation so far:
-${transcript}
-
-Reply with JSON only: {"reply": "...", "intake": {"name": "", "detail": "", "preferred_time": "", "address": "", "policy_number": ""}} (fill only the intake fields the customer actually gave; make detail a short description of what they want - for a restaurant booking use 'Table for N', never a bare number).
-${RULES}`;
-  let draft = { reply: "", intake: {} };
-  try {
-    draft = JSON.parse(await groqDraft(env.GROQ_API_KEY, prompt));
-  } catch {
-    return;
-  }
-  const reply = String(draft.reply || "").trim();
-  if (!reply) return;
-  const escalate = ESCALATION.some((re) => re.test(incoming));
-  if (escalate) await db.query(`UPDATE receptionist_contact SET needs_human=true, updated_at=now() WHERE id=$1 AND NOT needs_human`, [contact.id]);
-  const outId = crypto.randomUUID();
-  await db.query(
-    `INSERT INTO receptionist_message(id,direction,sender_type,body,zernio_message_id,is_draft,created_at,contact_id,workspace_id,media_urls)
-     VALUES($1,'outbound','ai',$2,'',true,now(),$3,$4,'[]'::jsonb)`,
-    [outId, reply, contact.id, channel.workspace_id]
-  );
-  const intake = draft.intake || {};
-  let detail = String(intake.detail || "").trim();
-  const preferred = String(intake.preferred_time || "").trim();
-  const industry = String(profile.industry || "general");
-  if (industry === "restaurant" && /^\d+$/.test(detail)) detail = `Table for ${detail}`;
-  if (detail || preferred) {
-    try {
-      await db.query(
-        `INSERT INTO receptionist_booking(id,service,preferred_time,status,notes,created_at,contact_id,workspace_id,duration_minutes,google_event_id,value)
-        VALUES($1,$2,$3,'requested','',now(),$4,$5,60,'',0)`,
-        [crypto.randomUUID(), detail.slice(0, 200), preferred.slice(0, 200), contact.id, channel.workspace_id]
-      );
-    } catch {
-    }
-  }
-  const inName = String(intake.name || "").trim();
-  const inAddress = String(intake.address || "").trim();
-  const inPolicy = String(intake.policy_number || "").trim();
-  try {
-    if (industry === "funeral" && (inName || detail || inPolicy)) {
-      await db.query(`INSERT INTO receptionist_funeralclaim(id,deceased_name,claimant_name,policy_number,status,notes,created_at,contact_id,workspace_id)
-        VALUES($1,$2,$3,$4,'new','',now(),$5,$6)`, [crypto.randomUUID(), detail.slice(0, 200), inName.slice(0, 200), inPolicy.slice(0, 64), contact.id, channel.workspace_id]);
-    } else if (industry === "dental" && (inName || detail)) {
-      await db.query(`INSERT INTO receptionist_dentalappointment(id,patient_name,reason,status,created_at,contact_id,workspace_id)
-        VALUES($1,$2,$3,'new',now(),$4,$5)`, [crypto.randomUUID(), inName.slice(0, 200), detail.slice(0, 300), contact.id, channel.workspace_id]);
-    } else if (industry === "trades" && (detail || inAddress)) {
-      await db.query(`INSERT INTO receptionist_tradedispatch(id,job_type,address,urgent,status,created_at,contact_id,workspace_id)
-        VALUES($1,$2,$3,false,'new',now(),$4,$5)`, [crypto.randomUUID(), detail.slice(0, 120), inAddress.slice(0, 300), contact.id, channel.workspace_id]);
-    }
-  } catch {
-  }
-  const sandbox = channel.is_sandbox || channel.zernio_account_id === SANDBOX_ACCOUNT_ID;
-  if (sandbox && !SANDBOX_SEND_ALLOWLIST.has(waId)) return;
-  const sentHour = await db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND is_draft=false AND created_at >= now() - interval '1 hour'`, [channel.workspace_id]);
-  const sentDay = await db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND is_draft=false AND created_at >= now() - interval '1 day'`, [channel.workspace_id]);
-  if (Number(sentHour.rows[0].c) >= MAX_SENDS_HOUR || Number(sentDay.rows[0].c) >= MAX_SENDS_DAY) return;
-  if (!contact.zernio_conversation_id) return;
-  const connQ = await db.query(`SELECT api_key, status FROM receptionist_tenantmessagingconnection WHERE workspace_id=$1 LIMIT 1`, [channel.workspace_id]);
-  const conn = connQ.rows[0];
-  if (conn && conn.status === "needs_attention") return;
-  const sendKey = conn && conn.status === "connected" && conn.api_key ? conn.api_key : env.ZERNIO_API_KEY;
-  const base = env.ZERNIO_BASE_URL || "https://zernio.com/api/v1";
-  const resp = await fetch(`${base}/inbox/conversations/${contact.zernio_conversation_id}/messages`, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${sendKey}` },
-    body: JSON.stringify({ accountId: channel.zernio_account_id, message: reply })
-  });
-  if (!resp.ok) return;
-  const data = await resp.json().catch(() => ({}));
-  const sentId = String(data?.message?.id || data?.messageId || data?.id || "");
-  await db.query(`UPDATE receptionist_message SET is_draft=false, zernio_message_id=$1 WHERE id=$2`, [sentId, outId]);
-}
-var ZBASE = "https://zernio.com/api/v1";
-async function zget(apiKey, path) {
-  const resp = await fetch(ZBASE + path, { headers: { authorization: `Bearer ${apiKey}` } });
-  if (!resp.ok) {
-    const e = new Error("zernio " + resp.status);
-    e.status = resp.status;
-    throw e;
-  }
-  return resp.json();
-}
-async function zpost(apiKey, path, body) {
-  const resp = await fetch(ZBASE + path, { method: "POST", headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" }, body: JSON.stringify(body) });
-  if (!resp.ok) {
-    const e = new Error("zernio " + resp.status);
-    e.status = resp.status;
-    throw e;
-  }
-  return resp.json();
-}
-async function validateTenantKey(apiKey, workspaceId, workspaceName) {
-  try {
-    await zget(apiKey, "/accounts");
-    const byExt = await zget(apiKey, `/profiles?externalId=${encodeURIComponent(workspaceId)}`).catch(() => ({}));
-    let profile = (byExt.profiles || [])[0] || byExt.profile;
-    if (!profile) {
-      const all = await zget(apiKey, "/profiles");
-      const profiles = all.profiles || [];
-      if (profiles.length === 1) profile = profiles[0];
-    }
-    if (!profile) {
-      const made = await zpost(apiKey, "/profiles", { name: workspaceName.slice(0, 80), externalId: workspaceId });
-      profile = made.profile;
-    }
-    return { profileId: String(profile?._id || profile?.id || ""), error: "" };
-  } catch (e) {
-    if (e.status === 401 || e.status === 403) return { profileId: "", error: "That key was not accepted. Copy the full key from your messaging account and paste it again." };
-    if (e.status === 402) return { profileId: "", error: "Your messaging plan covers 2 numbers. Add a card in your messaging account to connect more." };
-    return { profileId: "", error: "Could not reach the messaging service. Please try again." };
-  }
-}
-async function tenantConnectUrl(apiKey, profileId, redirectUrl) {
-  const data = await zget(apiKey, `/connect/whatsapp?profileId=${encodeURIComponent(profileId)}&redirect_url=${encodeURIComponent(redirectUrl)}`);
-  const url = data.authUrl || data.data?.authUrl;
-  if (!url) throw new Error("no authUrl");
-  return url;
-}
-async function tenantConfirmAndBind(db, conn, profileId, accountId, webhookUrl) {
-  const accounts = await zget(conn.api_key, `/accounts?profileId=${encodeURIComponent(profileId)}&platform=whatsapp`);
-  const list = accounts.accounts || [];
-  const match = list.find((a) => String(a._id || a.id) === accountId);
-  if (!match) return { ok: false, msg: "That number was not found on your messaging account. Please try again." };
-  const secret = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
-  let webhookId = "", webhookOk = false;
-  try {
-    const hook = await zpost(conn.api_key, "/webhooks/settings", {
-      name: "revup-" + conn.workspace_id,
-      url: webhookUrl,
-      secret,
-      events: ["message.received", "message.delivered", "message.read", "account.disconnected"],
-      profileIds: [profileId]
-    });
-    webhookId = String(hook.webhook?._id || hook.webhook?.id || "");
-    if (webhookId) {
-      const t = await zpost(conn.api_key, "/webhooks/test", { webhookId });
-      webhookOk = !!t.success;
-    }
-  } catch {
-  }
-  const phone = String(match.username || match.phoneNumber || "").replace(/^\+/, "");
-  await db.query(
-    `UPDATE receptionist_tenantmessagingconnection SET account_id=$1, phone_number=$2, webhook_id=$3, webhook_secret=$4, status='connected', last_error=$5, updated_at=now() WHERE workspace_id=$6`,
-    [accountId, phone, webhookId, webhookId ? secret : "", webhookOk ? "" : "Webhook check did not pass yet - replies may be delayed.", conn.workspace_id]
-  );
-  const ex = await db.query(`SELECT id FROM receptionist_zerniochannel WHERE workspace_id=$1`, [conn.workspace_id]);
-  if (ex.rows[0]) {
-    await db.query(
-      `UPDATE receptionist_zerniochannel SET zernio_account_id=$1, zernio_profile_id=$2, phone_number=$3, label=$4, is_sandbox=false WHERE workspace_id=$5`,
-      [accountId, profileId, phone, match.name || "WhatsApp", conn.workspace_id]
-    );
-  } else {
-    await db.query(
-      `INSERT INTO receptionist_zerniochannel(id,workspace_id,zernio_account_id,zernio_profile_id,phone_number,label,is_sandbox,connected_at)
-       VALUES($1,$2,$3,$4,$5,$6,false,now())`,
-      [crypto.randomUUID(), conn.workspace_id, accountId, profileId, phone, match.name || "WhatsApp"]
-    );
-  }
-  return { ok: true, msg: webhookOk ? "WhatsApp connected. Your receptionist is live on your number." : "Connected, but the delivery check did not pass yet - replies may be delayed." };
-}
-async function tenantWebhookSecret(db, payload) {
-  const account = payload?.message?.account || payload?.account || {};
-  const accountId = account.accountId || account._id || payload?.accountId || "";
-  const profileId = account.profileId || payload?.profileId || "";
-  if (accountId) {
-    const r = await db.query(`SELECT webhook_secret FROM receptionist_tenantmessagingconnection WHERE account_id=$1 AND webhook_secret<>'' LIMIT 1`, [accountId]);
-    if (r.rows[0]) return r.rows[0].webhook_secret;
-  }
-  if (profileId) {
-    const r = await db.query(`SELECT webhook_secret FROM receptionist_tenantmessagingconnection WHERE profile_id=$1 AND webhook_secret<>'' LIMIT 1`, [profileId]);
-    if (r.rows[0]) return r.rows[0].webhook_secret;
-  }
-  return "";
-}
-
 // src/index.ts
+init_presets();
+init_receptionist();
 init_reviews();
 
 // src/pages.ts
+init_freeai();
+init_presets();
 var ensured = null;
 function ensurePageTables(db) {
   if (!ensured) ensured = (async () => {
@@ -1402,7 +1886,8 @@ async function fetchForMirror(url) {
 var COPY_RULES = `You write landing page copy for South African small businesses.
 Rules: plain warm SA English, short sentences, no hype words (no "revolutionary", "game-changing", "unlock"), prices in rand (R) if any, mobile-first so keep headings under 9 words, body text under 60 words per section, bullets under 12 words each.
 The page speaks to ONE customer pain only - every section must tie back to that pain.
-NEVER invent facts: no phone numbers, no prices, no guarantees, no qualifications, no years of experience, no claims the business did not state. Only use details given in this brief. For contact, always point to the button (e.g. "tap the button below"), never write a phone number or email in the copy.
+NEVER invent facts: no phone numbers, no prices, no opening hours, no services not in the brief, no guarantees, no qualifications, no names, no years of experience, no claims the business did not state. Only use details given in this brief. For contact, always point to the button (e.g. "tap the button below"), never write a phone number or email in the copy.
+${FACT_RULES}
 If the brief gives no testimonials, do NOT write fake quotes or claims about what customers say. In a proof section, state plainly how the product works and what the business itself commits to.`;
 async function generateSections(env, brief, skeleton) {
   const preset = getPreset(brief.industry);
@@ -1417,47 +1902,27 @@ Write copy for a landing page with these sections in this order: ${skel}.
 Reply with JSON only:
 {"seo_title":"...","sections":[{"type":"hero","heading":"...","body":"...","items":["...","..."]},...]}
 Every section in the list must appear, same order, same type. items may be [] for hero/cta.`;
-  const models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
-  let lastErr = "no model replied";
-  for (const model of models) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${env.GROQ_API_KEY}` },
-          body: JSON.stringify({ model, temperature: 0.4, max_tokens: 3e3, reasoning_effort: "low", messages: [{ role: "user", content: prompt }] })
-        });
-        if (!resp.ok) {
-          lastErr = `groq ${resp.status}`;
-          continue;
-        }
-        const data = await resp.json();
-        const text = data?.choices?.[0]?.message?.content || "";
-        const m = /\{[\s\S]*\}/.exec(text);
-        if (!m) {
-          lastErr = "no JSON in reply";
-          continue;
-        }
-        const parsed = JSON.parse(m[0]);
-        const raw = Array.isArray(parsed.sections) ? parsed.sections : [];
-        const sections = raw.slice(0, 14).map((s) => ({
-          type: String(s.type || "benefits").slice(0, 20),
-          heading: String(s.heading || "").slice(0, 140),
-          body: String(s.body || "").slice(0, 800),
-          items: Array.isArray(s.items) ? s.items.slice(0, 8).map((x) => String(x).slice(0, 140)) : []
-        })).filter((s) => s.heading || s.body);
-        if (!sections.length) {
-          lastErr = "empty sections";
-          continue;
-        }
-        if (!sections.some((s) => s.type === "cta")) sections.push({ type: "cta", heading: "Ready when you are", body: "Send a message now and get a straight answer.", items: [] });
-        return { seo_title: String(parsed.seo_title || brief.business).slice(0, 120), sections };
-      } catch (e) {
-        lastErr = String(e?.message || e);
-      }
+  const r = await freeAiGenerate(env, prompt, { maxTokens: 3e3, temperature: 0.4 }, rejectInventedPrices(prompt, (text) => {
+    const m = /\{[\s\S]*\}/.exec(text);
+    if (!m) return null;
+    try {
+      const parsed = JSON.parse(m[0]);
+      const raw = Array.isArray(parsed.sections) ? parsed.sections : [];
+      const sections = raw.slice(0, 14).map((sec) => ({
+        type: String(sec.type || "benefits").slice(0, 20),
+        heading: String(sec.heading || "").slice(0, 140),
+        body: String(sec.body || "").slice(0, 800),
+        items: Array.isArray(sec.items) ? sec.items.slice(0, 8).map((x) => String(x).slice(0, 140)) : []
+      })).filter((sec) => sec.heading || sec.body);
+      if (!sections.length) return null;
+      if (!sections.some((sec) => sec.type === "cta")) sections.push({ type: "cta", heading: "Ready when you are", body: "Send a message now and get a straight answer.", items: [] });
+      return { seo_title: String(parsed.seo_title || brief.business).slice(0, 120), sections };
+    } catch {
+      return null;
     }
-  }
-  throw new Error(lastErr);
+  }));
+  if (!r) throw new Error("the copywriter is busy right now");
+  return r.value;
 }
 function pesc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -2312,6 +2777,2436 @@ async function autoDraftOpportunities(db) {
 
 // src/index.ts
 var import_spark_md5 = __toESM(require_spark_md5(), 1);
+
+// src/wificard.ts
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+function wifiCardPage(opts) {
+  const biz = esc(opts.businessName || "Your business");
+  const enquiryUrl = esc(opts.enquiryUrl);
+  const preSsid = esc(opts.prefill?.ssid || "");
+  const prePass = esc(opts.prefill?.pass || "");
+  const sampleBanner = opts.sample ? `<div class="card" style="border:2px dashed #F97316;background:#FFF7ED"><h2 style="margin-top:0">Sample preview</h2>
+<p>This is the exact card your customers would see in your waiting room. Guests scan one code to join your guest WiFi and the other to send you an enquiry - it lands straight in your RevUp inbox. The sample below is filled in with demo details; your own card uses your business name and your real enquiry form.</p>
+<p style="margin-bottom:0"><a class="btn btn-primary" href="/signup">Get your own card - start free</a></p></div>` : "";
+  return `<style>
+.wc-grid{display:grid;grid-template-columns:minmax(280px,380px) 1fr;gap:22px;align-items:start}
+@media(max-width:860px){.wc-grid{grid-template-columns:1fr}}
+.wc-preview-wrap{position:sticky;top:16px}
+.wifi-card{width:148mm;max-width:100%;aspect-ratio:148/105;background:#fff;border:1px solid #E7E5E4;border-radius:10px;box-shadow:0 1px 2px rgba(28,25,23,.05),0 8px 24px rgba(249,115,22,.10);display:flex;flex-direction:column;overflow:hidden}
+.wc-head{background:#FAFAF9;border-bottom:1px solid #E7E5E4;padding:10px 16px;display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.wc-biz{font-size:17px;font-weight:700;letter-spacing:-0.2px;color:#1C1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wc-tag{font-size:11px;font-weight:600;color:#EA580C;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
+.wc-body{flex:1;display:flex;align-items:center;justify-content:space-evenly;gap:10px;padding:10px 12px}
+.wc-qr{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
+.wc-qr .qrbox{background:#fff;border:1px solid #E7E5E4;border-radius:6px;padding:6px;line-height:0}
+.wc-qr .qrbox svg{width:26mm;height:26mm;max-width:104px;max-height:104px}
+.wc-lab{font-size:12px;font-weight:600;color:#1C1917;line-height:1.35}
+.wc-sub{font-size:10.5px;color:#57534E;line-height:1.35;max-width:34mm}
+.wc-net{font-size:11px;color:#57534E;margin-top:2px;line-height:1.4}
+.wc-net b{color:#1C1917;font-weight:600}
+.wc-foot{border-top:1px solid #E7E5E4;padding:6px 16px;display:flex;justify-content:space-between;align-items:center}
+.wc-foot span{font-size:9.5px;color:#A8A29E}
+#wifi-card-print{display:none}
+@media print{
+  body.printing > *:not(#wifi-card-print){display:none!important}
+  #wifi-card-print{display:flex;width:148mm;height:105mm;aspect-ratio:auto;box-shadow:none;border:1px solid #E7E5E4;margin:0}
+  @page{size:148mm 105mm;margin:0}
+}
+</style>
+${sampleBanner}
+<div class="card"><h2 style="margin-top:0">Waiting-room WiFi card</h2>
+<p>One printable card for your waiting room, with two separate codes: guests scan one to join your WiFi, and scan the other to ask for a quote or book - that lands straight in your RevUp inbox. Fill in your WiFi details below; the card is made right here in your browser and your WiFi password never leaves this page.</p></div>
+<div class="wc-grid">
+<div class="card"><h2 style="margin-top:0">Your details</h2>
+<form id="wc-form" onsubmit="return false">
+<label for="wc-biz">Business name on the card</label>
+<input id="wc-biz" maxlength="48" value="${biz}">
+<label for="wc-ssid">WiFi network name (SSID)</label>
+<input id="wc-ssid" maxlength="32" value="${preSsid}" placeholder="e.g. DemoDental-Guest" autocomplete="off">
+<label for="wc-pass">WiFi password</label>
+<input id="wc-pass" maxlength="63" value="${prePass}" placeholder="Your guest WiFi password" autocomplete="off">
+<label for="wc-sec">Security</label>
+<select id="wc-sec"><option value="WPA" selected>WPA / WPA2 / WPA3</option><option value="WEP">WEP</option><option value="nopass">Open (no password)</option></select>
+<label style="display:flex;align-items:center;gap:8px;font-weight:500"><input type="checkbox" id="wc-showpass" checked style="width:auto;margin:0"> Print the password as text on the card</label>
+<p class="mut" style="margin:6px 0 0">Use a separate guest network, never your office or till network. A photo of the card shows the WiFi details, so keep it to guest WiFi only.</p>
+<button type="button" class="btn btn-primary" style="width:100%;margin-top:14px" onclick="window.print()">Print / save as PDF</button>
+</form></div>
+<div class="wc-preview-wrap">
+<div class="print-root">
+<div class="wifi-card" id="wifi-card">
+<div class="wc-head"><span class="wc-biz" id="wc-biz-out">${biz}</span><span class="wc-tag">Free guest WiFi</span></div>
+<div class="wc-body">
+<div class="wc-qr"><div class="qrbox" id="qr-wifi"></div><div><div class="wc-lab">Scan to join our WiFi</div><div class="wc-net" id="wc-net-out">Network: <b>-</b><br>Password: <b>-</b></div></div></div>
+<div class="wc-qr"><div class="qrbox" id="qr-enquiry"></div><div><div class="wc-lab">Need a quote or want to book?</div><div class="wc-sub">Scan to message us - we reply fast.</div></div></div>
+</div>
+<div class="wc-foot"><span>Powered by RevUp</span><span id="wc-foot-note">Free for our guests</span></div>
+</div>
+</div>
+</div>
+</div>
+<script src="/static/qrcode.js"></script>
+<script>
+(function(){
+  var ENQ = ${JSON.stringify(opts.enquiryUrl)};
+  function escWifi(s){ return String(s||"").replace(/([\\\\;,:"'])/g, "\\\\$1"); }
+  function makeQr(el, text){
+    el.innerHTML = "";
+    var q = window.qrcode(0, "M");
+    q.addData(text); q.make();
+    el.innerHTML = q.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+    var svg = el.querySelector("svg");
+    if (svg){ svg.setAttribute("width","100%"); svg.setAttribute("height","100%"); }
+  }
+  function wifiPayload(){
+    var sec = document.getElementById("wc-sec").value;
+    var ssid = document.getElementById("wc-ssid").value.trim();
+    var pass = document.getElementById("wc-pass").value;
+    if (!ssid) return "";
+    if (sec === "nopass") return "WIFI:T:nopass;S:" + escWifi(ssid) + ";;";
+    return "WIFI:T:" + sec + ";S:" + escWifi(ssid) + ";P:" + escWifi(pass) + ";;";
+  }
+  function render(){
+    var biz = document.getElementById("wc-biz").value.trim() || "Your business";
+    var ssid = document.getElementById("wc-ssid").value.trim();
+    var pass = document.getElementById("wc-pass").value;
+    var sec = document.getElementById("wc-sec").value;
+    var showPass = document.getElementById("wc-showpass").checked;
+    document.getElementById("wc-biz-out").textContent = biz;
+    var net = "Network: <b>" + (ssid ? ssid.replace(/</g,"&lt;") : "-") + "</b>";
+    if (sec !== "nopass") net += "<br>Password: <b>" + (showPass && pass ? pass.replace(/</g,"&lt;") : (pass ? "ask at the counter" : "-")) + "</b>";
+    document.getElementById("wc-net-out").innerHTML = net;
+    var wp = wifiPayload();
+    makeQr(document.getElementById("qr-wifi"), wp || "WIFI:T:nopass;S:guest;;");
+    makeQr(document.getElementById("qr-enquiry"), ENQ);
+  }
+  window.addEventListener("beforeprint", function(){
+    var old = document.getElementById("wifi-card-print"); if (old) old.remove();
+    var c = document.getElementById("wifi-card").cloneNode(true);
+    c.id = "wifi-card-print";
+    document.body.appendChild(c);
+    document.body.classList.add("printing");
+  });
+  window.addEventListener("afterprint", function(){
+    var c = document.getElementById("wifi-card-print"); if (c) c.remove();
+    document.body.classList.remove("printing");
+  });
+  ["wc-biz","wc-ssid","wc-pass","wc-sec","wc-showpass"].forEach(function(id){
+    document.getElementById(id).addEventListener("input", render);
+    document.getElementById(id).addEventListener("change", render);
+  });
+  render();
+})();
+</script>`;
+}
+
+// src/index.ts
+init_freeai();
+
+// src/qrcodejs.ts
+var QRCODE_LIB = `//---------------------------------------------------------------------
+//
+// QR Code Generator for JavaScript
+//
+// Copyright (c) 2009 Kazuhiko Arase
+//
+// URL: http://www.d-project.com/
+//
+// Licensed under the MIT license:
+//  http://www.opensource.org/licenses/mit-license.php
+//
+// The word 'QR Code' is registered trademark of
+// DENSO WAVE INCORPORATED
+//  http://www.denso-wave.com/qrcode/faqpatent-e.html
+//
+//---------------------------------------------------------------------
+
+var qrcode = function() {
+
+  //---------------------------------------------------------------------
+  // qrcode
+  //---------------------------------------------------------------------
+
+  /**
+   * qrcode
+   * @param typeNumber 1 to 40
+   * @param errorCorrectionLevel 'L','M','Q','H'
+   */
+  var qrcode = function(typeNumber, errorCorrectionLevel) {
+
+    var PAD0 = 0xEC;
+    var PAD1 = 0x11;
+
+    var _typeNumber = typeNumber;
+    var _errorCorrectionLevel = QRErrorCorrectionLevel[errorCorrectionLevel];
+    var _modules = null;
+    var _moduleCount = 0;
+    var _dataCache = null;
+    var _dataList = [];
+
+    var _this = {};
+
+    var makeImpl = function(test, maskPattern) {
+
+      _moduleCount = _typeNumber * 4 + 17;
+      _modules = function(moduleCount) {
+        var modules = new Array(moduleCount);
+        for (var row = 0; row < moduleCount; row += 1) {
+          modules[row] = new Array(moduleCount);
+          for (var col = 0; col < moduleCount; col += 1) {
+            modules[row][col] = null;
+          }
+        }
+        return modules;
+      }(_moduleCount);
+
+      setupPositionProbePattern(0, 0);
+      setupPositionProbePattern(_moduleCount - 7, 0);
+      setupPositionProbePattern(0, _moduleCount - 7);
+      setupPositionAdjustPattern();
+      setupTimingPattern();
+      setupTypeInfo(test, maskPattern);
+
+      if (_typeNumber >= 7) {
+        setupTypeNumber(test);
+      }
+
+      if (_dataCache == null) {
+        _dataCache = createData(_typeNumber, _errorCorrectionLevel, _dataList);
+      }
+
+      mapData(_dataCache, maskPattern);
+    };
+
+    var setupPositionProbePattern = function(row, col) {
+
+      for (var r = -1; r <= 7; r += 1) {
+
+        if (row + r <= -1 || _moduleCount <= row + r) continue;
+
+        for (var c = -1; c <= 7; c += 1) {
+
+          if (col + c <= -1 || _moduleCount <= col + c) continue;
+
+          if ( (0 <= r && r <= 6 && (c == 0 || c == 6) )
+              || (0 <= c && c <= 6 && (r == 0 || r == 6) )
+              || (2 <= r && r <= 4 && 2 <= c && c <= 4) ) {
+            _modules[row + r][col + c] = true;
+          } else {
+            _modules[row + r][col + c] = false;
+          }
+        }
+      }
+    };
+
+    var getBestMaskPattern = function() {
+
+      var minLostPoint = 0;
+      var pattern = 0;
+
+      for (var i = 0; i < 8; i += 1) {
+
+        makeImpl(true, i);
+
+        var lostPoint = QRUtil.getLostPoint(_this);
+
+        if (i == 0 || minLostPoint > lostPoint) {
+          minLostPoint = lostPoint;
+          pattern = i;
+        }
+      }
+
+      return pattern;
+    };
+
+    var setupTimingPattern = function() {
+
+      for (var r = 8; r < _moduleCount - 8; r += 1) {
+        if (_modules[r][6] != null) {
+          continue;
+        }
+        _modules[r][6] = (r % 2 == 0);
+      }
+
+      for (var c = 8; c < _moduleCount - 8; c += 1) {
+        if (_modules[6][c] != null) {
+          continue;
+        }
+        _modules[6][c] = (c % 2 == 0);
+      }
+    };
+
+    var setupPositionAdjustPattern = function() {
+
+      var pos = QRUtil.getPatternPosition(_typeNumber);
+
+      for (var i = 0; i < pos.length; i += 1) {
+
+        for (var j = 0; j < pos.length; j += 1) {
+
+          var row = pos[i];
+          var col = pos[j];
+
+          if (_modules[row][col] != null) {
+            continue;
+          }
+
+          for (var r = -2; r <= 2; r += 1) {
+
+            for (var c = -2; c <= 2; c += 1) {
+
+              if (r == -2 || r == 2 || c == -2 || c == 2
+                  || (r == 0 && c == 0) ) {
+                _modules[row + r][col + c] = true;
+              } else {
+                _modules[row + r][col + c] = false;
+              }
+            }
+          }
+        }
+      }
+    };
+
+    var setupTypeNumber = function(test) {
+
+      var bits = QRUtil.getBCHTypeNumber(_typeNumber);
+
+      for (var i = 0; i < 18; i += 1) {
+        var mod = (!test && ( (bits >> i) & 1) == 1);
+        _modules[Math.floor(i / 3)][i % 3 + _moduleCount - 8 - 3] = mod;
+      }
+
+      for (var i = 0; i < 18; i += 1) {
+        var mod = (!test && ( (bits >> i) & 1) == 1);
+        _modules[i % 3 + _moduleCount - 8 - 3][Math.floor(i / 3)] = mod;
+      }
+    };
+
+    var setupTypeInfo = function(test, maskPattern) {
+
+      var data = (_errorCorrectionLevel << 3) | maskPattern;
+      var bits = QRUtil.getBCHTypeInfo(data);
+
+      // vertical
+      for (var i = 0; i < 15; i += 1) {
+
+        var mod = (!test && ( (bits >> i) & 1) == 1);
+
+        if (i < 6) {
+          _modules[i][8] = mod;
+        } else if (i < 8) {
+          _modules[i + 1][8] = mod;
+        } else {
+          _modules[_moduleCount - 15 + i][8] = mod;
+        }
+      }
+
+      // horizontal
+      for (var i = 0; i < 15; i += 1) {
+
+        var mod = (!test && ( (bits >> i) & 1) == 1);
+
+        if (i < 8) {
+          _modules[8][_moduleCount - i - 1] = mod;
+        } else if (i < 9) {
+          _modules[8][15 - i - 1 + 1] = mod;
+        } else {
+          _modules[8][15 - i - 1] = mod;
+        }
+      }
+
+      // fixed module
+      _modules[_moduleCount - 8][8] = (!test);
+    };
+
+    var mapData = function(data, maskPattern) {
+
+      var inc = -1;
+      var row = _moduleCount - 1;
+      var bitIndex = 7;
+      var byteIndex = 0;
+      var maskFunc = QRUtil.getMaskFunction(maskPattern);
+
+      for (var col = _moduleCount - 1; col > 0; col -= 2) {
+
+        if (col == 6) col -= 1;
+
+        while (true) {
+
+          for (var c = 0; c < 2; c += 1) {
+
+            if (_modules[row][col - c] == null) {
+
+              var dark = false;
+
+              if (byteIndex < data.length) {
+                dark = ( ( (data[byteIndex] >>> bitIndex) & 1) == 1);
+              }
+
+              var mask = maskFunc(row, col - c);
+
+              if (mask) {
+                dark = !dark;
+              }
+
+              _modules[row][col - c] = dark;
+              bitIndex -= 1;
+
+              if (bitIndex == -1) {
+                byteIndex += 1;
+                bitIndex = 7;
+              }
+            }
+          }
+
+          row += inc;
+
+          if (row < 0 || _moduleCount <= row) {
+            row -= inc;
+            inc = -inc;
+            break;
+          }
+        }
+      }
+    };
+
+    var createBytes = function(buffer, rsBlocks) {
+
+      var offset = 0;
+
+      var maxDcCount = 0;
+      var maxEcCount = 0;
+
+      var dcdata = new Array(rsBlocks.length);
+      var ecdata = new Array(rsBlocks.length);
+
+      for (var r = 0; r < rsBlocks.length; r += 1) {
+
+        var dcCount = rsBlocks[r].dataCount;
+        var ecCount = rsBlocks[r].totalCount - dcCount;
+
+        maxDcCount = Math.max(maxDcCount, dcCount);
+        maxEcCount = Math.max(maxEcCount, ecCount);
+
+        dcdata[r] = new Array(dcCount);
+
+        for (var i = 0; i < dcdata[r].length; i += 1) {
+          dcdata[r][i] = 0xff & buffer.getBuffer()[i + offset];
+        }
+        offset += dcCount;
+
+        var rsPoly = QRUtil.getErrorCorrectPolynomial(ecCount);
+        var rawPoly = qrPolynomial(dcdata[r], rsPoly.getLength() - 1);
+
+        var modPoly = rawPoly.mod(rsPoly);
+        ecdata[r] = new Array(rsPoly.getLength() - 1);
+        for (var i = 0; i < ecdata[r].length; i += 1) {
+          var modIndex = i + modPoly.getLength() - ecdata[r].length;
+          ecdata[r][i] = (modIndex >= 0)? modPoly.getAt(modIndex) : 0;
+        }
+      }
+
+      var totalCodeCount = 0;
+      for (var i = 0; i < rsBlocks.length; i += 1) {
+        totalCodeCount += rsBlocks[i].totalCount;
+      }
+
+      var data = new Array(totalCodeCount);
+      var index = 0;
+
+      for (var i = 0; i < maxDcCount; i += 1) {
+        for (var r = 0; r < rsBlocks.length; r += 1) {
+          if (i < dcdata[r].length) {
+            data[index] = dcdata[r][i];
+            index += 1;
+          }
+        }
+      }
+
+      for (var i = 0; i < maxEcCount; i += 1) {
+        for (var r = 0; r < rsBlocks.length; r += 1) {
+          if (i < ecdata[r].length) {
+            data[index] = ecdata[r][i];
+            index += 1;
+          }
+        }
+      }
+
+      return data;
+    };
+
+    var createData = function(typeNumber, errorCorrectionLevel, dataList) {
+
+      var rsBlocks = QRRSBlock.getRSBlocks(typeNumber, errorCorrectionLevel);
+
+      var buffer = qrBitBuffer();
+
+      for (var i = 0; i < dataList.length; i += 1) {
+        var data = dataList[i];
+        buffer.put(data.getMode(), 4);
+        buffer.put(data.getLength(), QRUtil.getLengthInBits(data.getMode(), typeNumber) );
+        data.write(buffer);
+      }
+
+      // calc num max data.
+      var totalDataCount = 0;
+      for (var i = 0; i < rsBlocks.length; i += 1) {
+        totalDataCount += rsBlocks[i].dataCount;
+      }
+
+      if (buffer.getLengthInBits() > totalDataCount * 8) {
+        throw 'code length overflow. ('
+          + buffer.getLengthInBits()
+          + '>'
+          + totalDataCount * 8
+          + ')';
+      }
+
+      // end code
+      if (buffer.getLengthInBits() + 4 <= totalDataCount * 8) {
+        buffer.put(0, 4);
+      }
+
+      // padding
+      while (buffer.getLengthInBits() % 8 != 0) {
+        buffer.putBit(false);
+      }
+
+      // padding
+      while (true) {
+
+        if (buffer.getLengthInBits() >= totalDataCount * 8) {
+          break;
+        }
+        buffer.put(PAD0, 8);
+
+        if (buffer.getLengthInBits() >= totalDataCount * 8) {
+          break;
+        }
+        buffer.put(PAD1, 8);
+      }
+
+      return createBytes(buffer, rsBlocks);
+    };
+
+    _this.addData = function(data, mode) {
+
+      mode = mode || 'Byte';
+
+      var newData = null;
+
+      switch(mode) {
+      case 'Numeric' :
+        newData = qrNumber(data);
+        break;
+      case 'Alphanumeric' :
+        newData = qrAlphaNum(data);
+        break;
+      case 'Byte' :
+        newData = qr8BitByte(data);
+        break;
+      case 'Kanji' :
+        newData = qrKanji(data);
+        break;
+      default :
+        throw 'mode:' + mode;
+      }
+
+      _dataList.push(newData);
+      _dataCache = null;
+    };
+
+    _this.isDark = function(row, col) {
+      if (row < 0 || _moduleCount <= row || col < 0 || _moduleCount <= col) {
+        throw row + ',' + col;
+      }
+      return _modules[row][col];
+    };
+
+    _this.getModuleCount = function() {
+      return _moduleCount;
+    };
+
+    _this.make = function() {
+      if (_typeNumber < 1) {
+        var typeNumber = 1;
+
+        for (; typeNumber < 40; typeNumber++) {
+          var rsBlocks = QRRSBlock.getRSBlocks(typeNumber, _errorCorrectionLevel);
+          var buffer = qrBitBuffer();
+
+          for (var i = 0; i < _dataList.length; i++) {
+            var data = _dataList[i];
+            buffer.put(data.getMode(), 4);
+            buffer.put(data.getLength(), QRUtil.getLengthInBits(data.getMode(), typeNumber) );
+            data.write(buffer);
+          }
+
+          var totalDataCount = 0;
+          for (var i = 0; i < rsBlocks.length; i++) {
+            totalDataCount += rsBlocks[i].dataCount;
+          }
+
+          if (buffer.getLengthInBits() <= totalDataCount * 8) {
+            break;
+          }
+        }
+
+        _typeNumber = typeNumber;
+      }
+
+      makeImpl(false, getBestMaskPattern() );
+    };
+
+    _this.createTableTag = function(cellSize, margin) {
+
+      cellSize = cellSize || 2;
+      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+      var qrHtml = '';
+
+      qrHtml += '<table style="';
+      qrHtml += ' border-width: 0px; border-style: none;';
+      qrHtml += ' border-collapse: collapse;';
+      qrHtml += ' padding: 0px; margin: ' + margin + 'px;';
+      qrHtml += '">';
+      qrHtml += '<tbody>';
+
+      for (var r = 0; r < _this.getModuleCount(); r += 1) {
+
+        qrHtml += '<tr>';
+
+        for (var c = 0; c < _this.getModuleCount(); c += 1) {
+          qrHtml += '<td style="';
+          qrHtml += ' border-width: 0px; border-style: none;';
+          qrHtml += ' border-collapse: collapse;';
+          qrHtml += ' padding: 0px; margin: 0px;';
+          qrHtml += ' width: ' + cellSize + 'px;';
+          qrHtml += ' height: ' + cellSize + 'px;';
+          qrHtml += ' background-color: ';
+          qrHtml += _this.isDark(r, c)? '#000000' : '#ffffff';
+          qrHtml += ';';
+          qrHtml += '"/>';
+        }
+
+        qrHtml += '</tr>';
+      }
+
+      qrHtml += '</tbody>';
+      qrHtml += '</table>';
+
+      return qrHtml;
+    };
+
+    _this.createSvgTag = function(cellSize, margin, alt, title) {
+
+      var opts = {};
+      if (typeof arguments[0] == 'object') {
+        // Called by options.
+        opts = arguments[0];
+        // overwrite cellSize and margin.
+        cellSize = opts.cellSize;
+        margin = opts.margin;
+        alt = opts.alt;
+        title = opts.title;
+      }
+
+      cellSize = cellSize || 2;
+      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+      // Compose alt property surrogate
+      alt = (typeof alt === 'string') ? {text: alt} : alt || {};
+      alt.text = alt.text || null;
+      alt.id = (alt.text) ? alt.id || 'qrcode-description' : null;
+
+      // Compose title property surrogate
+      title = (typeof title === 'string') ? {text: title} : title || {};
+      title.text = title.text || null;
+      title.id = (title.text) ? title.id || 'qrcode-title' : null;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+      var c, mc, r, mr, qrSvg='', rect;
+
+      rect = 'l' + cellSize + ',0 0,' + cellSize +
+        ' -' + cellSize + ',0 0,-' + cellSize + 'z ';
+
+      qrSvg += '<svg version="1.1" xmlns="http://www.w3.org/2000/svg"';
+      qrSvg += !opts.scalable ? ' width="' + size + 'px" height="' + size + 'px"' : '';
+      qrSvg += ' viewBox="0 0 ' + size + ' ' + size + '" ';
+      qrSvg += ' preserveAspectRatio="xMinYMin meet"';
+      qrSvg += (title.text || alt.text) ? ' role="img" aria-labelledby="' +
+          escapeXml([title.id, alt.id].join(' ').trim() ) + '"' : '';
+      qrSvg += '>';
+      qrSvg += (title.text) ? '<title id="' + escapeXml(title.id) + '">' +
+          escapeXml(title.text) + '</title>' : '';
+      qrSvg += (alt.text) ? '<description id="' + escapeXml(alt.id) + '">' +
+          escapeXml(alt.text) + '</description>' : '';
+      qrSvg += '<rect width="100%" height="100%" fill="white" cx="0" cy="0"/>';
+      qrSvg += '<path d="';
+
+      for (r = 0; r < _this.getModuleCount(); r += 1) {
+        mr = r * cellSize + margin;
+        for (c = 0; c < _this.getModuleCount(); c += 1) {
+          if (_this.isDark(r, c) ) {
+            mc = c*cellSize+margin;
+            qrSvg += 'M' + mc + ',' + mr + rect;
+          }
+        }
+      }
+
+      qrSvg += '" stroke="transparent" fill="black"/>';
+      qrSvg += '</svg>';
+
+      return qrSvg;
+    };
+
+    _this.createDataURL = function(cellSize, margin) {
+
+      cellSize = cellSize || 2;
+      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+      var min = margin;
+      var max = size - margin;
+
+      return createDataURL(size, size, function(x, y) {
+        if (min <= x && x < max && min <= y && y < max) {
+          var c = Math.floor( (x - min) / cellSize);
+          var r = Math.floor( (y - min) / cellSize);
+          return _this.isDark(r, c)? 0 : 1;
+        } else {
+          return 1;
+        }
+      } );
+    };
+
+    _this.createImgTag = function(cellSize, margin, alt) {
+
+      cellSize = cellSize || 2;
+      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+
+      var img = '';
+      img += '<img';
+      img += '\\u0020src="';
+      img += _this.createDataURL(cellSize, margin);
+      img += '"';
+      img += '\\u0020width="';
+      img += size;
+      img += '"';
+      img += '\\u0020height="';
+      img += size;
+      img += '"';
+      if (alt) {
+        img += '\\u0020alt="';
+        img += escapeXml(alt);
+        img += '"';
+      }
+      img += '/>';
+
+      return img;
+    };
+
+    var escapeXml = function(s) {
+      var escaped = '';
+      for (var i = 0; i < s.length; i += 1) {
+        var c = s.charAt(i);
+        switch(c) {
+        case '<': escaped += '&lt;'; break;
+        case '>': escaped += '&gt;'; break;
+        case '&': escaped += '&amp;'; break;
+        case '"': escaped += '&quot;'; break;
+        default : escaped += c; break;
+        }
+      }
+      return escaped;
+    };
+
+    var _createHalfASCII = function(margin) {
+      var cellSize = 1;
+      margin = (typeof margin == 'undefined')? cellSize * 2 : margin;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+      var min = margin;
+      var max = size - margin;
+
+      var y, x, r1, r2, p;
+
+      var blocks = {
+        '\u2588\u2588': '\u2588',
+        '\u2588 ': '\u2580',
+        ' \u2588': '\u2584',
+        '  ': ' '
+      };
+
+      var blocksLastLineNoMargin = {
+        '\u2588\u2588': '\u2580',
+        '\u2588 ': '\u2580',
+        ' \u2588': ' ',
+        '  ': ' '
+      };
+
+      var ascii = '';
+      for (y = 0; y < size; y += 2) {
+        r1 = Math.floor((y - min) / cellSize);
+        r2 = Math.floor((y + 1 - min) / cellSize);
+        for (x = 0; x < size; x += 1) {
+          p = '\u2588';
+
+          if (min <= x && x < max && min <= y && y < max && _this.isDark(r1, Math.floor((x - min) / cellSize))) {
+            p = ' ';
+          }
+
+          if (min <= x && x < max && min <= y+1 && y+1 < max && _this.isDark(r2, Math.floor((x - min) / cellSize))) {
+            p += ' ';
+          }
+          else {
+            p += '\u2588';
+          }
+
+          // Output 2 characters per pixel, to create full square. 1 character per pixels gives only half width of square.
+          ascii += (margin < 1 && y+1 >= max) ? blocksLastLineNoMargin[p] : blocks[p];
+        }
+
+        ascii += '\\n';
+      }
+
+      if (size % 2 && margin > 0) {
+        return ascii.substring(0, ascii.length - size - 1) + Array(size+1).join('\u2580');
+      }
+
+      return ascii.substring(0, ascii.length-1);
+    };
+
+    _this.createASCII = function(cellSize, margin) {
+      cellSize = cellSize || 1;
+
+      if (cellSize < 2) {
+        return _createHalfASCII(margin);
+      }
+
+      cellSize -= 1;
+      margin = (typeof margin == 'undefined')? cellSize * 2 : margin;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+      var min = margin;
+      var max = size - margin;
+
+      var y, x, r, p;
+
+      var white = Array(cellSize+1).join('\u2588\u2588');
+      var black = Array(cellSize+1).join('  ');
+
+      var ascii = '';
+      var line = '';
+      for (y = 0; y < size; y += 1) {
+        r = Math.floor( (y - min) / cellSize);
+        line = '';
+        for (x = 0; x < size; x += 1) {
+          p = 1;
+
+          if (min <= x && x < max && min <= y && y < max && _this.isDark(r, Math.floor((x - min) / cellSize))) {
+            p = 0;
+          }
+
+          // Output 2 characters per pixel, to create full square. 1 character per pixels gives only half width of square.
+          line += p ? white : black;
+        }
+
+        for (r = 0; r < cellSize; r += 1) {
+          ascii += line + '\\n';
+        }
+      }
+
+      return ascii.substring(0, ascii.length-1);
+    };
+
+    _this.renderTo2dContext = function(context, cellSize) {
+      cellSize = cellSize || 2;
+      var length = _this.getModuleCount();
+      for (var row = 0; row < length; row++) {
+        for (var col = 0; col < length; col++) {
+          context.fillStyle = _this.isDark(row, col) ? 'black' : 'white';
+          context.fillRect(row * cellSize, col * cellSize, cellSize, cellSize);
+        }
+      }
+    }
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qrcode.stringToBytes
+  //---------------------------------------------------------------------
+
+  qrcode.stringToBytesFuncs = {
+    'default' : function(s) {
+      var bytes = [];
+      for (var i = 0; i < s.length; i += 1) {
+        var c = s.charCodeAt(i);
+        bytes.push(c & 0xff);
+      }
+      return bytes;
+    }
+  };
+
+  qrcode.stringToBytes = qrcode.stringToBytesFuncs['default'];
+
+  //---------------------------------------------------------------------
+  // qrcode.createStringToBytes
+  //---------------------------------------------------------------------
+
+  /**
+   * @param unicodeData base64 string of byte array.
+   * [16bit Unicode],[16bit Bytes], ...
+   * @param numChars
+   */
+  qrcode.createStringToBytes = function(unicodeData, numChars) {
+
+    // create conversion map.
+
+    var unicodeMap = function() {
+
+      var bin = base64DecodeInputStream(unicodeData);
+      var read = function() {
+        var b = bin.read();
+        if (b == -1) throw 'eof';
+        return b;
+      };
+
+      var count = 0;
+      var unicodeMap = {};
+      while (true) {
+        var b0 = bin.read();
+        if (b0 == -1) break;
+        var b1 = read();
+        var b2 = read();
+        var b3 = read();
+        var k = String.fromCharCode( (b0 << 8) | b1);
+        var v = (b2 << 8) | b3;
+        unicodeMap[k] = v;
+        count += 1;
+      }
+      if (count != numChars) {
+        throw count + ' != ' + numChars;
+      }
+
+      return unicodeMap;
+    }();
+
+    var unknownChar = '?'.charCodeAt(0);
+
+    return function(s) {
+      var bytes = [];
+      for (var i = 0; i < s.length; i += 1) {
+        var c = s.charCodeAt(i);
+        if (c < 128) {
+          bytes.push(c);
+        } else {
+          var b = unicodeMap[s.charAt(i)];
+          if (typeof b == 'number') {
+            if ( (b & 0xff) == b) {
+              // 1byte
+              bytes.push(b);
+            } else {
+              // 2bytes
+              bytes.push(b >>> 8);
+              bytes.push(b & 0xff);
+            }
+          } else {
+            bytes.push(unknownChar);
+          }
+        }
+      }
+      return bytes;
+    };
+  };
+
+  //---------------------------------------------------------------------
+  // QRMode
+  //---------------------------------------------------------------------
+
+  var QRMode = {
+    MODE_NUMBER :    1 << 0,
+    MODE_ALPHA_NUM : 1 << 1,
+    MODE_8BIT_BYTE : 1 << 2,
+    MODE_KANJI :     1 << 3
+  };
+
+  //---------------------------------------------------------------------
+  // QRErrorCorrectionLevel
+  //---------------------------------------------------------------------
+
+  var QRErrorCorrectionLevel = {
+    L : 1,
+    M : 0,
+    Q : 3,
+    H : 2
+  };
+
+  //---------------------------------------------------------------------
+  // QRMaskPattern
+  //---------------------------------------------------------------------
+
+  var QRMaskPattern = {
+    PATTERN000 : 0,
+    PATTERN001 : 1,
+    PATTERN010 : 2,
+    PATTERN011 : 3,
+    PATTERN100 : 4,
+    PATTERN101 : 5,
+    PATTERN110 : 6,
+    PATTERN111 : 7
+  };
+
+  //---------------------------------------------------------------------
+  // QRUtil
+  //---------------------------------------------------------------------
+
+  var QRUtil = function() {
+
+    var PATTERN_POSITION_TABLE = [
+      [],
+      [6, 18],
+      [6, 22],
+      [6, 26],
+      [6, 30],
+      [6, 34],
+      [6, 22, 38],
+      [6, 24, 42],
+      [6, 26, 46],
+      [6, 28, 50],
+      [6, 30, 54],
+      [6, 32, 58],
+      [6, 34, 62],
+      [6, 26, 46, 66],
+      [6, 26, 48, 70],
+      [6, 26, 50, 74],
+      [6, 30, 54, 78],
+      [6, 30, 56, 82],
+      [6, 30, 58, 86],
+      [6, 34, 62, 90],
+      [6, 28, 50, 72, 94],
+      [6, 26, 50, 74, 98],
+      [6, 30, 54, 78, 102],
+      [6, 28, 54, 80, 106],
+      [6, 32, 58, 84, 110],
+      [6, 30, 58, 86, 114],
+      [6, 34, 62, 90, 118],
+      [6, 26, 50, 74, 98, 122],
+      [6, 30, 54, 78, 102, 126],
+      [6, 26, 52, 78, 104, 130],
+      [6, 30, 56, 82, 108, 134],
+      [6, 34, 60, 86, 112, 138],
+      [6, 30, 58, 86, 114, 142],
+      [6, 34, 62, 90, 118, 146],
+      [6, 30, 54, 78, 102, 126, 150],
+      [6, 24, 50, 76, 102, 128, 154],
+      [6, 28, 54, 80, 106, 132, 158],
+      [6, 32, 58, 84, 110, 136, 162],
+      [6, 26, 54, 82, 110, 138, 166],
+      [6, 30, 58, 86, 114, 142, 170]
+    ];
+    var G15 = (1 << 10) | (1 << 8) | (1 << 5) | (1 << 4) | (1 << 2) | (1 << 1) | (1 << 0);
+    var G18 = (1 << 12) | (1 << 11) | (1 << 10) | (1 << 9) | (1 << 8) | (1 << 5) | (1 << 2) | (1 << 0);
+    var G15_MASK = (1 << 14) | (1 << 12) | (1 << 10) | (1 << 4) | (1 << 1);
+
+    var _this = {};
+
+    var getBCHDigit = function(data) {
+      var digit = 0;
+      while (data != 0) {
+        digit += 1;
+        data >>>= 1;
+      }
+      return digit;
+    };
+
+    _this.getBCHTypeInfo = function(data) {
+      var d = data << 10;
+      while (getBCHDigit(d) - getBCHDigit(G15) >= 0) {
+        d ^= (G15 << (getBCHDigit(d) - getBCHDigit(G15) ) );
+      }
+      return ( (data << 10) | d) ^ G15_MASK;
+    };
+
+    _this.getBCHTypeNumber = function(data) {
+      var d = data << 12;
+      while (getBCHDigit(d) - getBCHDigit(G18) >= 0) {
+        d ^= (G18 << (getBCHDigit(d) - getBCHDigit(G18) ) );
+      }
+      return (data << 12) | d;
+    };
+
+    _this.getPatternPosition = function(typeNumber) {
+      return PATTERN_POSITION_TABLE[typeNumber - 1];
+    };
+
+    _this.getMaskFunction = function(maskPattern) {
+
+      switch (maskPattern) {
+
+      case QRMaskPattern.PATTERN000 :
+        return function(i, j) { return (i + j) % 2 == 0; };
+      case QRMaskPattern.PATTERN001 :
+        return function(i, j) { return i % 2 == 0; };
+      case QRMaskPattern.PATTERN010 :
+        return function(i, j) { return j % 3 == 0; };
+      case QRMaskPattern.PATTERN011 :
+        return function(i, j) { return (i + j) % 3 == 0; };
+      case QRMaskPattern.PATTERN100 :
+        return function(i, j) { return (Math.floor(i / 2) + Math.floor(j / 3) ) % 2 == 0; };
+      case QRMaskPattern.PATTERN101 :
+        return function(i, j) { return (i * j) % 2 + (i * j) % 3 == 0; };
+      case QRMaskPattern.PATTERN110 :
+        return function(i, j) { return ( (i * j) % 2 + (i * j) % 3) % 2 == 0; };
+      case QRMaskPattern.PATTERN111 :
+        return function(i, j) { return ( (i * j) % 3 + (i + j) % 2) % 2 == 0; };
+
+      default :
+        throw 'bad maskPattern:' + maskPattern;
+      }
+    };
+
+    _this.getErrorCorrectPolynomial = function(errorCorrectLength) {
+      var a = qrPolynomial([1], 0);
+      for (var i = 0; i < errorCorrectLength; i += 1) {
+        a = a.multiply(qrPolynomial([1, QRMath.gexp(i)], 0) );
+      }
+      return a;
+    };
+
+    _this.getLengthInBits = function(mode, type) {
+
+      if (1 <= type && type < 10) {
+
+        // 1 - 9
+
+        switch(mode) {
+        case QRMode.MODE_NUMBER    : return 10;
+        case QRMode.MODE_ALPHA_NUM : return 9;
+        case QRMode.MODE_8BIT_BYTE : return 8;
+        case QRMode.MODE_KANJI     : return 8;
+        default :
+          throw 'mode:' + mode;
+        }
+
+      } else if (type < 27) {
+
+        // 10 - 26
+
+        switch(mode) {
+        case QRMode.MODE_NUMBER    : return 12;
+        case QRMode.MODE_ALPHA_NUM : return 11;
+        case QRMode.MODE_8BIT_BYTE : return 16;
+        case QRMode.MODE_KANJI     : return 10;
+        default :
+          throw 'mode:' + mode;
+        }
+
+      } else if (type < 41) {
+
+        // 27 - 40
+
+        switch(mode) {
+        case QRMode.MODE_NUMBER    : return 14;
+        case QRMode.MODE_ALPHA_NUM : return 13;
+        case QRMode.MODE_8BIT_BYTE : return 16;
+        case QRMode.MODE_KANJI     : return 12;
+        default :
+          throw 'mode:' + mode;
+        }
+
+      } else {
+        throw 'type:' + type;
+      }
+    };
+
+    _this.getLostPoint = function(qrcode) {
+
+      var moduleCount = qrcode.getModuleCount();
+
+      var lostPoint = 0;
+
+      // LEVEL1
+
+      for (var row = 0; row < moduleCount; row += 1) {
+        for (var col = 0; col < moduleCount; col += 1) {
+
+          var sameCount = 0;
+          var dark = qrcode.isDark(row, col);
+
+          for (var r = -1; r <= 1; r += 1) {
+
+            if (row + r < 0 || moduleCount <= row + r) {
+              continue;
+            }
+
+            for (var c = -1; c <= 1; c += 1) {
+
+              if (col + c < 0 || moduleCount <= col + c) {
+                continue;
+              }
+
+              if (r == 0 && c == 0) {
+                continue;
+              }
+
+              if (dark == qrcode.isDark(row + r, col + c) ) {
+                sameCount += 1;
+              }
+            }
+          }
+
+          if (sameCount > 5) {
+            lostPoint += (3 + sameCount - 5);
+          }
+        }
+      };
+
+      // LEVEL2
+
+      for (var row = 0; row < moduleCount - 1; row += 1) {
+        for (var col = 0; col < moduleCount - 1; col += 1) {
+          var count = 0;
+          if (qrcode.isDark(row, col) ) count += 1;
+          if (qrcode.isDark(row + 1, col) ) count += 1;
+          if (qrcode.isDark(row, col + 1) ) count += 1;
+          if (qrcode.isDark(row + 1, col + 1) ) count += 1;
+          if (count == 0 || count == 4) {
+            lostPoint += 3;
+          }
+        }
+      }
+
+      // LEVEL3
+
+      for (var row = 0; row < moduleCount; row += 1) {
+        for (var col = 0; col < moduleCount - 6; col += 1) {
+          if (qrcode.isDark(row, col)
+              && !qrcode.isDark(row, col + 1)
+              &&  qrcode.isDark(row, col + 2)
+              &&  qrcode.isDark(row, col + 3)
+              &&  qrcode.isDark(row, col + 4)
+              && !qrcode.isDark(row, col + 5)
+              &&  qrcode.isDark(row, col + 6) ) {
+            lostPoint += 40;
+          }
+        }
+      }
+
+      for (var col = 0; col < moduleCount; col += 1) {
+        for (var row = 0; row < moduleCount - 6; row += 1) {
+          if (qrcode.isDark(row, col)
+              && !qrcode.isDark(row + 1, col)
+              &&  qrcode.isDark(row + 2, col)
+              &&  qrcode.isDark(row + 3, col)
+              &&  qrcode.isDark(row + 4, col)
+              && !qrcode.isDark(row + 5, col)
+              &&  qrcode.isDark(row + 6, col) ) {
+            lostPoint += 40;
+          }
+        }
+      }
+
+      // LEVEL4
+
+      var darkCount = 0;
+
+      for (var col = 0; col < moduleCount; col += 1) {
+        for (var row = 0; row < moduleCount; row += 1) {
+          if (qrcode.isDark(row, col) ) {
+            darkCount += 1;
+          }
+        }
+      }
+
+      var ratio = Math.abs(100 * darkCount / moduleCount / moduleCount - 50) / 5;
+      lostPoint += ratio * 10;
+
+      return lostPoint;
+    };
+
+    return _this;
+  }();
+
+  //---------------------------------------------------------------------
+  // QRMath
+  //---------------------------------------------------------------------
+
+  var QRMath = function() {
+
+    var EXP_TABLE = new Array(256);
+    var LOG_TABLE = new Array(256);
+
+    // initialize tables
+    for (var i = 0; i < 8; i += 1) {
+      EXP_TABLE[i] = 1 << i;
+    }
+    for (var i = 8; i < 256; i += 1) {
+      EXP_TABLE[i] = EXP_TABLE[i - 4]
+        ^ EXP_TABLE[i - 5]
+        ^ EXP_TABLE[i - 6]
+        ^ EXP_TABLE[i - 8];
+    }
+    for (var i = 0; i < 255; i += 1) {
+      LOG_TABLE[EXP_TABLE[i] ] = i;
+    }
+
+    var _this = {};
+
+    _this.glog = function(n) {
+
+      if (n < 1) {
+        throw 'glog(' + n + ')';
+      }
+
+      return LOG_TABLE[n];
+    };
+
+    _this.gexp = function(n) {
+
+      while (n < 0) {
+        n += 255;
+      }
+
+      while (n >= 256) {
+        n -= 255;
+      }
+
+      return EXP_TABLE[n];
+    };
+
+    return _this;
+  }();
+
+  //---------------------------------------------------------------------
+  // qrPolynomial
+  //---------------------------------------------------------------------
+
+  function qrPolynomial(num, shift) {
+
+    if (typeof num.length == 'undefined') {
+      throw num.length + '/' + shift;
+    }
+
+    var _num = function() {
+      var offset = 0;
+      while (offset < num.length && num[offset] == 0) {
+        offset += 1;
+      }
+      var _num = new Array(num.length - offset + shift);
+      for (var i = 0; i < num.length - offset; i += 1) {
+        _num[i] = num[i + offset];
+      }
+      return _num;
+    }();
+
+    var _this = {};
+
+    _this.getAt = function(index) {
+      return _num[index];
+    };
+
+    _this.getLength = function() {
+      return _num.length;
+    };
+
+    _this.multiply = function(e) {
+
+      var num = new Array(_this.getLength() + e.getLength() - 1);
+
+      for (var i = 0; i < _this.getLength(); i += 1) {
+        for (var j = 0; j < e.getLength(); j += 1) {
+          num[i + j] ^= QRMath.gexp(QRMath.glog(_this.getAt(i) ) + QRMath.glog(e.getAt(j) ) );
+        }
+      }
+
+      return qrPolynomial(num, 0);
+    };
+
+    _this.mod = function(e) {
+
+      if (_this.getLength() - e.getLength() < 0) {
+        return _this;
+      }
+
+      var ratio = QRMath.glog(_this.getAt(0) ) - QRMath.glog(e.getAt(0) );
+
+      var num = new Array(_this.getLength() );
+      for (var i = 0; i < _this.getLength(); i += 1) {
+        num[i] = _this.getAt(i);
+      }
+
+      for (var i = 0; i < e.getLength(); i += 1) {
+        num[i] ^= QRMath.gexp(QRMath.glog(e.getAt(i) ) + ratio);
+      }
+
+      // recursive call
+      return qrPolynomial(num, 0).mod(e);
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // QRRSBlock
+  //---------------------------------------------------------------------
+
+  var QRRSBlock = function() {
+
+    var RS_BLOCK_TABLE = [
+
+      // L
+      // M
+      // Q
+      // H
+
+      // 1
+      [1, 26, 19],
+      [1, 26, 16],
+      [1, 26, 13],
+      [1, 26, 9],
+
+      // 2
+      [1, 44, 34],
+      [1, 44, 28],
+      [1, 44, 22],
+      [1, 44, 16],
+
+      // 3
+      [1, 70, 55],
+      [1, 70, 44],
+      [2, 35, 17],
+      [2, 35, 13],
+
+      // 4
+      [1, 100, 80],
+      [2, 50, 32],
+      [2, 50, 24],
+      [4, 25, 9],
+
+      // 5
+      [1, 134, 108],
+      [2, 67, 43],
+      [2, 33, 15, 2, 34, 16],
+      [2, 33, 11, 2, 34, 12],
+
+      // 6
+      [2, 86, 68],
+      [4, 43, 27],
+      [4, 43, 19],
+      [4, 43, 15],
+
+      // 7
+      [2, 98, 78],
+      [4, 49, 31],
+      [2, 32, 14, 4, 33, 15],
+      [4, 39, 13, 1, 40, 14],
+
+      // 8
+      [2, 121, 97],
+      [2, 60, 38, 2, 61, 39],
+      [4, 40, 18, 2, 41, 19],
+      [4, 40, 14, 2, 41, 15],
+
+      // 9
+      [2, 146, 116],
+      [3, 58, 36, 2, 59, 37],
+      [4, 36, 16, 4, 37, 17],
+      [4, 36, 12, 4, 37, 13],
+
+      // 10
+      [2, 86, 68, 2, 87, 69],
+      [4, 69, 43, 1, 70, 44],
+      [6, 43, 19, 2, 44, 20],
+      [6, 43, 15, 2, 44, 16],
+
+      // 11
+      [4, 101, 81],
+      [1, 80, 50, 4, 81, 51],
+      [4, 50, 22, 4, 51, 23],
+      [3, 36, 12, 8, 37, 13],
+
+      // 12
+      [2, 116, 92, 2, 117, 93],
+      [6, 58, 36, 2, 59, 37],
+      [4, 46, 20, 6, 47, 21],
+      [7, 42, 14, 4, 43, 15],
+
+      // 13
+      [4, 133, 107],
+      [8, 59, 37, 1, 60, 38],
+      [8, 44, 20, 4, 45, 21],
+      [12, 33, 11, 4, 34, 12],
+
+      // 14
+      [3, 145, 115, 1, 146, 116],
+      [4, 64, 40, 5, 65, 41],
+      [11, 36, 16, 5, 37, 17],
+      [11, 36, 12, 5, 37, 13],
+
+      // 15
+      [5, 109, 87, 1, 110, 88],
+      [5, 65, 41, 5, 66, 42],
+      [5, 54, 24, 7, 55, 25],
+      [11, 36, 12, 7, 37, 13],
+
+      // 16
+      [5, 122, 98, 1, 123, 99],
+      [7, 73, 45, 3, 74, 46],
+      [15, 43, 19, 2, 44, 20],
+      [3, 45, 15, 13, 46, 16],
+
+      // 17
+      [1, 135, 107, 5, 136, 108],
+      [10, 74, 46, 1, 75, 47],
+      [1, 50, 22, 15, 51, 23],
+      [2, 42, 14, 17, 43, 15],
+
+      // 18
+      [5, 150, 120, 1, 151, 121],
+      [9, 69, 43, 4, 70, 44],
+      [17, 50, 22, 1, 51, 23],
+      [2, 42, 14, 19, 43, 15],
+
+      // 19
+      [3, 141, 113, 4, 142, 114],
+      [3, 70, 44, 11, 71, 45],
+      [17, 47, 21, 4, 48, 22],
+      [9, 39, 13, 16, 40, 14],
+
+      // 20
+      [3, 135, 107, 5, 136, 108],
+      [3, 67, 41, 13, 68, 42],
+      [15, 54, 24, 5, 55, 25],
+      [15, 43, 15, 10, 44, 16],
+
+      // 21
+      [4, 144, 116, 4, 145, 117],
+      [17, 68, 42],
+      [17, 50, 22, 6, 51, 23],
+      [19, 46, 16, 6, 47, 17],
+
+      // 22
+      [2, 139, 111, 7, 140, 112],
+      [17, 74, 46],
+      [7, 54, 24, 16, 55, 25],
+      [34, 37, 13],
+
+      // 23
+      [4, 151, 121, 5, 152, 122],
+      [4, 75, 47, 14, 76, 48],
+      [11, 54, 24, 14, 55, 25],
+      [16, 45, 15, 14, 46, 16],
+
+      // 24
+      [6, 147, 117, 4, 148, 118],
+      [6, 73, 45, 14, 74, 46],
+      [11, 54, 24, 16, 55, 25],
+      [30, 46, 16, 2, 47, 17],
+
+      // 25
+      [8, 132, 106, 4, 133, 107],
+      [8, 75, 47, 13, 76, 48],
+      [7, 54, 24, 22, 55, 25],
+      [22, 45, 15, 13, 46, 16],
+
+      // 26
+      [10, 142, 114, 2, 143, 115],
+      [19, 74, 46, 4, 75, 47],
+      [28, 50, 22, 6, 51, 23],
+      [33, 46, 16, 4, 47, 17],
+
+      // 27
+      [8, 152, 122, 4, 153, 123],
+      [22, 73, 45, 3, 74, 46],
+      [8, 53, 23, 26, 54, 24],
+      [12, 45, 15, 28, 46, 16],
+
+      // 28
+      [3, 147, 117, 10, 148, 118],
+      [3, 73, 45, 23, 74, 46],
+      [4, 54, 24, 31, 55, 25],
+      [11, 45, 15, 31, 46, 16],
+
+      // 29
+      [7, 146, 116, 7, 147, 117],
+      [21, 73, 45, 7, 74, 46],
+      [1, 53, 23, 37, 54, 24],
+      [19, 45, 15, 26, 46, 16],
+
+      // 30
+      [5, 145, 115, 10, 146, 116],
+      [19, 75, 47, 10, 76, 48],
+      [15, 54, 24, 25, 55, 25],
+      [23, 45, 15, 25, 46, 16],
+
+      // 31
+      [13, 145, 115, 3, 146, 116],
+      [2, 74, 46, 29, 75, 47],
+      [42, 54, 24, 1, 55, 25],
+      [23, 45, 15, 28, 46, 16],
+
+      // 32
+      [17, 145, 115],
+      [10, 74, 46, 23, 75, 47],
+      [10, 54, 24, 35, 55, 25],
+      [19, 45, 15, 35, 46, 16],
+
+      // 33
+      [17, 145, 115, 1, 146, 116],
+      [14, 74, 46, 21, 75, 47],
+      [29, 54, 24, 19, 55, 25],
+      [11, 45, 15, 46, 46, 16],
+
+      // 34
+      [13, 145, 115, 6, 146, 116],
+      [14, 74, 46, 23, 75, 47],
+      [44, 54, 24, 7, 55, 25],
+      [59, 46, 16, 1, 47, 17],
+
+      // 35
+      [12, 151, 121, 7, 152, 122],
+      [12, 75, 47, 26, 76, 48],
+      [39, 54, 24, 14, 55, 25],
+      [22, 45, 15, 41, 46, 16],
+
+      // 36
+      [6, 151, 121, 14, 152, 122],
+      [6, 75, 47, 34, 76, 48],
+      [46, 54, 24, 10, 55, 25],
+      [2, 45, 15, 64, 46, 16],
+
+      // 37
+      [17, 152, 122, 4, 153, 123],
+      [29, 74, 46, 14, 75, 47],
+      [49, 54, 24, 10, 55, 25],
+      [24, 45, 15, 46, 46, 16],
+
+      // 38
+      [4, 152, 122, 18, 153, 123],
+      [13, 74, 46, 32, 75, 47],
+      [48, 54, 24, 14, 55, 25],
+      [42, 45, 15, 32, 46, 16],
+
+      // 39
+      [20, 147, 117, 4, 148, 118],
+      [40, 75, 47, 7, 76, 48],
+      [43, 54, 24, 22, 55, 25],
+      [10, 45, 15, 67, 46, 16],
+
+      // 40
+      [19, 148, 118, 6, 149, 119],
+      [18, 75, 47, 31, 76, 48],
+      [34, 54, 24, 34, 55, 25],
+      [20, 45, 15, 61, 46, 16]
+    ];
+
+    var qrRSBlock = function(totalCount, dataCount) {
+      var _this = {};
+      _this.totalCount = totalCount;
+      _this.dataCount = dataCount;
+      return _this;
+    };
+
+    var _this = {};
+
+    var getRsBlockTable = function(typeNumber, errorCorrectionLevel) {
+
+      switch(errorCorrectionLevel) {
+      case QRErrorCorrectionLevel.L :
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 0];
+      case QRErrorCorrectionLevel.M :
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 1];
+      case QRErrorCorrectionLevel.Q :
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 2];
+      case QRErrorCorrectionLevel.H :
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 3];
+      default :
+        return undefined;
+      }
+    };
+
+    _this.getRSBlocks = function(typeNumber, errorCorrectionLevel) {
+
+      var rsBlock = getRsBlockTable(typeNumber, errorCorrectionLevel);
+
+      if (typeof rsBlock == 'undefined') {
+        throw 'bad rs block @ typeNumber:' + typeNumber +
+            '/errorCorrectionLevel:' + errorCorrectionLevel;
+      }
+
+      var length = rsBlock.length / 3;
+
+      var list = [];
+
+      for (var i = 0; i < length; i += 1) {
+
+        var count = rsBlock[i * 3 + 0];
+        var totalCount = rsBlock[i * 3 + 1];
+        var dataCount = rsBlock[i * 3 + 2];
+
+        for (var j = 0; j < count; j += 1) {
+          list.push(qrRSBlock(totalCount, dataCount) );
+        }
+      }
+
+      return list;
+    };
+
+    return _this;
+  }();
+
+  //---------------------------------------------------------------------
+  // qrBitBuffer
+  //---------------------------------------------------------------------
+
+  var qrBitBuffer = function() {
+
+    var _buffer = [];
+    var _length = 0;
+
+    var _this = {};
+
+    _this.getBuffer = function() {
+      return _buffer;
+    };
+
+    _this.getAt = function(index) {
+      var bufIndex = Math.floor(index / 8);
+      return ( (_buffer[bufIndex] >>> (7 - index % 8) ) & 1) == 1;
+    };
+
+    _this.put = function(num, length) {
+      for (var i = 0; i < length; i += 1) {
+        _this.putBit( ( (num >>> (length - i - 1) ) & 1) == 1);
+      }
+    };
+
+    _this.getLengthInBits = function() {
+      return _length;
+    };
+
+    _this.putBit = function(bit) {
+
+      var bufIndex = Math.floor(_length / 8);
+      if (_buffer.length <= bufIndex) {
+        _buffer.push(0);
+      }
+
+      if (bit) {
+        _buffer[bufIndex] |= (0x80 >>> (_length % 8) );
+      }
+
+      _length += 1;
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qrNumber
+  //---------------------------------------------------------------------
+
+  var qrNumber = function(data) {
+
+    var _mode = QRMode.MODE_NUMBER;
+    var _data = data;
+
+    var _this = {};
+
+    _this.getMode = function() {
+      return _mode;
+    };
+
+    _this.getLength = function(buffer) {
+      return _data.length;
+    };
+
+    _this.write = function(buffer) {
+
+      var data = _data;
+
+      var i = 0;
+
+      while (i + 2 < data.length) {
+        buffer.put(strToNum(data.substring(i, i + 3) ), 10);
+        i += 3;
+      }
+
+      if (i < data.length) {
+        if (data.length - i == 1) {
+          buffer.put(strToNum(data.substring(i, i + 1) ), 4);
+        } else if (data.length - i == 2) {
+          buffer.put(strToNum(data.substring(i, i + 2) ), 7);
+        }
+      }
+    };
+
+    var strToNum = function(s) {
+      var num = 0;
+      for (var i = 0; i < s.length; i += 1) {
+        num = num * 10 + chatToNum(s.charAt(i) );
+      }
+      return num;
+    };
+
+    var chatToNum = function(c) {
+      if ('0' <= c && c <= '9') {
+        return c.charCodeAt(0) - '0'.charCodeAt(0);
+      }
+      throw 'illegal char :' + c;
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qrAlphaNum
+  //---------------------------------------------------------------------
+
+  var qrAlphaNum = function(data) {
+
+    var _mode = QRMode.MODE_ALPHA_NUM;
+    var _data = data;
+
+    var _this = {};
+
+    _this.getMode = function() {
+      return _mode;
+    };
+
+    _this.getLength = function(buffer) {
+      return _data.length;
+    };
+
+    _this.write = function(buffer) {
+
+      var s = _data;
+
+      var i = 0;
+
+      while (i + 1 < s.length) {
+        buffer.put(
+          getCode(s.charAt(i) ) * 45 +
+          getCode(s.charAt(i + 1) ), 11);
+        i += 2;
+      }
+
+      if (i < s.length) {
+        buffer.put(getCode(s.charAt(i) ), 6);
+      }
+    };
+
+    var getCode = function(c) {
+
+      if ('0' <= c && c <= '9') {
+        return c.charCodeAt(0) - '0'.charCodeAt(0);
+      } else if ('A' <= c && c <= 'Z') {
+        return c.charCodeAt(0) - 'A'.charCodeAt(0) + 10;
+      } else {
+        switch (c) {
+        case ' ' : return 36;
+        case '$' : return 37;
+        case '%' : return 38;
+        case '*' : return 39;
+        case '+' : return 40;
+        case '-' : return 41;
+        case '.' : return 42;
+        case '/' : return 43;
+        case ':' : return 44;
+        default :
+          throw 'illegal char :' + c;
+        }
+      }
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qr8BitByte
+  //---------------------------------------------------------------------
+
+  var qr8BitByte = function(data) {
+
+    var _mode = QRMode.MODE_8BIT_BYTE;
+    var _data = data;
+    var _bytes = qrcode.stringToBytes(data);
+
+    var _this = {};
+
+    _this.getMode = function() {
+      return _mode;
+    };
+
+    _this.getLength = function(buffer) {
+      return _bytes.length;
+    };
+
+    _this.write = function(buffer) {
+      for (var i = 0; i < _bytes.length; i += 1) {
+        buffer.put(_bytes[i], 8);
+      }
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qrKanji
+  //---------------------------------------------------------------------
+
+  var qrKanji = function(data) {
+
+    var _mode = QRMode.MODE_KANJI;
+    var _data = data;
+
+    var stringToBytes = qrcode.stringToBytesFuncs['SJIS'];
+    if (!stringToBytes) {
+      throw 'sjis not supported.';
+    }
+    !function(c, code) {
+      // self test for sjis support.
+      var test = stringToBytes(c);
+      if (test.length != 2 || ( (test[0] << 8) | test[1]) != code) {
+        throw 'sjis not supported.';
+      }
+    }('\\u53cb', 0x9746);
+
+    var _bytes = stringToBytes(data);
+
+    var _this = {};
+
+    _this.getMode = function() {
+      return _mode;
+    };
+
+    _this.getLength = function(buffer) {
+      return ~~(_bytes.length / 2);
+    };
+
+    _this.write = function(buffer) {
+
+      var data = _bytes;
+
+      var i = 0;
+
+      while (i + 1 < data.length) {
+
+        var c = ( (0xff & data[i]) << 8) | (0xff & data[i + 1]);
+
+        if (0x8140 <= c && c <= 0x9FFC) {
+          c -= 0x8140;
+        } else if (0xE040 <= c && c <= 0xEBBF) {
+          c -= 0xC140;
+        } else {
+          throw 'illegal char at ' + (i + 1) + '/' + c;
+        }
+
+        c = ( (c >>> 8) & 0xff) * 0xC0 + (c & 0xff);
+
+        buffer.put(c, 13);
+
+        i += 2;
+      }
+
+      if (i < data.length) {
+        throw 'illegal char at ' + (i + 1);
+      }
+    };
+
+    return _this;
+  };
+
+  //=====================================================================
+  // GIF Support etc.
+  //
+
+  //---------------------------------------------------------------------
+  // byteArrayOutputStream
+  //---------------------------------------------------------------------
+
+  var byteArrayOutputStream = function() {
+
+    var _bytes = [];
+
+    var _this = {};
+
+    _this.writeByte = function(b) {
+      _bytes.push(b & 0xff);
+    };
+
+    _this.writeShort = function(i) {
+      _this.writeByte(i);
+      _this.writeByte(i >>> 8);
+    };
+
+    _this.writeBytes = function(b, off, len) {
+      off = off || 0;
+      len = len || b.length;
+      for (var i = 0; i < len; i += 1) {
+        _this.writeByte(b[i + off]);
+      }
+    };
+
+    _this.writeString = function(s) {
+      for (var i = 0; i < s.length; i += 1) {
+        _this.writeByte(s.charCodeAt(i) );
+      }
+    };
+
+    _this.toByteArray = function() {
+      return _bytes;
+    };
+
+    _this.toString = function() {
+      var s = '';
+      s += '[';
+      for (var i = 0; i < _bytes.length; i += 1) {
+        if (i > 0) {
+          s += ',';
+        }
+        s += _bytes[i];
+      }
+      s += ']';
+      return s;
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // base64EncodeOutputStream
+  //---------------------------------------------------------------------
+
+  var base64EncodeOutputStream = function() {
+
+    var _buffer = 0;
+    var _buflen = 0;
+    var _length = 0;
+    var _base64 = '';
+
+    var _this = {};
+
+    var writeEncoded = function(b) {
+      _base64 += String.fromCharCode(encode(b & 0x3f) );
+    };
+
+    var encode = function(n) {
+      if (n < 0) {
+        // error.
+      } else if (n < 26) {
+        return 0x41 + n;
+      } else if (n < 52) {
+        return 0x61 + (n - 26);
+      } else if (n < 62) {
+        return 0x30 + (n - 52);
+      } else if (n == 62) {
+        return 0x2b;
+      } else if (n == 63) {
+        return 0x2f;
+      }
+      throw 'n:' + n;
+    };
+
+    _this.writeByte = function(n) {
+
+      _buffer = (_buffer << 8) | (n & 0xff);
+      _buflen += 8;
+      _length += 1;
+
+      while (_buflen >= 6) {
+        writeEncoded(_buffer >>> (_buflen - 6) );
+        _buflen -= 6;
+      }
+    };
+
+    _this.flush = function() {
+
+      if (_buflen > 0) {
+        writeEncoded(_buffer << (6 - _buflen) );
+        _buffer = 0;
+        _buflen = 0;
+      }
+
+      if (_length % 3 != 0) {
+        // padding
+        var padlen = 3 - _length % 3;
+        for (var i = 0; i < padlen; i += 1) {
+          _base64 += '=';
+        }
+      }
+    };
+
+    _this.toString = function() {
+      return _base64;
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // base64DecodeInputStream
+  //---------------------------------------------------------------------
+
+  var base64DecodeInputStream = function(str) {
+
+    var _str = str;
+    var _pos = 0;
+    var _buffer = 0;
+    var _buflen = 0;
+
+    var _this = {};
+
+    _this.read = function() {
+
+      while (_buflen < 8) {
+
+        if (_pos >= _str.length) {
+          if (_buflen == 0) {
+            return -1;
+          }
+          throw 'unexpected end of file./' + _buflen;
+        }
+
+        var c = _str.charAt(_pos);
+        _pos += 1;
+
+        if (c == '=') {
+          _buflen = 0;
+          return -1;
+        } else if (c.match(/^\\s$/) ) {
+          // ignore if whitespace.
+          continue;
+        }
+
+        _buffer = (_buffer << 6) | decode(c.charCodeAt(0) );
+        _buflen += 6;
+      }
+
+      var n = (_buffer >>> (_buflen - 8) ) & 0xff;
+      _buflen -= 8;
+      return n;
+    };
+
+    var decode = function(c) {
+      if (0x41 <= c && c <= 0x5a) {
+        return c - 0x41;
+      } else if (0x61 <= c && c <= 0x7a) {
+        return c - 0x61 + 26;
+      } else if (0x30 <= c && c <= 0x39) {
+        return c - 0x30 + 52;
+      } else if (c == 0x2b) {
+        return 62;
+      } else if (c == 0x2f) {
+        return 63;
+      } else {
+        throw 'c:' + c;
+      }
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // gifImage (B/W)
+  //---------------------------------------------------------------------
+
+  var gifImage = function(width, height) {
+
+    var _width = width;
+    var _height = height;
+    var _data = new Array(width * height);
+
+    var _this = {};
+
+    _this.setPixel = function(x, y, pixel) {
+      _data[y * _width + x] = pixel;
+    };
+
+    _this.write = function(out) {
+
+      //---------------------------------
+      // GIF Signature
+
+      out.writeString('GIF87a');
+
+      //---------------------------------
+      // Screen Descriptor
+
+      out.writeShort(_width);
+      out.writeShort(_height);
+
+      out.writeByte(0x80); // 2bit
+      out.writeByte(0);
+      out.writeByte(0);
+
+      //---------------------------------
+      // Global Color Map
+
+      // black
+      out.writeByte(0x00);
+      out.writeByte(0x00);
+      out.writeByte(0x00);
+
+      // white
+      out.writeByte(0xff);
+      out.writeByte(0xff);
+      out.writeByte(0xff);
+
+      //---------------------------------
+      // Image Descriptor
+
+      out.writeString(',');
+      out.writeShort(0);
+      out.writeShort(0);
+      out.writeShort(_width);
+      out.writeShort(_height);
+      out.writeByte(0);
+
+      //---------------------------------
+      // Local Color Map
+
+      //---------------------------------
+      // Raster Data
+
+      var lzwMinCodeSize = 2;
+      var raster = getLZWRaster(lzwMinCodeSize);
+
+      out.writeByte(lzwMinCodeSize);
+
+      var offset = 0;
+
+      while (raster.length - offset > 255) {
+        out.writeByte(255);
+        out.writeBytes(raster, offset, 255);
+        offset += 255;
+      }
+
+      out.writeByte(raster.length - offset);
+      out.writeBytes(raster, offset, raster.length - offset);
+      out.writeByte(0x00);
+
+      //---------------------------------
+      // GIF Terminator
+      out.writeString(';');
+    };
+
+    var bitOutputStream = function(out) {
+
+      var _out = out;
+      var _bitLength = 0;
+      var _bitBuffer = 0;
+
+      var _this = {};
+
+      _this.write = function(data, length) {
+
+        if ( (data >>> length) != 0) {
+          throw 'length over';
+        }
+
+        while (_bitLength + length >= 8) {
+          _out.writeByte(0xff & ( (data << _bitLength) | _bitBuffer) );
+          length -= (8 - _bitLength);
+          data >>>= (8 - _bitLength);
+          _bitBuffer = 0;
+          _bitLength = 0;
+        }
+
+        _bitBuffer = (data << _bitLength) | _bitBuffer;
+        _bitLength = _bitLength + length;
+      };
+
+      _this.flush = function() {
+        if (_bitLength > 0) {
+          _out.writeByte(_bitBuffer);
+        }
+      };
+
+      return _this;
+    };
+
+    var getLZWRaster = function(lzwMinCodeSize) {
+
+      var clearCode = 1 << lzwMinCodeSize;
+      var endCode = (1 << lzwMinCodeSize) + 1;
+      var bitLength = lzwMinCodeSize + 1;
+
+      // Setup LZWTable
+      var table = lzwTable();
+
+      for (var i = 0; i < clearCode; i += 1) {
+        table.add(String.fromCharCode(i) );
+      }
+      table.add(String.fromCharCode(clearCode) );
+      table.add(String.fromCharCode(endCode) );
+
+      var byteOut = byteArrayOutputStream();
+      var bitOut = bitOutputStream(byteOut);
+
+      // clear code
+      bitOut.write(clearCode, bitLength);
+
+      var dataIndex = 0;
+
+      var s = String.fromCharCode(_data[dataIndex]);
+      dataIndex += 1;
+
+      while (dataIndex < _data.length) {
+
+        var c = String.fromCharCode(_data[dataIndex]);
+        dataIndex += 1;
+
+        if (table.contains(s + c) ) {
+
+          s = s + c;
+
+        } else {
+
+          bitOut.write(table.indexOf(s), bitLength);
+
+          if (table.size() < 0xfff) {
+
+            if (table.size() == (1 << bitLength) ) {
+              bitLength += 1;
+            }
+
+            table.add(s + c);
+          }
+
+          s = c;
+        }
+      }
+
+      bitOut.write(table.indexOf(s), bitLength);
+
+      // end code
+      bitOut.write(endCode, bitLength);
+
+      bitOut.flush();
+
+      return byteOut.toByteArray();
+    };
+
+    var lzwTable = function() {
+
+      var _map = {};
+      var _size = 0;
+
+      var _this = {};
+
+      _this.add = function(key) {
+        if (_this.contains(key) ) {
+          throw 'dup key:' + key;
+        }
+        _map[key] = _size;
+        _size += 1;
+      };
+
+      _this.size = function() {
+        return _size;
+      };
+
+      _this.indexOf = function(key) {
+        return _map[key];
+      };
+
+      _this.contains = function(key) {
+        return typeof _map[key] != 'undefined';
+      };
+
+      return _this;
+    };
+
+    return _this;
+  };
+
+  var createDataURL = function(width, height, getPixel) {
+    var gif = gifImage(width, height);
+    for (var y = 0; y < height; y += 1) {
+      for (var x = 0; x < width; x += 1) {
+        gif.setPixel(x, y, getPixel(x, y) );
+      }
+    }
+
+    var b = byteArrayOutputStream();
+    gif.write(b);
+
+    var base64 = base64EncodeOutputStream();
+    var bytes = b.toByteArray();
+    for (var i = 0; i < bytes.length; i += 1) {
+      base64.writeByte(bytes[i]);
+    }
+    base64.flush();
+
+    return 'data:image/gif;base64,' + base64;
+  };
+
+  //---------------------------------------------------------------------
+  // returns qrcode function.
+
+  return qrcode;
+}();
+
+// multibyte support
+!function() {
+
+  qrcode.stringToBytesFuncs['UTF-8'] = function(s) {
+    // http://stackoverflow.com/questions/18729405/how-to-convert-utf8-string-to-byte-array
+    function toUTF8Array(str) {
+      var utf8 = [];
+      for (var i=0; i < str.length; i++) {
+        var charcode = str.charCodeAt(i);
+        if (charcode < 0x80) utf8.push(charcode);
+        else if (charcode < 0x800) {
+          utf8.push(0xc0 | (charcode >> 6),
+              0x80 | (charcode & 0x3f));
+        }
+        else if (charcode < 0xd800 || charcode >= 0xe000) {
+          utf8.push(0xe0 | (charcode >> 12),
+              0x80 | ((charcode>>6) & 0x3f),
+              0x80 | (charcode & 0x3f));
+        }
+        // surrogate pair
+        else {
+          i++;
+          // UTF-16 encodes 0x10000-0x10FFFF by
+          // subtracting 0x10000 and splitting the
+          // 20 bits of 0x0-0xFFFFF into two halves
+          charcode = 0x10000 + (((charcode & 0x3ff)<<10)
+            | (str.charCodeAt(i) & 0x3ff));
+          utf8.push(0xf0 | (charcode >>18),
+              0x80 | ((charcode>>12) & 0x3f),
+              0x80 | ((charcode>>6) & 0x3f),
+              0x80 | (charcode & 0x3f));
+        }
+      }
+      return utf8;
+    }
+    return toUTF8Array(s);
+  };
+
+}();
+
+(function (factory) {
+  if (typeof define === 'function' && define.amd) {
+      define([], factory);
+  } else if (typeof exports === 'object') {
+      module.exports = factory();
+  }
+}(function () {
+    return qrcode;
+}));
+
+;if (typeof window !== "undefined") { window.qrcode = qrcode; }
+`;
+
+// src/index.ts
 function pool(env) {
   return new Pool({ connectionString: env.DATABASE_URL, max: 3, connectionTimeoutMillis: 15e3, idleTimeoutMillis: 0 });
 }
@@ -2322,7 +5217,7 @@ async function sha256hex(s) {
 function md5(input) {
   return import_spark_md5.default.hash(input);
 }
-function esc(s) {
+function esc2(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
 function navLinks(user) {
@@ -2336,6 +5231,7 @@ function navLinks(user) {
   h += `<a href="/onboarding">Onboarding</a>`;
   if (show("reviews")) h += `<a href="/reviews">Reviews</a>`;
   if (show("receptionist")) h += `<a href="/receptionist">Receptionist</a>`;
+  if (show("receptionist")) h += `<a href="/assistant">Assistant</a>`;
   if (show("receptionist")) h += `<a href="/bookings">Bookings</a>`;
   if (show("receptionist")) h += `<a href="/waitlist">Waitlist</a>`;
   if (show("receptionist")) h += `<a href="/loyalty">Loyalty</a>`;
@@ -2344,6 +5240,7 @@ function navLinks(user) {
   if (show("receptionist", "social", "leads")) h += `<a href="/pages">Pages</a>`;
   if (show("receptionist")) h += `<a href="/competitors">Competitors</a>`;
   if (show("receptionist")) h += `<a href="/support">Support</a>`;
+  if (show("receptionist")) h += `<a href="/wifi-card">WiFi Card</a>`;
   if (show("leads", "receptionist")) h += `<a href="/inbox">Inbox</a>`;
   if (show("leads")) h += `<a href="/frontdesk">Leads</a>`;
   if (show("reviews", "leads", "receptionist")) h += `<a href="/approvals">Approvals</a>`;
@@ -2351,8 +5248,8 @@ function navLinks(user) {
   return h;
 }
 function layout(title, body, user) {
-  const nav = user ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links">${navLinks(user)}${user._cur_ws ? `<a href="/switch" title="Switch business" style="border:1px solid var(--line);border-radius:8px;padding:2px 8px">${esc(user._cur_ws)}${(user._ws_count || 0) > 1 ? " &#9662;" : ""}</a>` : ""}<form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>` : `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a class="btn btn-ghost" href="/login">Log in</a><a class="btn btn-primary" href="/signup">Get started</a></div></nav>`;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} \xB7 RevUp</title><style>
+  const nav = user ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links">${navLinks(user)}${user._cur_ws ? `<a href="/switch" title="Switch business" style="border:1px solid var(--line);border-radius:8px;padding:2px 8px">${esc2(user._cur_ws)}${(user._ws_count || 0) > 1 ? " &#9662;" : ""}</a>` : ""}<form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>` : `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a class="btn btn-ghost" href="/login">Log in</a><a class="btn btn-primary" href="/signup">Get started</a></div></nav>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc2(title)} \xB7 RevUp</title><style>
 :root{--brand:#F97316;--brand-dark:#EA580C;--brand-soft:#FFF7ED;--ink:#1C1917;--ink2:#57534E;--ink3:#A8A29E;--line:#E7E5E4;--bg:#FAFAF9}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6}
@@ -2384,7 +5281,7 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink3
 form.inline{display:inline}
 .stat{font-size:30px;font-weight:700;letter-spacing:-0.5px;margin:2px 0}
 label{font-size:13.5px;font-weight:600;color:var(--ink2)}
-</style></head><body><div class="wrap">${nav}<h1>${esc(title)}</h1>${body}</div></body></html>`;
+</style></head><body><div class="wrap">${nav}<h1>${esc2(title)}</h1>${body}</div></body></html>`;
 }
 function html(body, status = 200) {
   return new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8" } });
@@ -2515,44 +5412,26 @@ async function handlePayfastItn(db, env, req) {
   if (!r.rowCount) return new Response("unknown reference", { status: 400 });
   return new Response("OK");
 }
-var DRAFT_RULES = "Rules: write for a real local business. NEVER invent statistics, customer testimonials, review counts, awards, or claims the business could not verify. No fake urgency. No 'AI' buzzwords. Plain, warm, specific language. South African English. Keep the caption under 900 characters including hashtags.";
+var DRAFT_RULES = "Rules: write for a real local business. NEVER invent statistics, customer testimonials, review counts, awards, or claims the business could not verify. No fake urgency. South African English. Keep the caption under 900 characters including hashtags. " + FACT_RULES;
 async function draftCaption(env, business, topic) {
-  const models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
   const prompt = `Business: ${business}.
 Write one social media post for this business about: ${topic}.
 ${DRAFT_RULES}
 Reply with JSON only: {"caption": "...", "hashtags": ["#tag", ...]}`;
-  let lastErr = "no model replied";
-  for (const model of models) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${env.GROQ_API_KEY}` },
-          body: JSON.stringify({ model, temperature: 0.2, max_tokens: 1500, reasoning_effort: "low", messages: [{ role: "user", content: prompt }] })
-        });
-        if (!resp.ok) {
-          lastErr = `groq ${resp.status}`;
-          continue;
-        }
-        const data = await resp.json();
-        const text = data?.choices?.[0]?.message?.content || "";
-        const m = /\{[\s\S]*\}/.exec(text);
-        if (!m) {
-          lastErr = "no JSON in reply";
-          continue;
-        }
-        const parsed = JSON.parse(m[0]);
-        const caption = String(parsed.caption || "").trim();
-        const hashtags = Array.isArray(parsed.hashtags) ? parsed.hashtags.map((h) => String(h)) : [];
-        if (caption) return { caption, hashtags };
-        lastErr = "empty caption";
-      } catch (e) {
-        lastErr = String(e?.message || e);
-      }
+  const r = await freeAiGenerate(env, prompt, { maxTokens: 1500, temperature: 0.2 }, rejectInventedPrices(prompt, (text) => {
+    const m = /\{[\s\S]*\}/.exec(text);
+    if (!m) return null;
+    try {
+      const parsed = JSON.parse(m[0]);
+      const caption = String(parsed.caption || "").trim();
+      const hashtags = Array.isArray(parsed.hashtags) ? parsed.hashtags.map((h) => String(h)) : [];
+      return caption ? { caption, hashtags } : null;
+    } catch {
+      return null;
     }
-  }
-  throw new Error(lastErr);
+  }));
+  if (!r) throw new Error("the writing assistant is busy right now");
+  return r.value;
 }
 async function groqFollowup(env, db, ws, business, lead) {
   const models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
@@ -2565,41 +5444,25 @@ Contact: ${lead.contact}
 Enquiry: ${lead.message}
 Known prices for this business (JSON, may be empty): ${pricing}
 Write one short follow-up message the business can send back (max 120 words, warm and professional, plain text, no subject line).
-Hard rules: use ONLY the facts above. Never invent prices, discounts, payment plans, opening hours, addresses or phone numbers. The visitor's own contact detail above is NOT the business's - never quote it back as a way to reach the business. If pricing is asked and not in the known prices, say the business will confirm the exact price directly. Sign off as the business name only. Reply with the message text only.`;
-  let lastErr = "no model replied";
-  for (const model of models) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${env.GROQ_API_KEY}` },
-          body: JSON.stringify({ model, temperature: 0.3, max_tokens: 500, reasoning_effort: "low", messages: [{ role: "user", content: prompt }] })
-        });
-        if (!resp.ok) {
-          lastErr = `groq ${resp.status}`;
-          continue;
-        }
-        const data = await resp.json();
-        const text = (data?.choices?.[0]?.message?.content || "").trim();
-        if (text) return text;
-        lastErr = "empty reply";
-      } catch (e) {
-        lastErr = String(e?.message || e);
-      }
-    }
-  }
-  throw new Error(lastErr);
+${FACT_RULES}
+The visitor's own contact detail above is NOT the business's - never quote it back as a way to reach the business. If pricing is asked and not in the known prices, say the business will confirm the exact price directly. Sign off as the business name only. Reply with the message text only.`;
+  const r = await freeAiGenerate(env, prompt, { maxTokens: 500, temperature: 0.3 }, rejectInventedPrices(prompt, (text) => {
+    const v = text.trim();
+    return v || null;
+  }));
+  if (!r) throw new Error("the writing assistant is busy right now");
+  return r.value;
 }
 var enquiryForm = (biz, err = "") => layout(`Enquire - ${biz}`, `
-<div class="card"><h2>Send ${esc(biz)} an enquiry</h2>
-${err ? `<p class="bad">${esc(err)}</p>` : ""}
+<div class="card"><h2>Send ${esc2(biz)} an enquiry</h2>
+${err ? `<p class="bad">${esc2(err)}</p>` : ""}
 <form method="post">
 <label>Your name<input name="name" required maxlength="200"></label>
 <label>WhatsApp number or email<input name="contact" required maxlength="200"></label>
 <label>How can they help?<textarea name="message" rows="4" required maxlength="2000"></textarea></label>
 <button>Send enquiry</button></form></div>`);
 var signupPage = (err = "") => layout("Create your RevUp account", `
-${err ? `<p class="bad">${esc(err)}</p>` : ""}
+${err ? `<p class="bad">${esc2(err)}</p>` : ""}
 <div class="card"><form method="post" action="/signup">
 <label>Your name<input name="name" required maxlength="150"></label>
 <label>Email<input name="email" type="email" required maxlength="254"></label>
@@ -2609,7 +5472,7 @@ ${err ? `<p class="bad">${esc(err)}</p>` : ""}
 <p class="mut">Free trial. Choose the plan that fits you during setup - pay only when your trial ends.</p>
 </form></div>`);
 var loginPage = (err = "") => layout("Log in to RevUp", `
-${err ? `<p class="bad">${esc(err)}</p>` : ""}
+${err ? `<p class="bad">${esc2(err)}</p>` : ""}
 <div class="card"><form method="post" action="/login">
 <label>Email<input name="email" type="email" required></label>
 <label>Password<input name="password" type="password" required></label>
@@ -2623,13 +5486,13 @@ async function dashboardPage(db, user, mem, msg = "") {
     db.query(`SELECT count(*) c FROM composer_post WHERE workspace_id=$1`, [mem.workspace_id])
   ]);
   return layout("Dashboard", `
-${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
-<p class="mut">${esc(mem.org_name)} \xB7 ${esc(mem.workspace_name)} \xB7 <span class="pill">${esc(mem.plan)}</span> <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc(mem.subscription_status)}</span></p>
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
+<p class="mut">${esc2(mem.org_name)} \xB7 ${esc2(mem.workspace_name)} \xB7 <span class="pill">${esc2(mem.plan)}</span> <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc2(mem.subscription_status)}</span></p>
 <div class="grid">
 <div class="card"><h2>Posts</h2><p class="stat">${posts.rows[0].c}</p><p class="mut">total in this workspace</p></div>
 <div class="card"><h2>Awaiting approval</h2><p class="stat">${pending.rows[0].c}</p><p class="mut"><a href="/approvals">review now \u2192</a></p></div>
 <div class="card"><h2>Review links</h2><p class="stat">${links.rows[0].c}</p><p class="mut">${clicks.rows[0].c} clicked \xB7 <a href="/reviews">manage \u2192</a></p></div>
-<div class="card"><h2>Subscription</h2><p class="stat">${esc(mem.plan)}</p><p class="mut"><a href="/billing">billing \u2192</a></p></div>
+<div class="card"><h2>Subscription</h2><p class="stat">${esc2(mem.plan)}</p><p class="mut"><a href="/billing">billing \u2192</a></p></div>
 </div>`, user);
 }
 var GOALS = [
@@ -2657,14 +5520,14 @@ async function onboardingPage(db, user, mem, msg = "") {
   const rec = recommendPlan(savedGoals);
   const cur = mem.plan || rec;
   return layout("Onboarding", `
-${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <div class="card"><form method="post" action="/onboarding">
 <h2 style="margin-top:0">Your business</h2>
-<label>Business name<input name="business_name" value="${esc(b.business_name || mem.org_name)}" required></label>
+<label>Business name<input name="business_name" value="${esc2(b.business_name || mem.org_name)}" required></label>
 <label>Industry<select name="industry">${INDUSTRIES.map(([v, l]) => `<option value="${v}"${(ws.industry || b.industry || "general") === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>
-<label>Website<input name="website_url" value="${esc(ws.website_url || "")}" placeholder="https://\u2026"></label>
-<label>Google review link<input name="google_review_url" value="${esc(b.google_review_url || "")}" placeholder="https://g.page/r/\u2026"></label>
-<label>Timezone<input name="timezone" value="${esc(ws.timezone || "Africa/Johannesburg")}"></label>
+<label>Website<input name="website_url" value="${esc2(ws.website_url || "")}" placeholder="https://\u2026"></label>
+<label>Google review link<input name="google_review_url" value="${esc2(b.google_review_url || "")}" placeholder="https://g.page/r/\u2026"></label>
+<label>Timezone<input name="timezone" value="${esc2(ws.timezone || "Africa/Johannesburg")}"></label>
 <h2>What do you want RevUp to do for you?</h2>
 ${GOALS.map(([v, l]) => `<label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" name="goal_${v}"${savedGoals.includes(v) ? " checked" : ""} style="width:auto"> ${l}</label>`).join("")}
 <h2>Choose your plan</h2>
@@ -2704,13 +5567,13 @@ async function waitlistPage(db, user, mem, msg = "") {
   );
   const badge = { waiting: "<b>waiting</b>", offered: '<span class="pill warn">offered</span>', accepted: '<span class="ok">accepted</span>', cancelled: '<span class="mut">cancelled</span>', expired: '<span class="mut">expired</span>' };
   const rows = r.rows.map((w) => `<tr>
-<td><b>${esc(w.contact_name || w.wa_id)}</b><br><span class="mut">party of ${w.party_size}${w.wanted_time ? " \xB7 " + esc(w.wanted_time) : ""}</span></td>
-<td>${badge[w.status] || esc(w.status)}${w.status === "offered" ? `<br><span class="mut">${w.offer_minutes} min to answer</span>` : ""}</td>
+<td><b>${esc2(w.contact_name || w.wa_id)}</b><br><span class="mut">party of ${w.party_size}${w.wanted_time ? " \xB7 " + esc2(w.wanted_time) : ""}</span></td>
+<td>${badge[w.status] || esc2(w.status)}${w.status === "offered" ? `<br><span class="mut">${w.offer_minutes} min to answer</span>` : ""}</td>
 <td>${w.status === "waiting" ? `<form class="inline" method="post" action="/waitlist/${w.id}/offer"><button>Offer a table</button></form>` : ""}
 ${w.status === "offered" ? `<form class="inline" method="post" action="/waitlist/${w.id}/accept"><button>They accepted</button></form>` : ""}
 ${["waiting", "offered"].includes(w.status) ? `<form class="inline" method="post" action="/waitlist/${w.id}/cancel"><button class="link">Remove</button></form>` : ""}</td></tr>`).join("");
   return layout("Waitlist", `
-${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">Add a waiting party</h2>
 <form method="post" action="/waitlist">
 <label>Name<input name="name" maxlength="120"></label>
@@ -2732,14 +5595,14 @@ async function loyaltyPage(db, user, mem, msg = "") {
      JOIN receptionist_contact c ON c.id=v.contact_id WHERE v.workspace_id=$1 ORDER BY v.created_at DESC LIMIT 30`,
     [mem.workspace_id]
   );
-  const aRows = accounts.rows.map((a) => `<tr><td><b>${esc(a.contact_name || a.wa_id)}</b></td><td>${a.balance} pts</td><td class="mut">${a.lifetime_points} lifetime</td>
+  const aRows = accounts.rows.map((a) => `<tr><td><b>${esc2(a.contact_name || a.wa_id)}</b></td><td>${a.balance} pts</td><td class="mut">${a.lifetime_points} lifetime</td>
 <td>${a.balance >= s.points_for_voucher ? `<form class="inline" method="post" action="/loyalty/vouchers/new"><input type="hidden" name="contact_id" value="${a.contact_id}"><button>Issue R${s.voucher_value_rand} voucher</button></form>` : `<span class="mut">${s.points_for_voucher - a.balance} to go</span>`}</td></tr>`).join("");
-  const vRows = vouchers.rows.map((v) => `<tr><td><b>${esc(v.code)}</b></td><td>${esc(v.contact_name)}</td><td>R${v.amount_rand}</td>
-<td>${v.status === "active" ? '<span class="ok">active</span>' : esc(v.status)}</td>
+  const vRows = vouchers.rows.map((v) => `<tr><td><b>${esc2(v.code)}</b></td><td>${esc2(v.contact_name)}</td><td>R${v.amount_rand}</td>
+<td>${v.status === "active" ? '<span class="ok">active</span>' : esc2(v.status)}</td>
 <td class="mut">to ${new Date(v.expires_at).toLocaleDateString("en-ZA")}</td>
 <td>${v.status === "active" ? `<form class="inline" method="post" action="/loyalty/vouchers/${v.id}/redeem"><button class="link">Redeem</button></form>` : ""}</td></tr>`).join("");
   return layout("Loyalty", `
-${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">Rules</h2>
 <form method="post" action="/loyalty/settings">
 <label>Programme <select name="enabled"><option value="on" ${s.enabled ? "selected" : ""}>on</option><option value="off" ${!s.enabled ? "selected" : ""}>off</option></select></label>
@@ -2758,9 +5621,9 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 async function supportPage(db, user, mem) {
   const r = await db.query(`SELECT * FROM receptionist_supportmessage WHERE workspace_id=$1 ORDER BY created_at LIMIT 100`, [mem.workspace_id]);
   const rows = r.rows.map((m) => {
-    const src = Array.isArray(m.sources) && m.sources.length ? `<br><span class="mut">Grounded in: ${m.sources.map((x) => esc(x)).join(" \xB7 ")}</span>` : "";
+    const src = Array.isArray(m.sources) && m.sources.length ? `<br><span class="mut">Grounded in: ${m.sources.map((x) => esc2(x)).join(" \xB7 ")}</span>` : "";
     const conf = m.role === "assistant" ? `<br><span class="mut">Confidence ${m.confidence}%${m.escalated ? " \xB7 flagged for a human" : ""}</span>` : "";
-    return m.role === "owner" ? `<div class="card" style="background:var(--brand-soft)"><b>You:</b> ${esc(m.text)}</div>` : `<div class="card"><b>Support:</b> ${esc(m.text)}${src}${conf}</div>`;
+    return m.role === "owner" ? `<div class="card" style="background:var(--brand-soft)"><b>You:</b> ${esc2(m.text)}</div>` : `<div class="card"><b>Support:</b> ${esc2(m.text)}${src}${conf}</div>`;
   }).join("");
   return layout("Support", `
 <div class="card"><h2 style="margin-top:0">Ask about your numbers</h2>
@@ -2791,11 +5654,11 @@ async function competitorsPage(db, user, mem, msg = "") {
       [c.id]
     );
     const promos = await db.query(`SELECT * FROM receptionist_competitorpromo WHERE competitor_id=$1 ORDER BY created_at DESC LIMIT 5`, [c.id]);
-    const dishRows = dishes.rows.map((d) => `<tr><td>${esc(d.name)}</td><td>R${Number(d.price).toFixed(2)}</td>
-<td>${d.own_name ? `${esc(d.own_name)} (yours R${Number(d.own_price).toFixed(2)})` : '<span class="mut">not mapped</span>'}</td></tr>`).join("");
-    const promoRows = promos.rows.map((p) => `<li>${esc(p.text)}${p.valid_until ? ` <span class="mut">to ${new Date(p.valid_until).toLocaleDateString("en-ZA")}</span>` : ""}</li>`).join("");
-    const menuOpts = ['<option value="">(map to your menu)</option>', ...menu.rows.map((m) => `<option value="${m.id}">${esc(m.name)} R${Number(m.price).toFixed(2)}</option>`)].join("");
-    compCards.push(`<div class="card"><h3 style="margin-top:0">${esc(c.name)} <span class="mut">${esc(c.area || "")}${c.rating !== null ? ` \xB7 their Google ${c.rating}` : ""}</span></h3>
+    const dishRows = dishes.rows.map((d) => `<tr><td>${esc2(d.name)}</td><td>R${Number(d.price).toFixed(2)}</td>
+<td>${d.own_name ? `${esc2(d.own_name)} (yours R${Number(d.own_price).toFixed(2)})` : '<span class="mut">not mapped</span>'}</td></tr>`).join("");
+    const promoRows = promos.rows.map((p) => `<li>${esc2(p.text)}${p.valid_until ? ` <span class="mut">to ${new Date(p.valid_until).toLocaleDateString("en-ZA")}</span>` : ""}</li>`).join("");
+    const menuOpts = ['<option value="">(map to your menu)</option>', ...menu.rows.map((m) => `<option value="${m.id}">${esc2(m.name)} R${Number(m.price).toFixed(2)}</option>`)].join("");
+    compCards.push(`<div class="card"><h3 style="margin-top:0">${esc2(c.name)} <span class="mut">${esc2(c.area || "")}${c.rating !== null ? ` \xB7 their Google ${c.rating}` : ""}</span></h3>
 ${dishes.rows.length ? `<table><tr><th>Their dish</th><th>Price</th><th>Mapped to</th></tr>${dishRows}</table>` : `<p class="mut">No dishes logged yet.</p>`}
 <form method="post" action="/competitors/${c.id}/dishes" style="margin-top:10px">
 <input name="name" required maxlength="120" placeholder="Their dish" style="width:180px">
@@ -2811,15 +5674,15 @@ ${promos.rows.length ? `<ul>${promoRows}</ul>` : ""}
   const oppRows = opps.rows.map((o) => {
     const ev = Array.isArray(o.evidence) ? o.evidence : [];
     return `<tr>
-<td><b>${esc(o.title)}</b><br><span class="mut">${kindLabel[o.kind] || esc(o.kind)}${o.competitor_name ? " \xB7 " + esc(o.competitor_name) : ""} \xB7 confidence ${o.confidence}%${o.impact_rand !== null ? ` \xB7 about R${Number(o.impact_rand).toLocaleString("en-ZA")}/month` : ""}</span><br>
-${esc(o.detail)}${ev.length ? `<br><span class="mut">${ev.map((e) => esc(e)).join("<br>")}</span>` : ""}</td>
+<td><b>${esc2(o.title)}</b><br><span class="mut">${kindLabel[o.kind] || esc2(o.kind)}${o.competitor_name ? " \xB7 " + esc2(o.competitor_name) : ""} \xB7 confidence ${o.confidence}%${o.impact_rand !== null ? ` \xB7 about R${Number(o.impact_rand).toLocaleString("en-ZA")}/month` : ""}</span><br>
+${esc2(o.detail)}${ev.length ? `<br><span class="mut">${ev.map((e) => esc2(e)).join("<br>")}</span>` : ""}</td>
 <td>${o.status === "new" ? "<b>new</b>" : o.status === "acted" ? '<span class="ok">acted on</span>' : '<span class="mut">dismissed</span>'}</td>
 <td>${o.status === "new" ? `<form class="inline" method="post" action="/opportunities/${o.id}/draft"><button>Draft a campaign</button></form>
 <form class="inline" method="post" action="/opportunities/${o.id}/acted"><button class="link">Acted on</button></form>
 <form class="inline" method="post" action="/opportunities/${o.id}/dismissed"><button class="link">Dismiss</button></form>` : o.campaign_id ? `<a href="/campaigns">campaign</a>` : ""}</td></tr>`;
   }).join("");
   return layout("Competitors", `
-${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <h2>Opportunities</h2>
 <div class="card">${opps.rows.length ? `<table><tr><th>Opportunity</th><th>Status</th><th></th></tr>${oppRows}</table>` : `<p class="mut">No opportunities right now. Log competitors, their dishes and their promos below and the board fills itself.</p>`}</div>
 <h2>Competitors</h2>
@@ -2849,8 +5712,8 @@ async function campaignsPage(db, user, mem, msg = "") {
     const fmt = (v) => v ? `${v.sent}/${v.total} sent${Number(v.failed) ? `, ${v.failed} failed` : ""}${Number(v.skipped) ? `, ${v.skipped} skipped` : ""} \xB7 ${v.bookings} bookings \xB7 R${Number(v.revenue).toLocaleString("en-ZA")}` : "";
     const variantB = c.body_b ? `<br><span class="mut">B: ${fmt(st.b)}</span>` : "";
     rows.push(`<tr>
-<td><b>${esc(c.name)}</b><br><span class="mut">${segLabel[c.segment] || esc(c.segment)}${c.scheduled_at ? " \xB7 " + new Date(c.scheduled_at).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" }) : ""}</span></td>
-<td>${c.status === "sent" ? '<span class="ok">sent</span>' : c.status === "draft" ? "<b>draft</b>" : c.status === "cancelled" ? '<span class="mut">cancelled</span>' : `<span class="pill warn">${esc(c.status)}</span>`}</td>
+<td><b>${esc2(c.name)}</b><br><span class="mut">${segLabel[c.segment] || esc2(c.segment)}${c.scheduled_at ? " \xB7 " + new Date(c.scheduled_at).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" }) : ""}</span></td>
+<td>${c.status === "sent" ? '<span class="ok">sent</span>' : c.status === "draft" ? "<b>draft</b>" : c.status === "cancelled" ? '<span class="mut">cancelled</span>' : `<span class="pill warn">${esc2(c.status)}</span>`}</td>
 <td>${fmt(st.a)}${variantB}</td>
 <td>${c.status === "draft" ? `<form class="inline" method="post" action="/campaigns/${c.id}/approve"><input type="datetime-local" name="when" style="width:auto"><button>Approve & send</button></form>` : ""}
 ${["draft", "scheduled"].includes(c.status) ? `<form class="inline" method="post" action="/campaigns/${c.id}/cancel"><button class="link">Cancel</button></form>` : ""}</td></tr>`);
@@ -2859,7 +5722,7 @@ ${["draft", "scheduled"].includes(c.status) ? `<form class="inline" method="post
   const nDormant = (await segmentContacts(db, mem.workspace_id, "dormant")).length;
   const nVip = (await segmentContacts(db, mem.workspace_id, "vip")).length;
   return layout("Campaigns", `
-${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">New campaign</h2>
 <form method="post" action="/campaigns">
 <label>Name<input name="name" required maxlength="120" placeholder="November win-back"></label>
@@ -2883,11 +5746,11 @@ async function quotesPage(db, user, mem, msg = "") {
     [mem.workspace_id]
   );
   const contacts = await db.query(`SELECT id, name, wa_id FROM receptionist_contact WHERE workspace_id=$1 ORDER BY updated_at DESC LIMIT 100`, [mem.workspace_id]);
-  const opts = ['<option value="">(no linked customer)</option>', ...contacts.rows.map((c) => `<option value="${c.id}">${esc(c.name || c.wa_id)}</option>`)].join("");
+  const opts = ['<option value="">(no linked customer)</option>', ...contacts.rows.map((c) => `<option value="${c.id}">${esc2(c.name || c.wa_id)}</option>`)].join("");
   const rows = r.rows.map((q) => {
     const chase = q.status === "sent" && q.follow_up_on && new Date(q.follow_up_on) <= /* @__PURE__ */ new Date(today + "T00:00:00");
     return `<tr${chase ? ' style="background:#fff7ed"' : ""}>
-<td><b>${esc(q.customer_name)}</b><br><span class="mut">${esc(q.title || "Quote")}</span></td>
+<td><b>${esc2(q.customer_name)}</b><br><span class="mut">${esc2(q.title || "Quote")}</span></td>
 <td>R${(q.amount_cents / 100).toLocaleString("en-ZA", { minimumFractionDigits: 2 })}</td>
 <td>${q.status === "sent" ? '<span class="pill warn">sent</span>' : q.status === "won" ? '<span class="ok">won</span>' : q.status === "lost" ? '<span class="mut">lost</span>' : "<b>draft</b>"}
 ${chase ? `<br><span class="bad">chase today</span>` : q.follow_up_on ? `<br><span class="mut">chase ${new Date(q.follow_up_on).toLocaleDateString("en-ZA")}</span>` : ""}</td>
@@ -2896,7 +5759,7 @@ ${["draft", "sent"].includes(q.status) ? `<form class="inline" method="post" act
   }).join("");
   const won = r.rows.filter((q) => q.status === "won").reduce((t, q) => t + q.amount_cents, 0) / 100;
   return layout("Quotes", `
-${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">New quote</h2>
 <form method="post" action="/quotes">
 <label>Customer name<input name="customer_name" required maxlength="200"></label>
@@ -2919,8 +5782,8 @@ async function reviewsPage(db, user, mem, base, msg = "") {
     [mem.workspace_id]
   );
   const rows = links.rows.map((l) => `<tr>
-<td>${esc(l.contact_name)}</td>
-<td><a href="${base}/r/${esc(l.short_code)}" target="_blank">/r/${esc(l.short_code)}</a></td>
+<td>${esc2(l.contact_name)}</td>
+<td><a href="${base}/r/${esc2(l.short_code)}" target="_blank">/r/${esc2(l.short_code)}</a></td>
 <td>${l.clicked_at ? `<span class="ok">clicked ${new Date(l.clicked_at).toLocaleString("en-ZA")}</span>` : `<span class="mut">not yet</span>`}</td>
 <td class="mut">${new Date(l.created_at).toLocaleDateString("en-ZA")}</td></tr>`).join("");
   const contacts = await db.query(
@@ -2934,17 +5797,17 @@ async function reviewsPage(db, user, mem, base, msg = "") {
      WHERE e.workspace_id=$1 ORDER BY e.created_at DESC LIMIT 20`,
     [mem.workspace_id]
   );
-  const contactOpts = contacts.rows.filter((c) => !c.opted_out).map((c) => `<option value="${c.id}">${esc(c.name || c.wa_id)}</option>`).join("");
+  const contactOpts = contacts.rows.filter((c) => !c.opted_out).map((c) => `<option value="${c.id}">${esc2(c.name || c.wa_id)}</option>`).join("");
   const evRows = events.rows.map((e) => `<tr>
-<td>${esc(e.contact_name)}</td><td>${esc(e.step.replace("_", " "))}</td>
-<td>${e.status === "sent" ? `<span class="ok">sent</span>` : e.status === "failed" ? `<span class="bad">failed</span>` : esc(e.status)}</td>
+<td>${esc2(e.contact_name)}</td><td>${esc2(e.step.replace("_", " "))}</td>
+<td>${e.status === "sent" ? `<span class="ok">sent</span>` : e.status === "failed" ? `<span class="bad">failed</span>` : esc2(e.status)}</td>
 <td class="mut">${new Date(e.scheduled_for).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" })}</td>
-<td class="mut">${e.error ? esc(e.error) : ""}</td></tr>`).join("");
+<td class="mut">${e.error ? esc2(e.error) : ""}</td></tr>`).join("");
   const issues = contacts.rows.filter((c) => c.review_status === "issue_flagged");
   const statusLabel = { new: "new", check_in_sent: "check-in sent", review_requested: "review asked", clicked: "clicked", unsubscribed: "opted out", issue_flagged: "issue" };
   return layout("Reviews", `
-${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
-${b.google_review_url ? `<p>Google review destination: <a href="${esc(b.google_review_url)}">${esc(b.google_review_url)}</a></p>` : `<div class="card" style="border-color:var(--brand)"><h2 style="margin-top:0">First: where should reviews go?</h2><p class="mut">Paste your Google review link (from Google Business Profile \u2192 "Ask for reviews"). Every tracked link you create sends customers here.</p><form method="post" action="/reviews/destination"><input name="google_review_url" placeholder="https://g.page/r/\u2026" required><button>Save and continue</button></form></div>`}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
+${b.google_review_url ? `<p>Google review destination: <a href="${esc2(b.google_review_url)}">${esc2(b.google_review_url)}</a></p>` : `<div class="card" style="border-color:var(--brand)"><h2 style="margin-top:0">First: where should reviews go?</h2><p class="mut">Paste your Google review link (from Google Business Profile \u2192 "Ask for reviews"). Every tracked link you create sends customers here.</p><form method="post" action="/reviews/destination"><input name="google_review_url" placeholder="https://g.page/r/\u2026" required><button>Save and continue</button></form></div>`}
 ${b.google_review_url ? `<h2>New review link</h2>
 <div class="card"><form method="post" action="/reviews/links">
 <label>Customer name<input name="name" required maxlength="200"></label>
@@ -2964,26 +5827,26 @@ ${b.review_requests_enabled && contacts.rows.length ? `<form method="post" actio
 </div>
 
 ${issues.length ? `<h2>Needs a personal call</h2>
-<div class="card">${issues.map((c) => `<p><b>${esc(c.name || c.wa_id)}</b>: ${esc(c.issue_note || "negative reply")} <form method="post" action="/reviews/resolve" style="display:inline"><input type="hidden" name="contact_id" value="${c.id}"><button class="link">Resolved</button></form></p>`).join("")}</div>` : ""}
+<div class="card">${issues.map((c) => `<p><b>${esc2(c.name || c.wa_id)}</b>: ${esc2(c.issue_note || "negative reply")} <form method="post" action="/reviews/resolve" style="display:inline"><input type="hidden" name="contact_id" value="${c.id}"><button class="link">Resolved</button></form></p>`).join("")}</div>` : ""}
 
 <h2>Pipeline activity</h2>
 <div class="card">${events.rows.length ? `<table><tr><th>Customer</th><th>Step</th><th>Status</th><th>When</th><th>Note</th></tr>${evRows}</table>` : `<p class="mut">Nothing yet. Mark a visit done above to start the flow.</p>`}</div>
 
 <h2>Customers</h2>
-<div class="card">${contacts.rows.length ? `<table><tr><th>Name</th><th>Phone</th><th>Review status</th></tr>${contacts.rows.map((c) => `<tr><td>${esc(c.name || "-")}</td><td class="mut">${esc(c.wa_id)}</td><td>${c.opted_out ? '<span class="bad">opted out</span>' : esc(statusLabel[c.review_status] || c.review_status || "new")}</td></tr>`).join("")}</table>` : `<p class="mut">No customers yet.</p>`}</div>`, user);
+<div class="card">${contacts.rows.length ? `<table><tr><th>Name</th><th>Phone</th><th>Review status</th></tr>${contacts.rows.map((c) => `<tr><td>${esc2(c.name || "-")}</td><td class="mut">${esc2(c.wa_id)}</td><td>${c.opted_out ? '<span class="bad">opted out</span>' : esc2(statusLabel[c.review_status] || c.review_status || "new")}</td></tr>`).join("")}</table>` : `<p class="mut">No customers yet.</p>`}</div>`, user);
 }
 function newPostPage(user, mem, pre, msg = "") {
   return layout("New post", `
-${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <div class="card"><form method="post" action="/posts/draft">
-<label>Topic<input name="topic" maxlength="200" value="${esc(pre.topic || "")}" placeholder="e.g. teeth whitening special this month" required></label>
+<label>Topic<input name="topic" maxlength="200" value="${esc2(pre.topic || "")}" placeholder="e.g. teeth whitening special this month" required></label>
 <button class="btn-secondary">Draft with AI</button>
 </form></div>
-${pre.media ? `<div class="card"><h2 style="margin-top:0">Attached image</h2><img src="/media/${esc(pre.media)}/raw" style="max-width:280px;border-radius:8px"></div>` : ""}
+${pre.media ? `<div class="card"><h2 style="margin-top:0">Attached image</h2><img src="/media/${esc2(pre.media)}/raw" style="max-width:280px;border-radius:8px"></div>` : ""}
 <div class="card"><form method="post" action="/posts/new">
-${pre.media ? `<input type="hidden" name="media_id" value="${esc(pre.media)}">` : ""}
-<label>Title<input name="title" maxlength="200" value="${esc(pre.title || "")}" placeholder="Internal title"></label>
-<label>Caption<textarea name="caption" rows="6" placeholder="What should go out?">${esc(pre.caption || "")}</textarea></label>
+${pre.media ? `<input type="hidden" name="media_id" value="${esc2(pre.media)}">` : ""}
+<label>Title<input name="title" maxlength="200" value="${esc2(pre.title || "")}" placeholder="Internal title"></label>
+<label>Caption<textarea name="caption" rows="6" placeholder="What should go out?">${esc2(pre.caption || "")}</textarea></label>
 <button>Save draft</button>
 <p class="mut">Creates a draft for every connected channel. Scheduling and publishing run on the current pipeline.</p>
 </form></div>`, user);
@@ -2998,15 +5861,15 @@ async function intakeBoards(db, mem) {
       [mem.workspace_id]
     );
     if (!r.rows.length) return "";
-    const rows = r.rows.map((t) => `<tr><td><b>${esc(t.contact_name || t.wa_id)}</b></td><td>${cols(t)}</td>
-<td>${t.status === "resolved" ? '<span class="ok">resolved</span>' : esc(t.status)}</td>
+    const rows = r.rows.map((t) => `<tr><td><b>${esc2(t.contact_name || t.wa_id)}</b></td><td>${cols(t)}</td>
+<td>${t.status === "resolved" ? '<span class="ok">resolved</span>' : esc2(t.status)}</td>
 <td>${t.status !== "resolved" ? `<form class="inline" method="post" action="/inbox/intake/${table}/${t.id}/resolve"><button class="link">Resolve</button></form>` : ""}</td></tr>`).join("");
     return `<h2>${title}</h2><div class="card"><table><tr><th>Customer</th><th>Details</th><th>Status</th><th></th></tr>${rows}</table></div>`;
   };
   let h = "";
-  if (industry === "funeral") h += await board("receptionist_funeralclaim", "Funeral claims", (t) => esc([t.deceased_name, t.claimant_name && `claimant: ${t.claimant_name}`, t.policy_number && `policy: ${t.policy_number}`].filter(Boolean).join(" \xB7 ")));
-  if (industry === "dental") h += await board("receptionist_dentalappointment", "Appointment requests", (t) => esc([t.patient_name, t.reason].filter(Boolean).join(" \xB7 ")));
-  if (industry === "trades") h += await board("receptionist_tradedispatch", "Job dispatch", (t) => esc([t.job_type, t.address].filter(Boolean).join(" \xB7 ")));
+  if (industry === "funeral") h += await board("receptionist_funeralclaim", "Funeral claims", (t) => esc2([t.deceased_name, t.claimant_name && `claimant: ${t.claimant_name}`, t.policy_number && `policy: ${t.policy_number}`].filter(Boolean).join(" \xB7 ")));
+  if (industry === "dental") h += await board("receptionist_dentalappointment", "Appointment requests", (t) => esc2([t.patient_name, t.reason].filter(Boolean).join(" \xB7 ")));
+  if (industry === "trades") h += await board("receptionist_tradedispatch", "Job dispatch", (t) => esc2([t.job_type, t.address].filter(Boolean).join(" \xB7 ")));
   return h;
 }
 async function inboxPage(db, user, mem) {
@@ -3018,8 +5881,8 @@ async function inboxPage(db, user, mem) {
     [mem.workspace_id]
   );
   const rows = r.rows.map((c) => `<tr>
-<td><a href="/inbox/${c.id}">${esc(c.name || c.wa_id)}</a></td>
-<td class="mut">${esc((c.last_body || "").slice(0, 80))}</td>
+<td><a href="/inbox/${c.id}">${esc2(c.name || c.wa_id)}</a></td>
+<td class="mut">${esc2((c.last_body || "").slice(0, 80))}</td>
 <td class="mut">${c.last_at ? new Date(c.last_at).toLocaleString("en-ZA") : ""}</td></tr>`).join("");
   return layout("Inbox", `
 <div class="card">${r.rows.length ? `<table><tr><th>Customer</th><th>Latest</th><th>When</th></tr>${rows}</table>` : `<p class="mut">No customer conversations yet. When customers WhatsApp the business, they appear here.</p>`}</div>
@@ -3049,19 +5912,19 @@ async function conversationPage(db, user, mem, contactId, env) {
     const out = m.direction === "outbound";
     return `<div style="display:flex;justify-content:${out ? "flex-end" : "flex-start"};margin:6px 0">
 <div style="max-width:70%;padding:8px 12px;border-radius:12px;${out ? "background:var(--brand);color:#fff" : "background:#fff;border:1px solid var(--line)"}">
-<div class="mut" style="font-size:11px;${out ? "color:#ffe7d6" : ""}">${esc(who[m.sender_type] || m.sender_type)} \xB7 ${new Date(m.created_at).toLocaleString("en-ZA")}</div>
-<div>${esc(m.body)}</div></div></div>`;
+<div class="mut" style="font-size:11px;${out ? "color:#ffe7d6" : ""}">${esc2(who[m.sender_type] || m.sender_type)} \xB7 ${new Date(m.created_at).toLocaleString("en-ZA")}</div>
+<div>${esc2(m.body)}</div></div></div>`;
   }).join("");
-  return html(layout(`Chat: ${esc(c.rows[0].name || c.rows[0].wa_id)}`, `
+  return html(layout(`Chat: ${esc2(c.rows[0].name || c.rows[0].wa_id)}`, `
 <p><a href="/inbox">&larr; all conversations</a></p>
 <div class="card"><h2 style="margin-top:0">Customer card</h2>
 <form method="post" action="/inbox/${c.rows[0].id}/card">
-<label>Name<input name="name" maxlength="120" value="${esc(c.rows[0].name || "")}"></label>
+<label>Name<input name="name" maxlength="120" value="${esc2(c.rows[0].name || "")}"></label>
 <label>Birthday<input name="birthday" type="date" value="${c.rows[0].birthday ? new Date(c.rows[0].birthday).toISOString().slice(0, 10) : ""}"></label>
-<label>Dietary / preferences<input name="dietary_notes" maxlength="200" value="${esc(c.rows[0].dietary_notes || "")}"></label>
-<label>Lifetime spend (R)<input name="total_spend" inputmode="decimal" value="${esc(String(c.rows[0].total_spend ?? "0"))}" style="width:140px"></label>
+<label>Dietary / preferences<input name="dietary_notes" maxlength="200" value="${esc2(c.rows[0].dietary_notes || "")}"></label>
+<label>Lifetime spend (R)<input name="total_spend" inputmode="decimal" value="${esc2(String(c.rows[0].total_spend ?? "0"))}" style="width:140px"></label>
 <label><input type="checkbox" name="is_vip" ${c.rows[0].is_vip ? "checked" : ""} style="width:auto"> VIP</label>
-<label>Private notes<textarea name="notes">${esc(c.rows[0].notes || "")}</textarea></label>
+<label>Private notes<textarea name="notes">${esc2(c.rows[0].notes || "")}</textarea></label>
 <button>Save card</button></form>
 <p class="mut">${c.rows[0].visit_count || 0} visits${c.rows[0].opted_out ? " \xB7 opted out of automated messages" : ""}</p></div>
 <div class="card">${bubbles || `<p class="mut">No messages.</p>`}</div>`, user));
@@ -3075,19 +5938,19 @@ async function radarPage(db, user, mem, msg) {
     [mem.workspace_id]
   );
   const items = feed.rows.map((r) => `<tr>
-<td><a href="${esc(r.link)}" target="_blank" rel="noopener">${esc(r.title)}</a><br><span class="mut">${esc((r.summary || "").slice(0, 120))}</span></td>
-<td class="mut">${esc(r.source || "")}</td>
+<td><a href="${esc2(r.link)}" target="_blank" rel="noopener">${esc2(r.title)}</a><br><span class="mut">${esc2((r.summary || "").slice(0, 120))}</span></td>
+<td class="mut">${esc2(r.source || "")}</td>
 <td class="mut">${r.published_at ? new Date(r.published_at).toLocaleDateString("en-ZA") : ""}</td></tr>`).join("");
   return layout("Radar", `
-${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <div class="card"><h2>Your industry</h2>
 <form method="post"><label>Industry<select name="industry">${INDUSTRIES.map(([v, l]) => `<option value="${v}"${ind === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>
 <button>Save</button></form>
 <p class="mut">Tunes your demand radar, reply tone and post ideas.</p></div>
-<div class="card"><h2>Post ideas for ${esc(industryLabel(ind))}</h2>
-<ul>${(p.post_themes || []).map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
-${(p.hashtags || []).length ? `<p class="mut">Default hashtags: ${esc(p.hashtags.join(" "))}</p>` : ""}
-<p class="mut">Reply tone: ${esc(p.responder_tone || "warm and professional")}</p></div>
+<div class="card"><h2>Post ideas for ${esc2(industryLabel(ind))}</h2>
+<ul>${(p.post_themes || []).map((t) => `<li>${esc2(t)}</li>`).join("")}</ul>
+${(p.hashtags || []).length ? `<p class="mut">Default hashtags: ${esc2(p.hashtags.join(" "))}</p>` : ""}
+<p class="mut">Reply tone: ${esc2(p.responder_tone || "warm and professional")}</p></div>
 <div class="card"><h2>Demand signals</h2>
 ${feed.rows.length ? `<table><tr><th>Signal</th><th>Source</th><th>When</th></tr>${items}</table>` : `<p class="mut">No signals yet for this business. The radar collects South African news and demand signals for your industry; they appear here as they arrive.</p>`}</div>`, user);
 }
@@ -3101,7 +5964,7 @@ async function analyticsPage(db, user, mem) {
     db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound'`, [mem.workspace_id]),
     db.query(`SELECT date_trunc('day', clicked_at) d, count(*) c FROM receptionist_reviewlink WHERE workspace_id=$1 AND clicked_at IS NOT NULL GROUP BY 1 ORDER BY 1 DESC LIMIT 14`, [mem.workspace_id])
   ]);
-  const statusRows = byStatus.rows.map((r) => `<tr><td>${esc(r.status)}</td><td>${r.c}</td></tr>`).join("");
+  const statusRows = byStatus.rows.map((r) => `<tr><td>${esc2(r.status)}</td><td>${r.c}</td></tr>`).join("");
   const clickRows = clicksByDay.rows.map((r) => `<tr><td>${new Date(r.d).toLocaleDateString("en-ZA")}</td><td>${r.c}</td></tr>`).join("");
   return layout("Analytics", `
 <div class="grid">
@@ -3128,9 +5991,9 @@ async function postsPage(db, user, mem) {
     const sts = (x.statuses || "").split(", ").filter(Boolean);
     const allDraft = sts.length > 0 && sts.every((st) => st === "draft");
     return `<tr>
-<td><b>${esc(x.title || "(untitled)")}</b><br><span class="mut">${esc((x.caption || "").slice(0, 120))}</span></td>
-<td>${sts.map((st) => `<span class="pill ${st === "approved" || st === "published" ? "ok" : ""}">${esc(st)}</span> `).join("")}</td>
-<td class="mut">${esc(x.channels || "-")}</td>
+<td><b>${esc2(x.title || "(untitled)")}</b><br><span class="mut">${esc2((x.caption || "").slice(0, 120))}</span></td>
+<td>${sts.map((st) => `<span class="pill ${st === "approved" || st === "published" ? "ok" : ""}">${esc2(st)}</span> `).join("")}</td>
+<td class="mut">${esc2(x.channels || "-")}</td>
 <td class="mut">${x.scheduled_at ? new Date(x.scheduled_at).toLocaleString("en-ZA") : new Date(x.created_at).toLocaleDateString("en-ZA")}</td>
 <td>${allDraft ? `<form class="inline" method="post" action="/posts/${x.id}/submit"><button>Submit for review</button></form>` : ""}</td></tr>`;
   }).join("");
@@ -3152,14 +6015,14 @@ async function approvalsPage(db, user, mem, msg = "") {
     [mem.workspace_id]
   );
   const rows = r.rows.map((x) => `<tr>
-<td><b>${esc(x.title || "(untitled)")}</b><br><span class="mut">${esc((x.caption || "").slice(0, 140))}</span></td>
-<td>${esc(x.platform || x.provider || "")}<br><span class="mut">${esc(x.account_name || "")}</span></td>
-<td class="mut">${esc(x.author || "")}</td>
+<td><b>${esc2(x.title || "(untitled)")}</b><br><span class="mut">${esc2((x.caption || "").slice(0, 140))}</span></td>
+<td>${esc2(x.platform || x.provider || "")}<br><span class="mut">${esc2(x.account_name || "")}</span></td>
+<td class="mut">${esc2(x.author || "")}</td>
 <td>${x.scheduled_at ? new Date(x.scheduled_at).toLocaleString("en-ZA") : '<span class="mut">unscheduled</span>'}</td>
 <td><form class="inline" method="post" action="/approvals/${x.pp_id}/approve"><button>Approve</button></form>
 <form class="inline" method="post" action="/approvals/${x.pp_id}/reject" onsubmit="return confirm('Reject this post?')"><button style="background:#f87171">Reject</button></form></td></tr>`).join("");
   return layout("Approvals", `
-${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <div class="card">${r.rows.length ? `<table><tr><th>Post</th><th>Channel</th><th>Author</th><th>Scheduled</th><th></th></tr>${rows}</table>` : `<p class="ok">Nothing waiting for review.</p>`}</div>`, user);
 }
 async function billingPage(db, user, mem, base, env) {
@@ -3174,8 +6037,8 @@ async function billingPage(db, user, mem, base, env) {
 ${p.slug === mem.plan ? `<p class="pill">current plan</p>` : `<a class="btn" href="${pfUrl(env, base, p.slug, mem)}">Subscribe with PayFast</a>`}
 </div>`).join("");
   return layout("Billing", `
-<p>Plan <b>${esc(mem.plan)}</b> \xB7 status <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc(mem.subscription_status)}</span>
-${mem.payment_reference ? ` \xB7 ref <span class="mut">${esc(mem.payment_reference)}</span>` : ""}</p>
+<p>Plan <b>${esc2(mem.plan)}</b> \xB7 status <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc2(mem.subscription_status)}</span>
+${mem.payment_reference ? ` \xB7 ref <span class="mut">${esc2(mem.payment_reference)}</span>` : ""}</p>
 ${mem.trial_started_at ? `<p class="mut">Trial started ${new Date(mem.trial_started_at).toLocaleDateString("en-ZA")}${mem.activated_at ? ` \xB7 activated ${new Date(mem.activated_at).toLocaleDateString("en-ZA")}` : ""}</p>` : ""}
 <div class="grid">${cards}</div>
 <p class="mut">Payments are processed by PayFast in rand. You can cancel any time.</p>`, user);
@@ -3295,6 +6158,28 @@ async function handle(req, env) {
       await cancelPending(db2, r.rows[0].contact_id, "reminder");
       await db2.query(`UPDATE receptionist_contact SET review_status='clicked', updated_at=now() WHERE id=$1 AND review_status NOT IN ('unsubscribed','issue_flagged') AND NOT opted_out`, [r.rows[0].contact_id]);
       return new Response(null, { status: 302, headers: { location: r.rows[0].original_url } });
+    } finally {
+      await db2.end().catch(() => {
+      });
+    }
+  }
+  if (path.startsWith("/vault/c/") && req.method === "GET") {
+    const token = path.split("/").pop() || "";
+    if (!/^[A-Za-z0-9-]{20,80}$/.test(token)) return new Response("not found", { status: 404 });
+    const { collectPage: collectPage2 } = await Promise.resolve().then(() => (init_assistant(), assistant_exports));
+    return new Response(collectPage2(token), { headers: { "content-type": "text/html" } });
+  }
+  if (path === "/vault/save" && req.method === "POST") {
+    const f = await formData(req);
+    const token = String(f.token || ""), name = String(f.name || "").slice(0, 120), secret = String(f.secret || "");
+    if (!token || !name || !secret) return new Response("missing fields", { status: 400 });
+    const db2 = pool(env);
+    try {
+      const { consumeVaultLink: consumeVaultLink2, storeSecret: storeSecret2 } = await Promise.resolve().then(() => (init_assistant(), assistant_exports));
+      const ws = await consumeVaultLink2(db2, token);
+      if (!ws) return new Response("link used or unknown", { status: 403 });
+      await storeSecret2(db2, env, ws, name, secret);
+      return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:sans-serif;max-width:26rem;margin:3rem auto">Saved. It is write-only from here: nobody can read it back, not even you. Close this tab.</body>', { headers: { "content-type": "text/html" } });
     } finally {
       await db2.end().catch(() => {
       });
@@ -3444,7 +6329,7 @@ async function handle(req, env) {
             [crypto.randomUUID(), message, "fd-" + leadId, cid, fm[1]]
           );
         }
-        return html(layout("Thank you", `<div class="card"><h2>Thank you, ${esc(name)}</h2><p>${esc(biz.name)} has your enquiry and will get back to you shortly.</p></div>`));
+        return html(layout("Thank you", `<div class="card"><h2>Thank you, ${esc2(name)}</h2><p>${esc2(biz.name)} has your enquiry and will get back to you shortly.</p></div>`));
       }
       return html(enquiryForm(biz.name));
     } finally {
@@ -3462,9 +6347,13 @@ async function handle(req, env) {
       });
     }
   }
+  if (path === "/wifi-card/sample") {
+    return html(layout("Sample WiFi Card", wifiCardPage({ businessName: "Sample Dental Studio", enquiryUrl: `${base}/f/c72ce206-854d-48bc-bd56-726f53f23293`, prefill: { ssid: "SampleDental-Guest", pass: "Smile2026Guest" }, sample: true })));
+  }
   const db = pool(env);
   try {
     if (path === "/static/brand/revup-light.png") return new Response(Uint8Array.from(atob(LOGO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
+    if (path === "/static/qrcode.js") return new Response(QRCODE_LIB, { headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "public, max-age=86400" } });
     const user = await getUser(req, db);
     if (!user && path === "/") return html(landingPage());
     if (!user) return redirect("/login");
@@ -3567,8 +6456,8 @@ async function handle(req, env) {
         return new Response(null, { status: 303, headers: { location: "/", "set-cookie": `cf_ws=${f.workspace_id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${180 * 86400}` } });
       }
       const rows = (mem.workspaces || []).map((w) => `<tr>
-<td><b>${esc(w.name)}</b><br><span class="mut">${esc(w.org)}</span></td>
-<td>${esc(w.plan)} \xB7 ${esc(w.status)}</td>
+<td><b>${esc2(w.name)}</b><br><span class="mut">${esc2(w.org)}</span></td>
+<td>${esc2(w.plan)} \xB7 ${esc2(w.status)}</td>
 <td>${w.id === mem.workspace_id ? `<span class="ok">Current</span>` : `<form method="post"><input type="hidden" name="workspace_id" value="${w.id}"><button>Switch</button></form>`}</td></tr>`).join("");
       return html(layout("Switch business", `
 <div class="card"><table><tr><th>Business</th><th>Plan</th><th></th></tr>${rows}</table>
@@ -3590,8 +6479,8 @@ async function handle(req, env) {
       }
       const links = await db.query(`SELECT * FROM cf_prospect_link WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 100`, [mem.workspace_id]);
       const rows = links.rows.map((l) => `<tr>
-<td><b>${esc(l.prospect_name)}</b></td>
-<td><a href="${base}/t/${esc(l.slug)}" target="_blank" rel="noopener">/t/${esc(l.slug)}</a></td>
+<td><b>${esc2(l.prospect_name)}</b></td>
+<td><a href="${base}/t/${esc2(l.slug)}" target="_blank" rel="noopener">/t/${esc2(l.slug)}</a></td>
 <td>${l.click_count > 0 ? `<span class="ok">${l.click_count} click${l.click_count === 1 ? "" : "s"}</span> <span class="mut">${l.last_clicked_at ? "last " + new Date(l.last_clicked_at).toLocaleString("en-ZA") : ""}</span>` : `<span class="mut">no clicks yet</span>`}</td></tr>`).join("");
       return html(layout("Prospect links", `
 <div class="card"><h2 style="margin-top:0">New tracked link</h2>
@@ -3636,15 +6525,15 @@ async function handle(req, env) {
       }
       const step = conn ? conn.status === "connected" ? 3 : 2 : 1;
       return html(layout("Connect WhatsApp", `
-${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}${err ? `<p class="bad">${esc2(err)}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">Connect your own WhatsApp number</h2>
 <p class="mut">Three one-time steps. Your customers then chat with YOUR number, and the receptionist answers them with your business details.</p>
 <h3>1. Create your messaging account ${step > 1 ? '<span class="ok">&#10003;</span>' : ""}</h3>
 <p class="mut">Open a free account with our messaging partner, then copy your API key from its settings.</p>
 <h3>2. Paste your API key ${step > 2 ? '<span class="ok">&#10003;</span>' : ""}</h3>
-${conn && conn.status === "connected" ? `<p class="ok">Number connected: +${esc(conn.phone_number || "")}</p>` : `<form method="post"><input type="hidden" name="action" value="save_key"><label>API key<input name="api_key" required maxlength="200" autocomplete="off"></label><button>Save key</button></form>`}
+${conn && conn.status === "connected" ? `<p class="ok">Number connected: +${esc2(conn.phone_number || "")}</p>` : `<form method="post"><input type="hidden" name="action" value="save_key"><label>API key<input name="api_key" required maxlength="200" autocomplete="off"></label><button>Save key</button></form>`}
 ${conn && conn.status !== "connected" ? `<h3>3. Connect WhatsApp</h3><form method="post"><input type="hidden" name="action" value="start"><button class="btn btn-primary">Connect WhatsApp</button><p class="mut">You will scan a QR code with the WhatsApp app on your phone - the same way WhatsApp Web pairs.</p></form>` : ""}
-${conn && conn.status === "connected" && conn.last_error ? `<p class="warn">${esc(conn.last_error)}</p>` : ""}
+${conn && conn.status === "connected" && conn.last_error ? `<p class="warn">${esc2(conn.last_error)}</p>` : ""}
 </div>`, user));
     }
     if (path === "/receptionist/connect/callback") {
@@ -3679,16 +6568,46 @@ ${conn && conn.status === "connected" && conn.last_error ? `<p class="warn">${es
       const allowance = { starter: 500, growth: 1e3, "business-pro": 2500 };
       const pl = planRow.rows[0]?.plan || "starter";
       const lim = allowance[pl] ?? 500;
-      const chan = ch.rows.map((c) => `<tr><td>+${esc(c.phone_number || "")}</td><td>${esc(c.label || "")}</td><td>${c.is_sandbox ? "demo line" : "live"}</td></tr>`).join("");
+      const chan = ch.rows.map((c) => `<tr><td>+${esc2(c.phone_number || "")}</td><td>${esc2(c.label || "")}</td><td>${c.is_sandbox ? "demo line" : "live"}</td></tr>`).join("");
       const p = prof.rows[0];
       return html(layout("Receptionist", `
 ${!ch.rows.length ? `<div class="card" style="border-color:var(--brand)"><h2 style="margin-top:0">Connect your WhatsApp</h2><p>Your receptionist answers customers on your own business WhatsApp number. <a href="/receptionist/connect">Connect it yourself in three steps</a> - it takes a few minutes.</p></div>` : ""}
 <div class="card"><h2 style="margin-top:0">Your receptionist</h2>
-<p>${p ? `${esc(p.business_name || mem.org_name)} \xB7 ${esc(p.industry || "general")} \xB7 ${p.is_active ? '<span class="ok">answering</span>' : '<span class="warn">paused</span>'}` : "Tell RevUp about your business in onboarding so the receptionist knows what to say."}</p>
+<p>${p ? `${esc2(p.business_name || mem.org_name)} \xB7 ${esc2(p.industry || "general")} \xB7 ${p.is_active ? '<span class="ok">answering</span>' : '<span class="warn">paused</span>'}` : "Tell RevUp about your business in onboarding so the receptionist knows what to say."}</p>
 <p class="mut">Business details, hours and prices come from <a href="/onboarding">onboarding</a>. Conversations live in your <a href="/inbox">inbox</a> - step in any time.</p></div>
 <div class="grid">
-<div class="card"><h2>AI replies this month</h2><p class="stat">${usedM.rows[0].c} / ${lim}</p><p class="mut">on the ${esc(pl)} plan</p></div>
+<div class="card"><h2>AI replies this month</h2><p class="stat">${usedM.rows[0].c} / ${lim}</p><p class="mut">on the ${esc2(pl)} plan</p></div>
 <div class="card"><h2>Connected numbers</h2>${ch.rows.length ? `<table><tr><th>Number</th><th>Label</th><th>Type</th></tr>${chan}</table>` : `<p class="mut">None yet.</p>`}</div>
+</div>`, user));
+    }
+    if (path === "/assistant") {
+      const { getSettings: getSettings2, upsertSettings: upsertSettings2, assistantCounts: assistantCounts2 } = await Promise.resolve().then(() => (init_assistant(), assistant_exports));
+      if (mem.plan !== "business-pro") {
+        return html(layout("Assistant", `<div class="card"><h2 style="margin-top:0">Your own assistant</h2>
+<p>Chat with your own assistant on your business WhatsApp: it remembers your rules and decisions, keeps a task log, parks anything that sends, spends or deploys for your Go + Sure, and holds a write-only vault for your secrets.</p>
+<p class="mut">The assistant is part of the Business Pro plan. <a href="/billing">Upgrade in billing -</a></p></div>`, user));
+      }
+      if (req.method === "POST") {
+        const f = await formData(req);
+        const phone = String(f.owner_phone || "").replace(/\D/g, "").slice(0, 32);
+        if (!phone || phone.length < 9) return redirect("/assistant?msg=" + encodeURIComponent("Enter your WhatsApp number with country code, e.g. 27612345678."));
+        await upsertSettings2(db, mem.workspace_id, phone, f.enabled === "on");
+        return redirect("/assistant?msg=" + encodeURIComponent("Assistant settings saved."));
+      }
+      const [settings, counts] = await Promise.all([getSettings2(db, mem.workspace_id), assistantCounts2(db, mem.workspace_id)]);
+      const msg = url.searchParams.get("msg") || "";
+      return html(layout("Assistant", `
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
+<div class="card"><h2 style="margin-top:0">Your own assistant</h2>
+<p>Message your business WhatsApp number from your own phone. The assistant answers only you: it remembers your rules and decisions, keeps a task log, parks anything that sends, spends or deploys until you reply <b>Go + Sure</b>, and holds a write-only vault for your secrets.</p>
+<form method="post" action="/assistant">
+<label>Your WhatsApp number (country code, e.g. 27612345678)<input name="owner_phone" value="${esc2(settings?.owner_phone || "")}" maxlength="32" placeholder="27\u2026"></label>
+<label><input type="checkbox" name="enabled" ${!settings || settings.enabled ? "checked" : ""}> Assistant answering</label>
+<button class="btn btn-primary" type="submit">Save</button></form></div>
+<div class="grid">
+<div class="card"><h2>Memories kept</h2><p class="stat">${counts.memories}</p></div>
+<div class="card"><h2>Waiting on Go + Sure</h2><p class="stat">${counts.pending}</p></div>
+<div class="card"><h2>Tasks running</h2><p class="stat">${counts.running}</p></div>
 </div>`, user));
     }
     if (path === "/") return html(await dashboardPage(db, user, mem, url.searchParams.get("msg") || ""));
@@ -3751,12 +6670,12 @@ ${!ch.rows.length ? `<div class="card" style="border-color:var(--brand)"><h2 sty
       for (const d of drafts.rows) (byLead[d.lead_id] = byLead[d.lead_id] || []).push(d);
       const rows = leads.rows.map((l) => {
         const ds = (byLead[l.id] || []).map((d) => `<div style="border:1px solid var(--line);border-radius:8px;padding:8px;margin:6px 0">
-<div class="mut" style="font-size:11px">Follow-up draft \xB7 ${esc(d.status)} \xB7 ${new Date(d.created_at).toLocaleString("en-ZA")}</div>
-<div style="white-space:pre-wrap">${esc(d.body)}</div>
+<div class="mut" style="font-size:11px">Follow-up draft \xB7 ${esc2(d.status)} \xB7 ${new Date(d.created_at).toLocaleString("en-ZA")}</div>
+<div style="white-space:pre-wrap">${esc2(d.body)}</div>
 ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/approve" style="margin-top:6px"><button>Mark approved</button></form>` : ""}</div>`).join("");
         return `<tr>
-<td><b>${esc(l.name)}</b><br><span class="mut">${esc(l.contact)}</span></td>
-<td>${esc(l.message.slice(0, 100))}${ds}</td>
+<td><b>${esc2(l.name)}</b><br><span class="mut">${esc2(l.contact)}</span></td>
+<td>${esc2(l.message.slice(0, 100))}${ds}</td>
 <td><form method="post" action="/frontdesk/${l.id}/save" style="display:flex;gap:6px;align-items:center">
 <select name="stage">${STAGES.map((s) => `<option${l.stage === s ? " selected" : ""}>${s}</option>`).join("")}</select>
 <input name="value" type="number" min="0" step="0.01" value="${(l.value_cents / 100).toFixed(2)}" style="width:90px" title="Value (ZAR)">
@@ -3820,13 +6739,13 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
       const items = await db.query(`SELECT id, filename, mime, size, created_at FROM cf_media WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 60`, [mem.workspace_id]);
       const msg = url.searchParams.get("msg") || "", err = url.searchParams.get("err") || "";
       const cards = items.rows.map((m) => `<div class="card" style="padding:10px">
-<img src="/media/${m.id}/raw" alt="${esc(m.filename)}" style="width:100%;height:140px;object-fit:cover;border-radius:8px;background:var(--line)">
-<p style="margin:6px 0 2px"><b>${esc(m.filename)}</b><br><span class="mut">${Math.round(m.size / 1024)} KB \xB7 ${new Date(m.created_at).toLocaleDateString("en-ZA")}</span></p>
+<img src="/media/${m.id}/raw" alt="${esc2(m.filename)}" style="width:100%;height:140px;object-fit:cover;border-radius:8px;background:var(--line)">
+<p style="margin:6px 0 2px"><b>${esc2(m.filename)}</b><br><span class="mut">${Math.round(m.size / 1024)} KB \xB7 ${new Date(m.created_at).toLocaleDateString("en-ZA")}</span></p>
 <p style="margin:4px 0"><a href="/posts/new?media=${m.id}">Use in a post</a></p>
 <form method="post" action="/media/${m.id}/delete" onsubmit="return confirm('Delete this image?')"><button class="link" style="color:var(--bad)">Delete</button></form>
 </div>`).join("");
       return html(layout("Media library", `
-${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}${err ? `<p class="bad">${esc2(err)}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">Add an image</h2>
 <form method="post" enctype="multipart/form-data"><input type="file" name="file" accept="image/*" required><button>Upload</button></form>
 <p class="mut">Images up to 2 MB. Your library holds 25 images (50 MB) - plenty for a month of posts.</p></div>
@@ -3845,7 +6764,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
     }
     if (path === "/posts") {
       const msg = url.searchParams.get("msg") || "";
-      return html((msg ? `<p class="ok">${esc(msg)}</p>` : "") + await postsPage(db, user, mem));
+      return html((msg ? `<p class="ok">${esc2(msg)}</p>` : "") + await postsPage(db, user, mem));
     }
     if (path === "/posts/new") {
       if (req.method === "POST") {
@@ -3957,14 +6876,14 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
       );
       const msg = url.searchParams.get("msg") || "";
       const rows = bk.rows.map((b) => `<tr>
-<td><b>${esc(b.contact_name || b.wa_id)}</b><br><span class="mut">${esc(b.service || "booking")}</span></td>
-<td class="mut">${b.status === "confirmed" && b.scheduled_start ? new Date(b.scheduled_start).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" }) : esc(b.preferred_time || "to confirm")}</td>
+<td><b>${esc2(b.contact_name || b.wa_id)}</b><br><span class="mut">${esc2(b.service || "booking")}</span></td>
+<td class="mut">${b.status === "confirmed" && b.scheduled_start ? new Date(b.scheduled_start).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" }) : esc2(b.preferred_time || "to confirm")}</td>
 <td>${b.status === "confirmed" ? '<span class="ok">confirmed</span>' : b.status === "done" ? "done" : b.status === "cancelled" ? '<span class="mut">cancelled</span>' : "<b>requested</b>"}</td>
 <td>${b.status === "requested" ? `<form class="inline" method="post" action="/bookings/${b.id}/confirm"><input type="datetime-local" name="when" required style="width:auto"><button>Confirm</button></form>` : ""}
 ${b.status === "confirmed" ? `<form class="inline" method="post" action="/bookings/${b.id}/done"><button>Mark done</button></form>` : ""}
 ${["requested", "confirmed"].includes(b.status) ? `<form class="inline" method="post" action="/bookings/${b.id}/cancel"><button class="link">Cancel</button></form>` : ""}</td></tr>`).join("");
       return html(layout("Bookings", `
-${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <p class="mut">Booking requests land here from your WhatsApp receptionist. Confirm a time, and when the job is finished mark it done - that starts the review request flow automatically.</p>
 <div class="card">${bk.rows.length ? `<table><tr><th>Customer</th><th>Time</th><th>Status</th><th></th></tr>${rows}</table>` : `<p class="mut">No bookings yet. When a customer books on WhatsApp, it shows up here.</p>`}</div>`, user));
     }
@@ -4132,6 +7051,10 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
       }
       return html(await supportPage(db, user, mem));
     }
+    if (path === "/wifi-card") {
+      const bp = await db.query(`SELECT business_name FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [mem.workspace_id]);
+      return html(layout("WiFi Card", wifiCardPage({ businessName: bp.rows[0]?.business_name || user._cur_ws || "", enquiryUrl: `${base}/f/${mem.workspace_id}` }), user));
+    }
     if (path === "/revenue-mode" && req.method === "POST") {
       const f = await formData(req);
       const mode = f.mode === "draft" ? "draft" : "suggest";
@@ -4254,13 +7177,14 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
     if (path === "/billing") return html(await billingPage(db, user, mem, base, env));
     return html(layout("Not found", `<p class="bad">Nothing here yet.</p>`, user), 404);
   } catch (e) {
-    return html(layout("Error", `<p class="bad">${esc(String(e).slice(0, 300))}</p>`), 500);
+    return html(layout("Error", `<p class="bad">${esc2(String(e).slice(0, 300))}</p>`), 500);
   } finally {
     await db.end().catch(() => {
     });
   }
 }
 export {
+  DRAFT_RULES,
   index_default as default,
   landingPage,
   md5,
