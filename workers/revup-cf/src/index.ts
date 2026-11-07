@@ -1595,7 +1595,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
           const industry = bp.rows[0]?.industry || "";
           const existing = await db.query(`SELECT title FROM socialteam_idea WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 40`, [mem.workspace_id]);
           const ideas = await runResearcher(env, business, industry, existing.rows.map((r: any) => r.title));
-          for (const i of ideas) {
+          for (const i of ideas.slice(0, 3)) {
             await db.query(`INSERT INTO socialteam_idea(id, workspace_id, title, angle, rationale) VALUES($1,$2,$3,$4,$5)`,
               [crypto.randomUUID(), mem.workspace_id, i.title, i.angle, i.rationale]);
           }

@@ -53,28 +53,35 @@ test('parseReview: pass boolean + note required', () => {
   assert.equal(parseReview('{"pass":true}'), null);
 });
 
-// --- customer-facing copy rules ---
-test('page: team framing, no AI lead, no vendor names, no forbidden wording', () => {
-  const html = teamPageBody(
-    [{ id: '11111111-1111-1111-1111-111111111111', title: 'Idea', angle: 'Angle', rationale: 'Why' }],
-    [{ id: '22222222-2222-2222-2222-222222222222', caption: 'Caption body', hashtags: ['#x'], review_note: 'Checked: clean', status: 'ready' }]);
-  assert.ok(html.includes('A full social media team for your business'));
-  assert.ok(html.includes('Researcher') && html.includes('Writer') && html.includes('Reviewer'));
-  assert.ok(html.includes('every post still waits for your approval'));
-  assert.ok(html.includes('50-member team'));
-  assert.ok(!/\bAI\b/.test(html), 'never the word AI in customer copy');
+// --- customer-facing copy rules + premium low-text UI ---
+test('page: compact chips, one primary button, tap-to-expand, no vendor names', () => {
+  const ideas = Array.from({length: 5}, (_, n) => ({ id: `i${n}`, title: `Idea ${n}`, angle: 'Angle', rationale: 'Why' }));
+  const pieces = [{ id: '22222222-2222-2222-2222-222222222222', caption: 'Line one\nLine two\nLine three\nLine four', hashtags: ['#x'], review_note: 'Checked: clean', status: 'ready' }];
+  const html = teamPageBody(ideas, pieces);
+  // three members as compact chips
+  assert.ok(html.includes('tchip') && html.includes('Researcher') && html.includes('Writer') && html.includes('Reviewer'));
+  // exactly one primary button (the research action); write/send live behind a tap
+  const outside = html.replace(/<details[\s\S]*?<\/details>/g, '');
+  assert.equal((outside.match(/<button>/g) || []).length, 1, 'only one always-visible primary button');
+  assert.ok(html.includes('/team/research'));
+  // 3 ideas max, titles only in the closed row, why-it-works behind a tap
+  assert.equal((html.match(/class="tidea"/g) || []).length, 3, '3 ideas max');
+  assert.ok(html.includes('<details class="tidea">'), 'idea expands on tap');
+  assert.ok(html.includes('/team/idea/i0/write') && html.includes('/team/idea/i0/park'));
+  // post card: 3-line clamp, expand on tap, reviewer note + send inside
+  assert.ok(html.includes('-webkit-line-clamp:2'));
+  assert.ok(html.includes('<details class="tpiece">'));
+  assert.ok(html.includes('/team/piece/22222222-2222-2222-2222-222222222222/send'));
+  // wider team collapsed to one line
+  assert.ok(html.includes('47 more teammates switch on as you grow'));
+  assert.ok(html.includes('You approve every post'));
+  // no long explainer paragraphs / forbidden wording
+  assert.ok(!html.includes('50-member team'));
   for (const bad of ['Groq', 'OpenRouter', 'Zernio', 'FrontDesk', 'Radar', 'Not Yet Built', 'not yet built'])
     assert.ok(!html.includes(bad), bad);
-  assert.ok(html.includes('/team/research'), 'research action');
-  assert.ok(html.includes('/team/idea/11111111-1111-1111-1111-111111111111/write'), 'write action');
-  assert.ok(html.includes('/team/piece/22222222-2222-2222-2222-222222222222/send'), 'send action');
+  assert.ok(!/\bAI\b/.test(html), 'never the word AI in customer copy');
 });
 test('page: XSS escaping on idea and piece fields', () => {
   const html = teamPageBody([{ id: '1', title: '<script>x</script>', angle: 'a', rationale: 'r' }], []);
   assert.ok(!html.includes('<script>x</script>'));
-});
-test('page: wider team lists departments without promising them live', () => {
-  const html = teamPageBody([], []);
-  assert.ok(html.includes('switches on as your business grows'));
-  assert.ok(!html.includes('Coming soon') && !html.includes('Not Yet Built'));
 });
