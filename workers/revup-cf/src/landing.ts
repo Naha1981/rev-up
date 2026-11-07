@@ -51,8 +51,7 @@ section{padding:96px 0}
 .badge .b1{color:var(--orange)}
 .metastrip{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:16px 0;display:flex;justify-content:space-between;gap:16px;font-family:"DM Mono",monospace;font-size:10.5px;letter-spacing:.16em;color:var(--muted);flex-wrap:wrap}
 .marquee{background:var(--orange);color:var(--ink);overflow:hidden;padding:13px 0;border-top:1px solid rgba(23,23,20,.2)}
-.marquee-track{display:flex;gap:44px;white-space:nowrap;font-family:"Space Grotesk";font-weight:700;font-size:15px;letter-spacing:.06em;animation:mq 26s linear infinite;width:max-content}
-@keyframes mq{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.marquee-track{display:flex;justify-content:center;text-align:center;font-family:"Space Grotesk";font-weight:700;font-size:15px;letter-spacing:.06em}
 .cards3{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
 .ecard{padding:30px;display:flex;flex-direction:column;gap:16px;min-height:520px}
 .ecard.dark{background:var(--green);color:#f6f0e7}
@@ -204,8 +203,7 @@ export function landingPage(): string {
 </div></header>
 
 <div class="marquee"><div class="marquee-track">
-<span>RESPOND WITH PURPOSE &#10035; BUILD TRUST &#10035; KEEP MOVING &#10035; TURN ENQUIRIES INTO ACTION &#10035; RESPOND WITH PURPOSE &#10035; BUILD TRUST &#10035; KEEP MOVING &#10035; TURN ENQUIRIES INTO ACTION &#10035;&nbsp;</span>
-<span>RESPOND WITH PURPOSE &#10035; BUILD TRUST &#10035; KEEP MOVING &#10035; TURN ENQUIRIES INTO ACTION &#10035; RESPOND WITH PURPOSE &#10035; BUILD TRUST &#10035; KEEP MOVING &#10035; TURN ENQUIRIES INTO ACTION &#10035;&nbsp;</span>
+<span>RESPOND WITH PURPOSE &#10035; BUILD TRUST &#10035; KEEP MOVING &#10035; TURN ENQUIRIES INTO ACTION</span>
 </div></div>
 
 <section id="platform"><div class="wrap">

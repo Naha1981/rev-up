@@ -215,7 +215,7 @@ const PAGE_CSS = `<style>
 /* Apple-style: borderless soft cards, generous space, one accent, quiet type */
 .tchips{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 16px}
 .tchip{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:5px 14px 5px 6px;font-weight:600;font-size:13px;background:#fff;box-shadow:0 1px 2px rgba(23,23,20,.05),0 6px 18px rgba(23,23,20,.06)}
-.tav{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--brand,#f47721),#d95f0e);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.tav{width:26px;height:26px;border-radius:50%;background:var(--brand,#f47721);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
 .tidea,.tpiece{border:0;border-radius:16px;background:#fff;margin:0 0 10px;overflow:hidden;box-shadow:0 1px 2px rgba(23,23,20,.05),0 10px 28px rgba(23,23,20,.06);transition:box-shadow .18s ease}
 .tidea:hover,.tpiece:hover{box-shadow:0 2px 4px rgba(23,23,20,.06),0 14px 36px rgba(23,23,20,.09)}
 .tidea>summary,.tpiece>summary{display:flex;align-items:center;gap:12px;padding:16px 18px;cursor:pointer;list-style:none;font-size:15px;font-weight:600;-webkit-tap-highlight-color:transparent}
@@ -224,7 +224,7 @@ const PAGE_CSS = `<style>
 .tpiece-t{flex:1;min-width:0;font-weight:500;color:#3d3a33;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap;line-height:1.4}
 .tidea-b,.tpiece-b{padding:0 18px 16px;font-size:14px;color:#3d3a33}
 .tidea-b p,.tpiece-b p{margin:6px 0}
-.tlbl{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9a958a;margin:20px 4px 10px;font-weight:700}
+.tlbl{font-size:12px;color:#9a958a;margin:20px 4px 8px;font-weight:500}
 .tchev{color:#c9c4b8;font-size:12px;transition:transform .15s ease}
 details[open] .tchev{transform:rotate(90deg)}
 .tpiece .pill{flex-shrink:0}

@@ -51,29 +51,32 @@ function esc(s: any): string {
 export function navLinks(user: any): string {
   const g: string[] = Array.isArray(user._goals) ? user._goals : [];
   const show = (...need: string[]) => !g.length || need.some((n) => g.includes(n));
+  // Daily work stays on the bar; everything else sits under More.
   let h = `<a href="/">Dashboard</a>`;
-  if (show("social")) h += `<a href="/analytics">Analytics</a>`;
-  if (show("reviews")) h += `<a href="/radar">Radar</a>`;
-  if (show("social")) h += `<a href="/posts">Posts</a>`;
-  if (show("social")) h += `<a href="/team">Team</a>`;
-  if (show("social")) h += `<a href="/media">Media</a>`;
-  h += `<a href="/onboarding">Onboarding</a>`;
-  if (show("reviews")) h += `<a href="/reviews">Reviews</a>`;
-  if (show("receptionist")) h += `<a href="/receptionist">Receptionist</a>`;
-  if (show("receptionist")) h += `<a href="/assistant">Assistant</a>`;
-  if (show("receptionist")) h += `<a href="/bookings">Bookings</a>`;
-  if (show("receptionist")) h += `<a href="/waitlist">Waitlist</a>`;
-  if (show("receptionist")) h += `<a href="/loyalty">Loyalty</a>`;
-  if (show("receptionist")) h += `<a href="/quotes">Quotes</a>`;
-  if (show("receptionist")) h += `<a href="/campaigns">Campaigns</a>`;
-  if (show("receptionist", "social", "leads")) h += `<a href="/pages">Pages</a>`;
-  if (show("receptionist")) h += `<a href="/competitors">Competitors</a>`;
-  if (show("receptionist")) h += `<a href="/support">Support</a>`;
-  if (show("receptionist")) h += `<a href="/wifi-card">WiFi Card</a>`;
   if (show("leads", "receptionist")) h += `<a href="/inbox">Inbox</a>`;
   if (show("leads")) h += `<a href="/frontdesk">Leads</a>`;
   if (show("reviews", "leads", "receptionist")) h += `<a href="/approvals">Approvals</a>`;
-  h += `<a href="/billing">Billing</a>`;
+  if (show("social")) h += `<a href="/posts">Posts</a>`;
+  if (show("social")) h += `<a href="/team">Team</a>`;
+  if (show("reviews")) h += `<a href="/reviews">Reviews</a>`;
+  if (show("receptionist")) h += `<a href="/receptionist">Receptionist</a>`;
+  let more = "";
+  if (show("social")) more += `<a href="/analytics">Analytics</a>`;
+  if (show("reviews")) more += `<a href="/radar">Radar</a>`;
+  if (show("social")) more += `<a href="/media">Media</a>`;
+  more += `<a href="/onboarding">Onboarding</a>`;
+  if (show("receptionist")) more += `<a href="/assistant">Assistant</a>`;
+  if (show("receptionist")) more += `<a href="/bookings">Bookings</a>`;
+  if (show("receptionist")) more += `<a href="/waitlist">Waitlist</a>`;
+  if (show("receptionist")) more += `<a href="/loyalty">Loyalty</a>`;
+  if (show("receptionist")) more += `<a href="/quotes">Quotes</a>`;
+  if (show("receptionist")) more += `<a href="/campaigns">Campaigns</a>`;
+  if (show("receptionist", "social", "leads")) more += `<a href="/pages">Pages</a>`;
+  if (show("receptionist")) more += `<a href="/competitors">Competitors</a>`;
+  if (show("receptionist")) more += `<a href="/support">Support</a>`;
+  if (show("receptionist")) more += `<a href="/wifi-card">WiFi Card</a>`;
+  more += `<a href="/billing">Billing</a>`;
+  h += `<details class="nav-more"><summary>More</summary><div class="nav-more-panel">${more}</div></details>`;
   return h;
 }
 
@@ -92,6 +95,16 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:16px 0
 .nav-links{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
 .nav-links a{color:var(--ink2);font-size:14px;font-weight:500}
 .nav-links a:hover{color:var(--ink);text-decoration:none}
+.nav-more{position:relative}
+.nav-more summary{list-style:none;cursor:pointer;color:var(--ink2);font-size:14px;font-weight:500;display:flex;align-items:center;gap:4px;user-select:none}
+.nav-more summary::-webkit-details-marker{display:none}
+.nav-more summary::after{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg) translateY(-2px)}
+.nav-more summary:hover{color:var(--ink)}
+.nav-more[open] summary{color:var(--ink)}
+.nav-more-panel{position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid var(--line);border-radius:12px;padding:8px;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,0.06);z-index:50;display:grid;gap:2px}
+.nav-more-panel a{display:block;padding:6px 12px;border-radius:8px;white-space:nowrap;color:var(--ink2)}
+.nav-more-panel a:hover{background:var(--bg);color:var(--ink);text-decoration:none}
+@media (max-width:640px){.nav-more-panel{left:0;right:auto}}
 .btn{display:inline-block;padding:10px 20px;border-radius:10px;font-weight:500;font-size:15px;text-decoration:none;transition:background .15s;border:0;cursor:pointer}
 .btn-primary{background:var(--brand);color:#fff}
 .btn-primary:hover{background:var(--brand-dark);text-decoration:none}
@@ -307,7 +320,7 @@ ${err ? `<p class="bad">${esc(err)}</p>` : ""}
 <label>Password<input name="password" type="password" required minlength="8"></label>
 <label>Business name<input name="business" required maxlength="200"></label>
 <button>Create account</button>
-<p class="mut">Free trial. Choose the plan that fits you during setup - pay only when your trial ends.</p>
+<p class="mut">One monthly price from day one - no setup fee. Choose your plan during setup and activate it with your first payment.</p>
 </form></div>`);
 
 const loginPage = (err = "") => layout("Log in to RevUp", `
@@ -318,7 +331,8 @@ ${err ? `<p class="bad">${esc(err)}</p>` : ""}
 <button>Log in</button>
 </form></div>`);
 
-async function dashboardPage(db: Pool, user: any, mem: any, msg = ""): Promise<string> {
+function statusLabel(s: string): string { return s === "active" ? "active" : "activation pending"; }
+export async function dashboardPage(db: Pool, user: any, mem: any, msg = ""): Promise<string> {
   const [pending, links, clicks, posts] = await Promise.all([
     db.query(`SELECT count(*) c FROM composer_platform_post pp JOIN composer_post p ON p.id=pp.post_id WHERE p.workspace_id=$1 AND pp.status='pending_review'`, [mem.workspace_id]),
     db.query(`SELECT count(*) c FROM receptionist_reviewlink WHERE workspace_id=$1`, [mem.workspace_id]),
@@ -327,7 +341,7 @@ async function dashboardPage(db: Pool, user: any, mem: any, msg = ""): Promise<s
   ]);
   return layout("Dashboard", `
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
-<p class="mut">${esc(mem.org_name)}${mem.workspace_name && mem.workspace_name !== mem.org_name ? ` · ${esc(mem.workspace_name)}` : ""} · <span class="pill">${esc(mem.plan)}</span> <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc(mem.subscription_status)}</span></p>
+<p class="mut">${esc(mem.org_name)}${mem.workspace_name && mem.workspace_name !== mem.org_name ? ` · ${esc(mem.workspace_name)}` : ""} · <span class="pill">${esc(mem.plan)}</span> <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc(statusLabel(mem.subscription_status))}</span></p>
 <div class="grid">
 <div class="card"><h2>Posts</h2><p class="stat">${posts.rows[0].c}</p><p class="mut">total in this workspace</p></div>
 <div class="card"><h2>Awaiting approval</h2><p class="stat">${pending.rows[0].c}</p><p class="mut"><a href="/approvals">review now →</a></p></div>
@@ -340,13 +354,13 @@ const GOALS: [string, string][] = [
   ["receptionist", "Answer my business WhatsApp day and night"],
   ["reviews", "Turn happy customers into 5-star Google reviews"],
   ["social", "Keep my Facebook and Instagram posting"],
-  ["leads", "Capture website enquiries and follow them up (FrontDesk)"],
+  ["leads", "Capture website enquiries and follow them up"],
 ];
 // PRICING LOCKED by Thabiso 6 Nov 2026 - see PRICING.md. Changes need his explicit approval.
 const PLAN_CARDS: { slug: string; name: string; price: number; feat: string }[] = [
   { slug: "starter", name: "Starter", price: 499, feat: "Google review booster + enquiry inbox" },
   { slug: "growth", name: "Growth", price: 999, feat: "Everything in Starter + social posting with approvals" },
-  { slug: "business-pro", name: "Business Pro", price: 1999, feat: "Everything in Growth + hands-free auto-posting, FrontDesk lead pipeline and follow-ups" },
+  { slug: "business-pro", name: "Business Pro", price: 1999, feat: "Everything in Growth + hands-free auto-posting, lead pipeline and follow-ups" },
 ];
 export function recommendPlan(goals: string[]): string {
   if (goals.includes("leads")) return "business-pro";
@@ -354,7 +368,7 @@ export function recommendPlan(goals: string[]): string {
   return "starter";
 }
 
-async function onboardingPage(db: Pool, user: any, mem: any, msg = ""): Promise<string> {
+export async function onboardingPage(db: Pool, user: any, mem: any, msg = ""): Promise<string> {
   const bp = await db.query(`SELECT * FROM receptionist_businessprofile WHERE workspace_id=$1 LIMIT 1`, [mem.workspace_id]);
   const b = bp.rows[0] || {};
   const w = await db.query(`SELECT industry, website_url, timezone FROM workspaces_workspace WHERE id=$1`, [mem.workspace_id]);
@@ -375,7 +389,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 ${GOALS.map(([v, l]) => `<label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" name="goal_${v}"${savedGoals.includes(v) ? " checked" : ""} style="width:auto"> ${l}</label>`).join("")}
 <h2>Choose your plan</h2>
 ${PLAN_CARDS.map((p) => `<label style="display:block;border:1px solid ${cur === p.slug ? "var(--brand)" : "var(--line)"};border-radius:12px;padding:12px 14px;margin:8px 0;cursor:pointer;font-weight:400">
-<input type="radio" name="plan" value="${p.slug}"${cur === p.slug ? " checked" : ""} style="width:auto"> <b>${p.name} - R${p.price.toLocaleString("en-ZA")}/month</b>${rec === p.slug ? ` <span class="pill ok recpill">Recommended for you</span>` : ""}<br>
+<input type="radio" name="plan" value="${p.slug}"${cur === p.slug ? " checked" : ""} style="width:auto"> <b>${p.name} - R${p.price.toLocaleString("en-ZA")}/month</b>${rec === p.slug ? ` <span class="pill ok recpill" style="margin-left:8px">Recommended</span>` : ""}<br>
 <span class="mut">${p.feat}</span></label>`).join("")}
 <script>
 (function(){
@@ -386,7 +400,7 @@ ${PLAN_CARDS.map((p) => `<label style="display:block;border:1px solid ${cur === 
     document.querySelectorAll('input[name="plan"]').forEach(function(p){
       var card=p.closest('label');
       var old=card.querySelector('.recpill');if(old)old.remove();
-      if(p.value===r){var sp=document.createElement('span');sp.className='pill ok recpill';sp.textContent='Recommended for you';card.querySelector('b').after(sp);}
+      if(p.value===r){var sp=document.createElement('span');sp.className='pill ok recpill';sp.style.marginLeft='8px';sp.textContent='Recommended';card.querySelector('b').after(sp);}
       if(!p.dataset.touched)p.checked=(p.value===r);
       card.style.borderColor=p.checked?'var(--brand)':'var(--line)';
     });
@@ -396,7 +410,7 @@ ${PLAN_CARDS.map((p) => `<label style="display:block;border:1px solid ${cur === 
   recalc();
 })();
 </script>
-<p class="mut">Your trial starts now - no payment today. You can change plans any time on the billing page.</p>
+<p class="mut">Plans are billed monthly from day one - no setup fee. You can change plans any time on the billing page.</p>
 <button>Save and continue</button>
 </form></div>`, user);
 }
@@ -857,23 +871,23 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <div class="card">${r.rows.length ? `<table><tr><th>Post</th><th>Channel</th><th>Author</th><th>Scheduled</th><th></th></tr>${rows}</table>` : `<p class="ok">Nothing waiting for review.</p>`}</div>`, user);
 }
 
-async function billingPage(db: Pool, user: any, mem: any, base: string, env: Env): Promise<string> {
+export async function billingPage(db: Pool, user: any, mem: any, base: string, env: Env): Promise<string> {
   const plans = [
     { slug: "starter", name: "Starter", price: 499, feat: "1 workspace · core publishing" },
     { slug: "growth", name: "Growth", price: 999, feat: "3 workspaces · approvals · reviews" },
-    { slug: "business-pro", name: "Business Pro", price: 1999, feat: "everything in Growth · FrontDesk lead pipeline + follow-ups · 3 channels" },
+    { slug: "business-pro", name: "Business Pro", price: 1999, feat: "everything in Growth · lead pipeline + follow-ups · 3 channels" },
   ];
   const cards = plans.map((p) => `<div class="card"><h2>${p.name}</h2>
 <p style="font-size:26px;margin:0">R${p.price.toLocaleString("en-ZA")}<span class="mut">/month</span></p>
 <p class="mut">${p.feat}</p>
 ${p.slug === mem.plan
-  ? `<p class="pill">current plan</p>`
-  : `<a class="btn" href="${pfUrl(env, base, p.slug, mem)}">Subscribe with PayFast</a>`}
+  ? (mem.subscription_status === "active" ? `<p class="pill">current plan</p>` : `<a class="btn btn-primary" href="${pfUrl(env, base, p.slug, mem)}">Activate with PayFast</a>`)
+  : `<a class="btn btn-primary" href="${pfUrl(env, base, p.slug, mem)}">Subscribe with PayFast</a>`}
 </div>`).join("");
   return layout("Billing", `
-<p>Plan <b>${esc(mem.plan)}</b> · status <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc(mem.subscription_status)}</span>
+<p>Plan <b>${esc(mem.plan)}</b> · status <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc(statusLabel(mem.subscription_status))}</span>
 ${mem.payment_reference ? ` · ref <span class="mut">${esc(mem.payment_reference)}</span>` : ""}</p>
-${mem.trial_started_at ? `<p class="mut">Trial started ${new Date(mem.trial_started_at).toLocaleDateString("en-ZA")}${mem.activated_at ? ` · activated ${new Date(mem.activated_at).toLocaleDateString("en-ZA")}` : ""}</p>` : ""}
+${mem.activated_at ? `<p class="mut">Active since ${new Date(mem.activated_at).toLocaleDateString("en-ZA")}</p>` : ""}
 <div class="grid">${cards}</div>
 <p class="mut">Payments are processed by PayFast in rand. You can cancel any time.</p>`, user);
 }
@@ -1034,7 +1048,7 @@ async function handle(req: Request, env: Env): Promise<Response> {
              VALUES($1,$2,$3,$4,false,true,false,false,'[]'::jsonb,now(),now(),'',now())`, [userId, h.rows[0].hash, email, f.name.trim()]);
           await client.query(
             `INSERT INTO organizations_organization(id,name,logo_url,default_timezone,plan,subscription_status,payment_reference,payfast_token,access_suspension_reason,trial_started_at,billing_email,created_at,updated_at)
-             VALUES($1,$2,'','Africa/Johannesburg','starter','trial',$3,'','',now(),$4,now(),now())`, [orgId, f.business.trim(), ref, email]);
+             VALUES($1,$2,'','Africa/Johannesburg','starter','pending_activation',$3,'','',NULL,$4,now(),now())`, [orgId, f.business.trim(), ref, email]);
           await client.query(
             `INSERT INTO workspaces_workspace(id,name,description,organization_id,timezone,primary_color,secondary_color,default_hashtags,default_first_comment,approval_workflow_mode,is_archived,icon,industry,publish_test_mode,website_url,facebook_url,web_presence_gate_exempt,created_at,updated_at)
              VALUES($1,$2,'',$3,'Africa/Johannesburg','#0ea5e9','#0b1120','[]'::jsonb,'','required',false,'','',false,'','',false,now(),now())`, [wsId, f.business.trim(), orgId]);
@@ -1237,7 +1251,7 @@ async function handle(req: Request, env: Env): Promise<Response> {
         }
         const rows = (mem.workspaces || []).map((w: any) => `<tr>
 <td><b>${esc(w.name)}</b><br><span class="mut">${esc(w.org)}</span></td>
-<td>${esc(w.plan)} · ${esc(w.status)}</td>
+<td>${esc(w.plan)} · ${esc(statusLabel(w.status))}</td>
 <td>${w.id === mem.workspace_id ? `<span class="ok">Current</span>` : `<form method="post"><input type="hidden" name="workspace_id" value="${w.id}"><button>Switch</button></form>`}</td></tr>`).join("");
         return html(layout("Switch business", `
 <div class="card"><table><tr><th>Business</th><th>Plan</th><th></th></tr>${rows}</table>
@@ -1413,7 +1427,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
             await client.query("COMMIT");
           } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }
           const planName = PLAN_CARDS.find((p) => p.slug === plan)?.name || plan;
-          return redirect("/?msg=" + encodeURIComponent(`You are on ${planName} - trial started. Add your Google review link under Reviews whenever you are ready.`));
+          return redirect("/?msg=" + encodeURIComponent(`${planName} chosen - activate it with your first monthly payment on the billing page. Add your Google review link under Reviews whenever you are ready.`));
         }
         return html(await onboardingPage(db, user, mem));
       }
