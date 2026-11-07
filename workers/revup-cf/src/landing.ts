@@ -89,6 +89,7 @@ const LANDING_BODY = `
     <div class="card"><div class="icon">🗂️</div><h3>FrontDesk lead capture</h3><p>A simple enquiry form for your website. Every enquiry lands in one pipeline, with a considered follow-up drafted for your approval.</p></div>
     <div class="card"><div class="icon">📈</div><h3>Your numbers, in plain language</h3><p>See reviews requested, links clicked, posts drafted and enquiries captured. No spreadsheets, no jargon.</p></div>
     <div class="card"><div class="icon">✍️</div><h3>Social posting</h3><p>Posts in your voice, tuned to your trade and your town, drafted and scheduled to your social pages. You approve every word before anything goes out.</p></div>
+    <div class="card"><div class="icon">🤝</div><h3>Your social media team <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:#fef3c7;color:#92400e;border-radius:999px;padding:2px 10px;vertical-align:middle">in progress</span></h3><p>A Researcher, a Writer and a Reviewer working for your business: they bring post ideas, write them in your voice and check every word. You make the final decisions.</p></div>
   </div>
 </section>
 </div>
