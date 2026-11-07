@@ -694,7 +694,7 @@ function newPostPage(user: any, mem: any, pre: Record<string, string>, msg = "")
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <div class="card"><form method="post" action="/posts/draft">
 <label>Topic<input name="topic" maxlength="200" value="${esc(pre.topic || "")}" placeholder="e.g. teeth whitening special this month" required></label>
-<button class="btn-secondary">Draft with AI</button>
+<button class="btn-secondary">Draft for me</button>
 </form></div>
 ${pre.media ? `<div class="card"><h2 style="margin-top:0">Attached image</h2><img src="/media/${esc(pre.media)}/raw" style="max-width:280px;border-radius:8px"></div>` : ""}
 <div class="card"><form method="post" action="/posts/new">
@@ -810,7 +810,8 @@ async function analyticsPage(db: Pool, user: any, mem: any): Promise<string> {
     db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound'`, [mem.workspace_id]),
     db.query(`SELECT date_trunc('day', clicked_at) d, count(*) c FROM receptionist_reviewlink WHERE workspace_id=$1 AND clicked_at IS NOT NULL GROUP BY 1 ORDER BY 1 DESC LIMIT 14`, [mem.workspace_id]),
   ]);
-  const statusRows = byStatus.rows.map((r: any) => `<tr><td>${esc(r.status)}</td><td>${r.c}</td></tr>`).join("");
+  const ANALYTICS_STATUS_LABELS: Record<string, string> = { pending_review: "Awaiting approval", published: "Published", approved: "Approved", draft: "Draft", rejected: "Rejected", scheduled: "Scheduled", publishing: "Publishing", failed: "Failed" };
+  const statusRows = byStatus.rows.map((r: any) => `<tr><td>${esc(ANALYTICS_STATUS_LABELS[r.status] || r.status)}</td><td>${r.c}</td></tr>`).join("");
   const clickRows = clicksByDay.rows.map((r: any) => `<tr><td>${new Date(r.d).toLocaleDateString("en-ZA")}</td><td>${r.c}</td></tr>`).join("");
   return layout("Analytics", `
 <div class="grid">
@@ -835,9 +836,12 @@ async function postsPage(db: Pool, user: any, mem: any): Promise<string> {
   const rows = r.rows.map((x: any) => {
     const sts = (x.statuses || "").split(", ").filter(Boolean);
     const allDraft = sts.length > 0 && sts.every((st: string) => st === "draft");
+    const POST_STATUS_LABELS: Record<string, string> = { pending_review: "Awaiting approval", published: "Published", approved: "Approved", draft: "Draft", rejected: "Rejected", scheduled: "Scheduled", publishing: "Publishing", failed: "Failed" };
+    const statusLabel = (st: string) => POST_STATUS_LABELS[st] || st;
+    if (sts.length === 0) sts.push(x.published_at ? "published" : x.scheduled_at ? "scheduled" : "draft");
     return `<tr>
 <td><b>${esc(x.title || "(untitled)")}</b><br><span class="mut">${esc((x.caption || "").slice(0, 120))}</span></td>
-<td>${sts.map((st: string) => `<span class="pill ${st === "approved" || st === "published" ? "ok" : ""}">${esc(st)}</span> `).join("")}</td>
+<td>${sts.map((st: string) => `<span class="pill ${st === "approved" || st === "published" ? "ok" : ""}">${esc(statusLabel(st))}</span> `).join("")}</td>
 <td class="mut">${esc(x.channels || "-")}</td>
 <td class="mut">${x.scheduled_at ? new Date(x.scheduled_at).toLocaleString("en-ZA") : new Date(x.created_at).toLocaleDateString("en-ZA")}</td>
 <td>${allDraft ? `<form class="inline" method="post" action="/posts/${x.id}/submit"><button>Submit for review</button></form>` : ""}</td></tr>`;
@@ -1368,7 +1372,7 @@ ${!ch.rows.length ? `<div class="card" style="border-color:var(--brand)"><h2 sty
 <p>${p ? `${esc(p.business_name || mem.org_name)} · ${esc(p.industry || "general")} · ${p.is_active ? '<span class="ok">answering</span>' : '<span class="warn">paused</span>'}` : "Tell RevUp about your business in onboarding so the receptionist knows what to say."}</p>
 <p class="mut">Business details, hours and prices come from <a href="/onboarding">onboarding</a>. Conversations live in your <a href="/inbox">inbox</a> - step in any time.</p></div>
 <div class="grid">
-<div class="card"><h2>AI replies this month</h2><p class="stat">${usedM.rows[0].c} / ${lim}</p><p class="mut">on the ${esc(pl)} plan</p></div>
+<div class="card"><h2>Replies this month</h2><p class="stat">${usedM.rows[0].c} / ${lim}</p><p class="mut">on the ${esc(pl)} plan</p></div>
 <div class="card"><h2>Connected numbers</h2>${ch.rows.length ? `<table><tr><th>Number</th><th>Label</th><th>Type</th></tr>${chan}</table>` : `<p class="mut">None yet.</p>`}</div>
 </div>`, user));
       }

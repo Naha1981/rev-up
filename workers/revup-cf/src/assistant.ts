@@ -262,7 +262,7 @@ export async function handleAssistantMessage(
 
   const ai = await freeAiGenerate<string>(env, prompt, { maxTokens: 800, temperature: 0.4, requireBackupConsent: true },
     rejectInventedPrices(prompt, (t) => t.trim() || null), fetcher);
-  if (!ai) return { reply: "My AI is unavailable right now and the backup is either off or down. Try me again in a few minutes." };
+  if (!ai) return { reply: "I'm unavailable right now and my backup is either off or down. Try me again in a few minutes." };
 
   // Memory extraction pass: store one durable fact/rule the owner stated. Best-effort.
   let stored: string | undefined;

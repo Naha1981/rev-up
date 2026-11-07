@@ -219,3 +219,5 @@ theme/static/css/dist/
 /seed_ad_analytics.py
 /seed_ad_calendar.py
 modules/responder/node_modules/
+workers/revup-cf/dist-test/
+workers/revup-cf/.wrangler/
