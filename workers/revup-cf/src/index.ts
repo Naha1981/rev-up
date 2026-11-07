@@ -27,7 +27,11 @@ function pool(env: Env) {
   // pool hands out dead clients). idleTimeoutMillis 0 disables the reaper: a 1s
   // reaper raced mid-request checkout and hung the reconnect. end() must not
   // throw in finally or it masks the friendly 500 page with a worker exception.
-  return new Pool({ connectionString: env.DATABASE_URL, max: 3, connectionTimeoutMillis: 15000, idleTimeoutMillis: 0 });
+  // max: 1 - one connection per request. Postgres caps at 112 connections and the
+  // Render stack + cron worker also use some; at max: 3 just ~35 concurrent users
+  // could exhaust them (measured 7 Nov: 32 of 50 concurrent dashboard loads 500'd).
+  // Promise.all queries simply queue on the single connection.
+  return new Pool({ connectionString: env.DATABASE_URL, max: 1, connectionTimeoutMillis: 15000, idleTimeoutMillis: 0 });
 }
 
 // ---------- crypto ----------
@@ -165,6 +169,16 @@ async function rateLimited(db: Pool, bucket: string, req: Request, limit: number
     `INSERT INTO cf_ratelimit(key,count) VALUES($1,1) ON CONFLICT (key) DO UPDATE SET count=cf_ratelimit.count+1 RETURNING count`,
     [`${bucket}:${ip}:${day}`]);
   return Number(r.rows[0].count) > limit;
+}
+
+// Read-only rate-limit check, no increment. Login uses this so that only FAILED
+// attempts burn the daily budget: successful logins must not count, or 50 staff
+// on one office network would lock each other out at 20 logins a day.
+export async function rateLimitExceeded(db: Pool, bucket: string, req: Request, limit: number): Promise<boolean> {
+  const ip = (req.headers.get("cf-connecting-ip") || "unknown").slice(0, 64);
+  const day = new Date().toISOString().slice(0, 10);
+  const r = await db.query(`SELECT count FROM cf_ratelimit WHERE key=$1`, [`${bucket}:${ip}:${day}`]);
+  return r.rows[0] ? Number(r.rows[0].count) > limit : false;
 }
 
 function sessionCookie(token: string): string {
@@ -1072,7 +1086,9 @@ async function handle(req: Request, env: Env): Promise<Response> {
       const f = await formData(req);
       const db = pool(env);
       try {
-        if (await rateLimited(db, "login", req, 20)) return html(loginPage("Too many attempts from this network today - please try again tomorrow."), 429);
+        // Block networks already over the failed-attempt budget BEFORE running
+        // bcrypt (cheap check first), then count only failures.
+        if (await rateLimitExceeded(db, "login", req, 20)) return html(loginPage("Too many failed attempts from this network today - please try again tomorrow."), 429);
         const r = await db.query(`SELECT id,password FROM accounts_user WHERE lower(email)=lower($1) AND is_active`, [(f.email || "").trim()]);
         const row = r.rows[0];
         let ok = false;
@@ -1080,8 +1096,7 @@ async function handle(req: Request, env: Env): Promise<Response> {
           const v = await db.query(VERIFY_SQL, [f.password || "", row.password.slice("bcrypt_sha256$".length)]);
           ok = v.rows[0]?.ok === true;
         }
-        if (!ok) return html(loginPage("Wrong email or password."), 401);
-      // (rate limit checked below before password verify)
+        if (!ok) { await rateLimited(db, "login", req, 20); return html(loginPage("Wrong email or password."), 401); }
         const token = await newSession(db, row.id, req);
         return new Response(null, { status: 303, headers: { location: "/", "set-cookie": sessionCookie(token) } });
       } finally { await db.end().catch(() => {}); }

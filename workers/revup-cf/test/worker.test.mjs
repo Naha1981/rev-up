@@ -198,3 +198,19 @@ test('page detail has publish toggle, stat cards, tooltips', async () => {
   assert.ok(b.includes('uitip-b'), 'tooltips');
   assert.equal((b.match(/publish" style="display:inline"/g) || []).length, 1, 'only the noscript fallback form remains');
 });
+
+// --- login rate limit: only failed attempts count ---
+import { rateLimitExceeded } from '../dist-test/index.mjs';
+const fakeReq = { headers: { get: () => '1.2.3.4' } };
+test('rateLimitExceeded: under budget allowed', async () => {
+  const db = { query: async () => ({ rows: [{ count: 20 }] }) };
+  assert.equal(await rateLimitExceeded(db, 'login', fakeReq, 20), false);
+});
+test('rateLimitExceeded: over budget blocked', async () => {
+  const db = { query: async () => ({ rows: [{ count: 21 }] }) };
+  assert.equal(await rateLimitExceeded(db, 'login', fakeReq, 20), true);
+});
+test('rateLimitExceeded: no row means allowed (no failed attempts yet)', async () => {
+  const db = { query: async () => ({ rows: [] }) };
+  assert.equal(await rateLimitExceeded(db, 'login', fakeReq, 20), false);
+});
