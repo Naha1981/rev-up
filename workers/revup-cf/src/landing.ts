@@ -331,6 +331,7 @@ export function landingPage(): string {
 <div class="tcell"><span class="num">07</span><h3>WiFi card <span class="pill pill-live">Live</span></h3><p>A printable card for your waiting room. Guests scan one code for your WiFi and another to send an enquiry or book - straight into your pipeline.</p></div>
 <div class="tcell"><span class="num">08</span><h3>Support inbox <span class="pill pill-live">Live</span></h3><p>Customer help requests land in the same flow and get answered fast, so small problems never become bad reviews.</p></div>
 <div class="tcell"><span class="num">09</span><h3>Pro Assistant <span class="pill pill-live">Live on Business Pro</span></h3><p>Text RevUp questions like "how did last week go?" It pulls your real numbers, remembers your rules and does the admin. Backup AI keeps the line answering if one engine has a bad day.</p></div>
+<div class="tcell"><span class="num">10</span><h3>Your social media team <span class="pill pill-wip">In progress</span></h3><p>A Researcher, a Writer and a Reviewer working for your business: they bring post ideas, write them in your voice and check every word. You make the final decisions - every post still waits for your approval.</p></div>
 </div>
 </div></section>
 
