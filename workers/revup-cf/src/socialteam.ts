@@ -207,46 +207,69 @@ export async function producePiece(env: Env, db: Pool, ws: string, pieceId: stri
 }
 
 // ---------- page ----------
+// Premium low-text UI, mobile first: titles only, everything else behind a tap.
+// <details>/<summary> gives tap-to-expand with no JavaScript.
 const esc = (s: any) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
 
+const PAGE_CSS = `<style>
+/* Apple-style: borderless soft cards, generous space, one accent, quiet type */
+.tchips{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 16px}
+.tchip{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:5px 14px 5px 6px;font-weight:600;font-size:13px;background:#fff;box-shadow:0 1px 2px rgba(23,23,20,.05),0 6px 18px rgba(23,23,20,.06)}
+.tav{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--brand,#f47721),#d95f0e);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.tidea,.tpiece{border:0;border-radius:16px;background:#fff;margin:0 0 10px;overflow:hidden;box-shadow:0 1px 2px rgba(23,23,20,.05),0 10px 28px rgba(23,23,20,.06);transition:box-shadow .18s ease}
+.tidea:hover,.tpiece:hover{box-shadow:0 2px 4px rgba(23,23,20,.06),0 14px 36px rgba(23,23,20,.09)}
+.tidea>summary,.tpiece>summary{display:flex;align-items:center;gap:12px;padding:16px 18px;cursor:pointer;list-style:none;font-size:15px;font-weight:600;-webkit-tap-highlight-color:transparent}
+.tidea>summary::-webkit-details-marker,.tpiece>summary::-webkit-details-marker{display:none}
+.tidea-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tpiece-t{flex:1;min-width:0;font-weight:500;color:#3d3a33;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap;line-height:1.4}
+.tidea-b,.tpiece-b{padding:0 18px 16px;font-size:14px;color:#3d3a33}
+.tidea-b p,.tpiece-b p{margin:6px 0}
+.tlbl{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9a958a;margin:20px 4px 10px;font-weight:700}
+.tchev{color:#c9c4b8;font-size:12px;transition:transform .15s ease}
+details[open] .tchev{transform:rotate(90deg)}
+.tpiece .pill{flex-shrink:0}
+.tfoot{color:#9a958a;font-size:12px;margin:18px 4px 0}
+</style>`;
+
+const PIECE_LABEL: Record<string, string> = {
+  ready: "ready", returned: "your call", sent_for_approval: "in approvals", in_review: "writing",
+};
+
+function firstLine(caption: string): string {
+  const t = String(caption || "").trim();
+  return t.length > 150 ? t.slice(0, 150).trimEnd() + "…" : t;
+}
+
 export function teamPageBody(ideas: any[], pieces: any[], msg = ""): string {
-  const members = LIVE_AGENTS.map((a) => `
-<div class="card"><h2>${esc(a.name)}</h2><p class="mut">${esc(a.dept)}</p><p>${esc(a.does)}</p><p><span class="pill ok">on your team</span></p></div>`).join("");
-  const wider = TEAM_DEPARTMENTS.map((d) => {
-    const n = TEAM_AGENTS.filter((a) => a.dept === d && !a.live).length;
-    return n ? `<li>${esc(d)} <span class="mut">(${n} more ${n === 1 ? "member" : "members"})</span></li>` : "";
-  }).join("");
-  const ideaRows = ideas.map((i: any) => `
-<div class="card"><h2>${esc(i.title)}</h2><p>${esc(i.angle)}</p><p class="mut">Why it works: ${esc(i.rationale)}</p>
+  const chips = LIVE_AGENTS.map((a) =>
+    `<span class="tchip"><span class="tav">${esc(a.name[0])}</span>${esc(a.name)}</span>`).join("");
+  const ideaRows = ideas.slice(0, 3).map((i: any) => `
+<details class="tidea"><summary><span class="tidea-t">${esc(i.title)}</span><span class="tchev">&#9656;</span></summary>
+<div class="tidea-b"><p>${esc(i.angle)}</p><p class="mut">${esc(i.rationale)}</p>
 <form class="inline" method="post" action="/team/idea/${i.id}/write"><button>Write this up</button></form>
-<form class="inline" method="post" action="/team/idea/${i.id}/park"><button class="link">Park it</button></form></div>`).join("");
+<form class="inline" method="post" action="/team/idea/${i.id}/park"><button class="link">Park</button></form></div></details>`).join("");
   const pieceRows = pieces.map((p: any) => {
     const tags = Array.isArray(p.hashtags) ? p.hashtags.join(" ") : "";
-    const state = p.status === "ready" ? '<span class="pill ok">checked - ready for you</span>'
-      : p.status === "returned" ? '<span class="pill warn">reviewer flagged it - your call</span>'
-      : p.status === "sent_for_approval" ? '<span class="pill ok">in your approvals queue</span>'
-      : '<span class="pill">with the team</span>';
+    const cls = p.status === "ready" || p.status === "sent_for_approval" ? "ok" : p.status === "returned" ? "warn" : "";
     return `
-<div class="card">${state}<p style="white-space:pre-wrap">${esc(p.caption)}</p>${tags ? `<p class="mut">${esc(tags)}</p>` : ""}
-<p class="mut">Reviewer: ${esc(p.review_note)}</p>
-${p.status === "ready" || p.status === "returned" ? `<form class="inline" method="post" action="/team/piece/${p.id}/send"><button>Send to my approvals</button></form>` : ""}</div>`;
+<details class="tpiece"><summary><span class="pill ${cls}">${esc(PIECE_LABEL[p.status] || p.status)}</span><span class="tpiece-t">${esc(firstLine(p.caption))}</span><span class="tchev">&#9656;</span></summary>
+<div class="tpiece-b"><p style="white-space:pre-wrap">${esc(p.caption)}</p>${tags ? `<p class="mut">${esc(tags)}</p>` : ""}
+<p class="mut">${esc(p.review_note)}</p>
+${p.status === "ready" || p.status === "returned" ? `<form class="inline" method="post" action="/team/piece/${p.id}/send"><button>Send to approvals</button></form>` : ""}</div></details>`;
   }).join("");
-  return `
+  return `${PAGE_CSS}
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
-<p class="mut">A full social media team for your business - it researches, plans, writes and reviews. You make the final decisions: every post still waits for your approval before anything goes out.</p>
-<div class="grid">${members}</div>
-<div class="card"><h2>Get fresh ideas</h2><p class="mut">Your Researcher studies your business and brings back five post ideas. Pick the ones you like - your Writer drafts them, your Reviewer checks them, and they land in your approvals queue.</p>
-<form method="post" action="/team/research"><button>Ask the Researcher for ideas</button></form></div>
-${ideas.length ? `<h2>Fresh ideas from your Researcher</h2>${ideaRows}` : ""}
-${pieces.length ? `<h2>Posts your team is working on</h2>${pieceRows}` : ""}
-<div class="card"><h2>The wider team grows with you</h2><p class="mut">Today three members carry the work. A 50-member team across 10 departments stands behind them and switches on as your business grows:</p>
-<ul class="mut">${wider}</ul></div>`;
+<div class="tchips">${chips}</div>
+<form method="post" action="/team/research"><button>Get fresh ideas</button></form>
+${ideaRows ? `<p class="tlbl">Fresh ideas</p>${ideaRows}` : ""}
+${pieceRows ? `<p class="tlbl">Posts</p>${pieceRows}` : ""}
+<p class="tfoot">${TEAM_AGENTS.length - LIVE_AGENTS.length} more teammates switch on as you grow. You approve every post.</p>`;
 }
 
 export async function teamPage(db: Pool, ws: string, msg = ""): Promise<string> {
   const [ideas, pieces] = await Promise.all([
-    db.query(`SELECT id, title, angle, rationale FROM socialteam_idea WHERE workspace_id=$1 AND status='fresh' ORDER BY created_at DESC LIMIT 12`, [ws]),
-    db.query(`SELECT id, caption, hashtags, review_note, status FROM socialteam_piece WHERE workspace_id=$1 AND status <> 'archived' ORDER BY created_at DESC LIMIT 12`, [ws]),
+    db.query(`SELECT id, title, angle, rationale FROM socialteam_idea WHERE workspace_id=$1 AND status='fresh' ORDER BY created_at DESC LIMIT 3`, [ws]),
+    db.query(`SELECT id, caption, hashtags, review_note, status FROM socialteam_piece WHERE workspace_id=$1 AND status <> 'archived' ORDER BY created_at DESC LIMIT 4`, [ws]),
   ]);
   return teamPageBody(ideas.rows, pieces.rows, msg);
 }
