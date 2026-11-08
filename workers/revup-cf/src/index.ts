@@ -255,9 +255,41 @@ function pfQuotePlus(v: string): string {
   return encodeURIComponent(v).replace(/%20/g, "+").replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
 }
 
+// PayFast's published ITN source networks (developers.payfast.co.za/docs,
+// "Ports and IP addresses"). Stored as [network, mask] 32-bit ints.
+const ITN_ALLOWED_NETS: Array<[number, number]> = [
+  ["197.97.145.144", 28],
+  ["41.74.179.192", 27],
+  ["102.216.36.0", 28],
+  ["102.216.36.128", 28],
+  ["144.126.193.139", 32],
+].map(([base, bits]) => {
+  const mask = bits === 0 ? 0 : (~0 << (32 - (bits as number))) >>> 0;
+  return [(ipToInt(base as string) as number) & mask, mask];
+});
+
+function ipToInt(ip: string): number | null {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(ip);
+  if (!m) return null;
+  const parts = m.slice(1).map(Number);
+  if (parts.some((n) => n > 255)) return null;
+  return (((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0);
+}
+
+// True when the ITN source IP is in PayFast's published ranges. On the worker
+// the source IP comes from CF-Connecting-IP, set by Cloudflare at the edge -
+// client-supplied X-Forwarded-For is never trusted here.
+export function itnSourceAllowed(ip: string): boolean {
+  const n = ipToInt(ip);
+  if (n === null) return false;
+  return ITN_ALLOWED_NETS.some(([net, mask]) => (n & mask) === net);
+}
+
 async function handlePayfastItn(db: Pool, env: Env, req: Request): Promise<Response> {
   // Django-faithful triple verification: signature (posted order, quote_plus,
   // passphrase last), PayFast validate-back, then status COMPLETE.
+  const srcIp = req.headers.get("cf-connecting-ip") || "";
+  if (!itnSourceAllowed(srcIp)) return new Response("source ip not allowed", { status: 400 });
   const raw = await req.text();
   const pairs = raw.split("&").filter(Boolean).map((p) => {
     const i = p.indexOf("=");

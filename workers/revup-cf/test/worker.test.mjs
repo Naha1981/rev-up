@@ -237,3 +237,23 @@ import { timingSafeEq } from '../dist-test/index.mjs';
 test('timingSafeEq: equal strings pass', () => assert.ok(timingSafeEq('a94a8fe5ccb19ba61c4c0873d391e987982fbbd3', 'a94a8fe5ccb19ba61c4c0873d391e987982fbbd3')));
 test('timingSafeEq: one-char diff rejected', () => assert.ok(!timingSafeEq('a94a8fe5ccb19ba61c4c0873d391e987982fbbd3', 'a94a8fe5ccb19ba61c4c0873d391e987982fbbd4')));
 test('timingSafeEq: length mismatch rejected', () => assert.ok(!timingSafeEq('abc', 'abcd')));
+
+// --- ITN source IP allowlist (PayFast published ranges) ---
+import { itnSourceAllowed } from '../dist-test/index.mjs';
+test('itnSourceAllowed: PayFast-range IPs pass', () => {
+  assert.ok(itnSourceAllowed('197.97.145.150'));   // 197.97.145.144/28
+  assert.ok(itnSourceAllowed('41.74.179.200'));    // 41.74.179.192/27
+  assert.ok(itnSourceAllowed('102.216.36.10'));    // 102.216.36.0/28
+  assert.ok(itnSourceAllowed('102.216.36.140'));   // 102.216.36.128/28
+  assert.ok(itnSourceAllowed('144.126.193.139'));  // single host
+});
+test('itnSourceAllowed: non-range IPs rejected', () => {
+  assert.ok(!itnSourceAllowed('197.97.145.160'));  // just outside /28
+  assert.ok(!itnSourceAllowed('8.8.8.8'));
+  assert.ok(!itnSourceAllowed('10.0.0.1'));
+});
+test('itnSourceAllowed: garbage rejected', () => {
+  assert.ok(!itnSourceAllowed(''));
+  assert.ok(!itnSourceAllowed('999.1.1.1'));
+  assert.ok(!itnSourceAllowed('not-an-ip'));
+});
