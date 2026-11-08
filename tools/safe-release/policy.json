@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "app": "revup-cf",
+  "target": "cloudflare-worker",
+  "account": "655bd72036df93c103f655230cf9ade7",
+  "service": "revup-cf",
+  "schema_revision": "cf-ddl-expand-only-v1",
+  "config_revision": "wrangler-toml-5d54398",
+  "coverage_reviewed": true,
+  "required_checks": [
+    "worker-unit"
+  ],
+  "production_resources": [
+    "neon-postgres-shared",
+    "revup.nahalabs.co.za",
+    "revup-new.nahalabs.co.za",
+    "cron-*/15"
+  ],
+  "preview_resources": [
+    "gha-postgres-service",
+    "wrangler-dev",
+    "fake-provider-stubs"
+  ],
+  "preview_external_effects": "disabled",
+  "migration_strategy": "expand-contract",
+  "pilot_mode": "allowlist-default-off",
+  "auto_promote": false,
+  "max_proof_age_hours": 24
+}

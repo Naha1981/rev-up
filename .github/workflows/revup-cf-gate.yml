@@ -1,0 +1,83 @@
+name: RevUp CF release gate
+
+# Safe-release gate for the Cloudflare Worker front door (workers/revup-cf).
+# Runs the worker unit suite, builds the exact deploy artifact (wrangler
+# --dry-run, no upload), and creates + verifies a release manifest bound to
+# the full commit and artifact hash (tools/safe-release/release_gate.py).
+# PLAN_ONLY: this workflow never deploys. Live deploys stay manual wrangler
+# and need the owner's explicit Go + Sure each time.
+
+on:
+  push:
+    branches: [main]
+    paths: ["workers/revup-cf/**", "tools/safe-release/**", ".github/workflows/revup-cf-gate.yml"]
+  pull_request:
+    branches: [main]
+    paths: ["workers/revup-cf/**", "tools/safe-release/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Unit tests + manifest gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: workers/revup-cf/package-lock.json
+
+      - name: Install worker deps
+        working-directory: workers/revup-cf
+        run: npm ci
+
+      - name: Run worker unit suite (evidence: raw TAP)
+        working-directory: workers/revup-cf
+        run: |
+          mkdir -p "$RUNNER_TEMP/gate"
+          npm test --silent | tee "$RUNNER_TEMP/gate/worker-unit.tap"
+          grep -q "^# fail 0" "$RUNNER_TEMP/gate/worker-unit.tap"
+
+      - name: Build deploy artifact (dry-run, no upload)
+        working-directory: workers/revup-cf
+        run: npx wrangler deploy --dry-run --outdir "$RUNNER_TEMP/gate/candidate"
+
+      - name: Create and verify release manifest
+        run: |
+          set -euo pipefail
+          G="$RUNNER_TEMP/gate"
+          ART=$(python3 tools/safe-release/release_gate.py artifact-digest --artifact "$G/candidate" | jq -r .artifact_sha256)
+          PASS=$(grep -oP '^# pass \K[0-9]+' "$G/worker-unit.tap")
+          EVID=$(sha256sum "$G/worker-unit.tap" | cut -d' ' -f1)
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          jq -n --arg c "${{ github.sha }}" --arg a "$ART" --arg e "$EVID" --arg t "$NOW" --argjson p "$PASS" \
+            '[{check:"worker-unit",status:"passed",commit:$c,artifact_sha256:$a,assertions:$p,evidence_sha256:$e,evidence_reference:"worker-unit.tap (node --test raw TAP in this CI run)",finished_at:$t}]' > "$G/checks.json"
+          python3 tools/safe-release/release_gate.py manifest \
+            --policy tools/safe-release/policy.json --checks "$G/checks.json" \
+            --artifact "$G/candidate" --commit "${{ github.sha }}" \
+            --rollback tools/safe-release/rollback.json --output "$G/release.json"
+          python3 tools/safe-release/release_gate.py verify \
+            --policy tools/safe-release/policy.json --manifest "$G/release.json" --artifact "$G/candidate"
+          jq -r '"manifest_sha256: \(.manifest_sha256)"' "$G/release.json"
+
+      - name: Upload release manifest + test evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-manifest-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/gate/release.json
+            ${{ runner.temp }}/gate/worker-unit.tap
+          retention-days: 90

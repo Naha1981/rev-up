@@ -1,0 +1,7 @@
+{
+  "version": "e2e0c0f9-a6b0-43c6-af0e-0a4af92636dc",
+  "artifact_sha256": "50891c1ec1df95a9afb121479bee3768ad3359b98c7e9f7fb800142356dd50d5",
+  "account": "655bd72036df93c103f655230cf9ade7",
+  "service": "revup-cf",
+  "rehearsal_evidence_sha256": "321346d4324eb92e68de82a13974d4e24cb721024b0a1347b029f22915767fc9"
+}
