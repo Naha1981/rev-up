@@ -543,6 +543,13 @@ export async function handleChatAppRoute(req: Request, env: any, url: URL, poolF
   if (path === "/oauth/authorize" && (req.method === "GET" || req.method === "POST")) return handleAuthorize(req, env, url, poolFn);
   if (path === "/oauth/token" && req.method === "POST") return handleToken(req, env, poolFn);
   if (path === "/mcp" || path === "/mcp/") return handleMcp(req, env, url, poolFn);
+  if (path === "/.well-known/openai-apps-challenge") {
+    // OpenAI plugin-directory domain verification. Token arrives from the developer
+    // portal at connect time; served as plain text only when configured. Fail closed.
+    const t = (env as any).OPENAI_APPS_CHALLENGE || "";
+    if (!t) return new Response("not found", { status: 404 });
+    return new Response(t, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+  }
   if (path === "/privacy") return html(privacyPage());
   return null;
 }
