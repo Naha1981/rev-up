@@ -721,6 +721,17 @@ OAUTH2_PROVIDER = {
     "REQUEST_APPROVAL_PROMPT": "auto",
     # Claude's OAuth callback is always https; reject non-TLS redirect URIs.
     "ALLOWED_REDIRECT_URI_SCHEMES": ["https"],
+    # RFC 9700 (OAuth 2.0 Security BCP) compliance: disable the implicit and
+    # password grants, require S256-only PKCE, forbid access tokens in the
+    # URI query, emit the RFC 9207 ``iss`` parameter, hash stored tokens, and
+    # revoke the token family on refresh-token replay.
+    "COMPLIANT_BCP_RFC9700_IMPLICIT_GRANT": True,
+    "COMPLIANT_BCP_RFC9700_PASSWORD_GRANT": True,
+    "COMPLIANT_BCP_RFC9700_PKCE_METHOD": True,
+    "COMPLIANT_BCP_RFC9700_ACCESS_TOKEN_TRANSPORT": True,
+    "COMPLIANT_BCP_RFC9700_AUTHZ_RESPONSE_ISS": True,
+    "COMPLIANT_BCP_RFC9700_TOKEN_STORAGE": True,
+    "REFRESH_TOKEN_REUSE_PROTECTION": True,
 }
 
 
