@@ -224,7 +224,7 @@ class TestConnectionLinkPageTokens:
 
 
 def test_pair_whatsapp_tick_counts_bound_receptionist_channel(workspace, user):
-    """Checklist 'Pair your WhatsApp' completes from a Zernio-bound channel,
+    """Checklist 'Pair your WhatsApp' completes from a partner-bound channel,
     not only the legacy pairing-code connection."""
     from apps.onboarding.checklist import _has_receptionist_whatsapp
     from apps.receptionist.models import ZernioChannel

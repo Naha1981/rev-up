@@ -280,7 +280,7 @@ async function deliver(db, env, workspaceId, contact, body) {
     [outId, body, contact.id, workspaceId]
   );
   const sandbox = channel.is_sandbox || channel.zernio_account_id === "6a180a034c7f364ffded3c9c";
-  const ALLOW = /* @__PURE__ */ new Set(["27672347593", "27612980377"]);
+  const ALLOW = new Set(String(env.SANDBOX_ALLOWLIST || "").split(",").map((s) => s.trim()).filter(Boolean));
   if (sandbox && !ALLOW.has(contact.wa_id)) throw new Error("sandbox line may only message allowlisted test numbers");
   const budget = await db.query(
     `SELECT count(*) FILTER (WHERE created_at >= now() - interval '1 hour') h,
@@ -599,9 +599,9 @@ async function handleZernioWebhook(db, env, payload) {
       return;
     }
   }
-  const org = await db.query(`SELECT o.plan, o.id FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [channel.workspace_id]);
+  const org = await db.query(`SELECT o.plan, o.id, o.subscription_status FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [channel.workspace_id]);
   const plan = org.rows[0]?.plan || "starter";
-  const allowance = PLAN_ALLOWANCE[plan] ?? 500;
+  const allowance = org.rows[0]?.subscription_status === "active" ? PLAN_ALLOWANCE[plan] ?? 500 : 500;
   const used = await db.query(
     `SELECT count(*) c FROM receptionist_message m JOIN workspaces_workspace w ON w.id=m.workspace_id
      WHERE w.organization_id=$1 AND m.direction='outbound' AND m.sender_type='ai' AND m.is_draft=false AND m.created_at >= date_trunc('month', now())`,
@@ -702,7 +702,7 @@ ${RULES}`;
 }
 async function sendChannelMessage(db, env, channel, contactId, waId, text) {
   const sandbox = channel.is_sandbox || channel.zernio_account_id === SANDBOX_ACCOUNT_ID;
-  if (sandbox && !SANDBOX_SEND_ALLOWLIST.has(waId)) return { ok: false, messageId: "" };
+  if (sandbox && !sandboxAllow(env).has(waId)) return { ok: false, messageId: "" };
   const sentHour = await db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND is_draft=false AND created_at >= now() - interval '1 hour'`, [channel.workspace_id]);
   const sentDay = await db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND is_draft=false AND created_at >= now() - interval '1 day'`, [channel.workspace_id]);
   if (Number(sentHour.rows[0].c) >= MAX_SENDS_HOUR || Number(sentDay.rows[0].c) >= MAX_SENDS_DAY) return { ok: false, messageId: "" };
@@ -824,13 +824,13 @@ async function tenantWebhookSecret(db, payload) {
   }
   return "";
 }
-var SANDBOX_ACCOUNT_ID, SANDBOX_SEND_ALLOWLIST, OPT_OUT, PLAN_ALLOWANCE, MAX_SENDS_HOUR, MAX_SENDS_DAY, MAX_DRAFTS_DAY, MAX_AI_ATTEMPTS_DAY, ESCALATION, RULES, ZBASE;
+var SANDBOX_ACCOUNT_ID, sandboxAllow, OPT_OUT, PLAN_ALLOWANCE, MAX_SENDS_HOUR, MAX_SENDS_DAY, MAX_DRAFTS_DAY, MAX_AI_ATTEMPTS_DAY, ESCALATION, RULES, ZBASE;
 var init_receptionist = __esm({
   "src/receptionist.ts"() {
     init_freeai();
     init_presets();
     SANDBOX_ACCOUNT_ID = "6a180a034c7f364ffded3c9c";
-    SANDBOX_SEND_ALLOWLIST = /* @__PURE__ */ new Set(["27672347593", "27612980377"]);
+    sandboxAllow = (env) => new Set(String(env.SANDBOX_ALLOWLIST || "").split(",").map((s) => s.trim()).filter(Boolean));
     OPT_OUT = /* @__PURE__ */ new Set(["STOP", "STOP ALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"]);
     PLAN_ALLOWANCE = { starter: 500, growth: 1e3, "business-pro": 2500 };
     MAX_SENDS_HOUR = 60;
@@ -1108,8 +1108,8 @@ async function maybeHandleAssistant(db, env, c) {
   const setting = s.rows[0];
   if (!setting || !setting.enabled || !setting.owner_phone) return false;
   if (String(setting.owner_phone).replace(/\D/g, "") !== c.waId.replace(/\D/g, "")) return false;
-  const org = await db.query(`SELECT o.plan FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [c.workspaceId]);
-  if ((org.rows[0]?.plan || "starter") !== "business-pro") return false;
+  const org = await db.query(`SELECT o.plan, o.subscription_status FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [c.workspaceId]);
+  if ((org.rows[0]?.plan || "starter") !== "business-pro" || org.rows[0]?.subscription_status !== "active") return false;
   const taskId = await startTask(db, c.workspaceId, "message", `Reply to owner: ${c.body.slice(0, 80)}`);
   try {
     await db.query(`CREATE TABLE IF NOT EXISTS cf_ai_usage(workspace_id uuid, day date, attempts int NOT NULL DEFAULT 0, PRIMARY KEY(workspace_id, day))`);

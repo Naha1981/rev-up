@@ -6,7 +6,7 @@ LinkedIn needs NO Meta App Review). Same shape later for client workspaces.
 
 ## What needs the browser (00:05, after daily budget reset)
 
-1. developer.linkedin.com with the user's LinkedIn login (vault: LinkedIn - Thabiso Naha).
+1. developer.linkedin.com with the user's LinkedIn login (stored login).
 2. Create app: name "NahaLabs BrightBean", LinkedIn Page = NahaLabs
    (company page required to create the app; he is a page admin - he posted
    to it 16 Oct 05:24).

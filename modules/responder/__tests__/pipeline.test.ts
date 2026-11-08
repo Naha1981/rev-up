@@ -17,7 +17,7 @@ function deps() {
   return {
     whatsApp,
     store,
-    convoOpts: { agentName: "Thabiso", calendar: new StubCalendarProvider() },
+    convoOpts: { agentName: "Sipho", calendar: new StubCalendarProvider() },
   };
 }
 

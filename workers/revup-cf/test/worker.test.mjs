@@ -214,3 +214,20 @@ test('rateLimitExceeded: no row means allowed (no failed attempts yet)', async (
   const db = { query: async () => ({ rows: [] }) };
   assert.equal(await rateLimitExceeded(db, 'login', fakeReq, 20), false);
 });
+
+// --- PayFast ITN amount check (audit fix: amount_gross must match plan price) ---
+import { itnAmountOk } from '../dist-test/index.mjs';
+test('itnAmountOk: exact price passes', () => {
+  assert.ok(itnAmountOk('starter', '499.00'));
+  assert.ok(itnAmountOk('growth', '999.00'));
+  assert.ok(itnAmountOk('business-pro', '1999.00'));
+});
+test('itnAmountOk: wrong amount rejected', () => {
+  assert.ok(!itnAmountOk('business-pro', '1.00'));
+  assert.ok(!itnAmountOk('starter', '999.00'));
+});
+test('itnAmountOk: missing/garbage amount rejected', () => {
+  assert.ok(!itnAmountOk('starter', undefined));
+  assert.ok(!itnAmountOk('starter', 'abc'));
+});
+test('itnAmountOk: unknown plan rejected', () => assert.ok(!itnAmountOk('free', '499.00')));

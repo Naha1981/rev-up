@@ -216,9 +216,19 @@ export async function formData(req: Request): Promise<Record<string, string>> {
 }
 
 // ---------- payfast ----------
+export const PLAN_PRICES: Record<string, number> = { starter: 499, growth: 999, "business-pro": 1999 };
+
+// ITN defence-in-depth: the reported gross must match the plan's price.
+// (m_payment_id is already inside the passphrase signature; this catches
+// amount drift on token/recurring charges.)
+export function itnAmountOk(plan: string, gross: string | undefined): boolean {
+  const expected = PLAN_PRICES[plan];
+  const actual = parseFloat(gross || "NaN");
+  return expected !== undefined && Number.isFinite(actual) && Math.abs(actual - expected) < 0.01;
+}
+
 export function pfUrl(env: Env, base: string, plan: string, org: any): string {
-  const prices: Record<string, number> = { starter: 499, growth: 999, "business-pro": 1999 };
-  const amount = prices[plan];
+  const amount = PLAN_PRICES[plan];
   const params: [string, string][] = [
     ["merchant_id", env.PF_MERCHANT_ID],
     ["merchant_key", env.PF_MERCHANT_KEY],
@@ -270,6 +280,7 @@ async function handlePayfastItn(db: Pool, env: Env, req: Request): Promise<Respo
   const reference = mpid.startsWith("RU-") ? "RU-" + (parts[1] || "") : "";
   const plan = parts.slice(2).join("-");
   if (!reference || !["starter", "growth", "business-pro"].includes(plan)) return new Response("unknown reference", { status: 400 });
+  if (!itnAmountOk(plan, post["amount_gross"])) return new Response("amount mismatch", { status: 400 });
   const r = await db.query(
     `UPDATE organizations_organization SET plan=$1, subscription_status='active', payfast_token=$2, updated_at=now() WHERE payment_reference=$3`,
     [plan, post["token"] || "", reference]);
@@ -371,7 +382,7 @@ const GOALS: [string, string][] = [
   ["social", "Keep my Facebook and Instagram posting"],
   ["leads", "Capture website enquiries and follow them up"],
 ];
-// PRICING LOCKED by Thabiso 6 Nov 2026 - see PRICING.md. Changes need his explicit approval.
+// PRICING LOCKED by the owner 6 Nov 2026 - see PRICING.md. Changes need the owner's explicit approval.
 const PLAN_CARDS: { slug: string; name: string; price: number; feat: string }[] = [
   { slug: "starter", name: "Starter", price: 499, feat: "Google review booster + enquiry inbox" },
   { slug: "growth", name: "Growth", price: 999, feat: "Everything in Starter + social posting with approvals" },
@@ -1121,9 +1132,9 @@ async function handle(req: Request, env: Env): Promise<Response> {
       const pdb = pool(env);
       try {
         const w = await pdb.query(
-          `SELECT w.id, w.name, o.plan FROM workspaces_workspace w JOIN organizations_organization o ON o.id=w.organization_id WHERE w.id=$1 AND w.is_archived=false AND o.deleted_at IS NULL`, [fm[1]]);
+          `SELECT w.id, w.name, o.plan, o.subscription_status FROM workspaces_workspace w JOIN organizations_organization o ON o.id=w.organization_id WHERE w.id=$1 AND w.is_archived=false AND o.deleted_at IS NULL`, [fm[1]]);
         const biz = w.rows[0];
-        if (!biz || biz.plan !== "business-pro") return html(layout("Enquiries closed", `<div class="card"><p>This business is not taking online enquiries right now.</p></div>`), 404);
+        if (!biz || biz.plan !== "business-pro" || biz.subscription_status !== "active") return html(layout("Enquiries closed", `<div class="card"><p>This business is not taking online enquiries right now.</p></div>`), 404);
         if (req.method === "POST") {
           const f = await formData(req);
           const name = (f.name || "").trim().slice(0, 200), contact = (f.contact || "").trim().slice(0, 200), message = (f.message || "").trim().slice(0, 2000);
@@ -1395,7 +1406,7 @@ ${!ch.rows.length ? `<div class="card" style="border-color:var(--brand)"><h2 sty
 
       if (path === "/assistant") {
         const { getSettings, upsertSettings, assistantCounts } = await import("./assistant");
-        if (mem.plan !== "business-pro") {
+        if (mem.plan !== "business-pro" || mem.subscription_status !== "active") {
           return html(layout("Assistant", `<div class="card"><h2 style="margin-top:0">Your own assistant</h2>
 <p>Chat with your own assistant on your business WhatsApp: it remembers your rules and decisions, keeps a task log, parks anything that sends, spends or deploys for your Go + Sure, and holds a write-only vault for your secrets.</p>
 <p class="mut">The assistant is part of the Business Pro plan. <a href="/billing">Upgrade in billing -</a></p></div>`, user));
@@ -1465,7 +1476,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
       if (path === "/analytics") return html(await analyticsPage(db, user, mem));
 
       if (path === "/frontdesk") {
-        if (mem.plan !== "business-pro") return html(layout("Leads", `
+        if (mem.plan !== "business-pro" || mem.subscription_status !== "active") return html(layout("Leads", `
 <div class="card"><h2>Leads is a Business Pro feature</h2>
 <p>Capture website enquiries, work a shared lead pipeline, and send considered follow-ups. <a href="/billing">Upgrade to Business Pro - R1,999/month</a>.</p></div>`, user));
         const leads = await db.query(`SELECT * FROM frontdesk_lead WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 200`, [mem.workspace_id]);
@@ -1498,7 +1509,7 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
 
       const fsave = /^\/frontdesk\/([0-9a-f-]{36})\/save$/.exec(path);
       if (fsave && req.method === "POST") {
-        if (mem.plan !== "business-pro") return redirect("/frontdesk");
+        if (mem.plan !== "business-pro" || mem.subscription_status !== "active") return redirect("/frontdesk");
         const f = await formData(req);
         const stage = ["new", "contacted", "quoted", "won", "lost"].includes(f.stage) ? f.stage : "new";
         const cents = Math.max(0, Math.round(parseFloat(f.value || "0") * 100) || 0);
@@ -1508,7 +1519,7 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
 
       const fdraft = /^\/frontdesk\/([0-9a-f-]{36})\/draft$/.exec(path);
       if (fdraft && req.method === "POST") {
-        if (mem.plan !== "business-pro") return redirect("/frontdesk");
+        if (mem.plan !== "business-pro" || mem.subscription_status !== "active") return redirect("/frontdesk");
         const lr = await db.query(`SELECT * FROM frontdesk_lead WHERE id=$1 AND workspace_id=$2`, [fdraft[1], mem.workspace_id]);
         if (!lr.rows[0]) return redirect("/frontdesk");
         try {
@@ -1521,7 +1532,7 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
 
       const fappr = /^\/frontdesk\/draft\/([0-9a-f-]{36})\/approve$/.exec(path);
       if (fappr && req.method === "POST") {
-        if (mem.plan !== "business-pro") return redirect("/frontdesk");
+        if (mem.plan !== "business-pro" || mem.subscription_status !== "active") return redirect("/frontdesk");
         await db.query(`UPDATE frontdesk_followup_draft SET status='approved', updated_at=now() WHERE id=$1 AND workspace_id=$2`, [fappr[1], mem.workspace_id]);
         return redirect("/frontdesk");
       }

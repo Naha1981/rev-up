@@ -1,4 +1,4 @@
-"""Outreach link codes: one per business Thabiso emailed or WhatsApped.
+"""Outreach link codes: one per business contacted directly.
 
 Links carry the code as utm_content (his spec, 3 Nov 2026):
 ?utm_source=whatsapp&utm_medium=outreach&utm_campaign=response_test_nov3&utm_content=<code>

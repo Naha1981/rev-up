@@ -118,7 +118,7 @@ export async function deliver(db: Pool, env: any, workspaceId: string, contact: 
      VALUES($1,'outbound','ai',$2,'',true,now(),$3,$4,'[]'::jsonb)`, [outId, body, contact.id, workspaceId]);
 
   const sandbox = channel.is_sandbox || channel.zernio_account_id === "6a180a034c7f364ffded3c9c";
-  const ALLOW = new Set(["27672347593", "27612980377"]);
+  const ALLOW = new Set(String(env.SANDBOX_ALLOWLIST || "").split(",").map((s: string) => s.trim()).filter(Boolean));
   if (sandbox && !ALLOW.has(contact.wa_id)) throw new Error("sandbox line may only message allowlisted test numbers");
   const budget = await db.query(
     `SELECT count(*) FILTER (WHERE created_at >= now() - interval '1 hour') h,

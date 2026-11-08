@@ -1,6 +1,6 @@
 # RevUp pricing - LOCKED
 
-Locked by Thabiso on 6 Nov 2026 (approval: "Lock the RevUp plan" = "Yes").
+Locked by the owner on 6 Nov 2026.
 Do not change prices, tier names, tier contents or this wording without his
 explicit approval.
 

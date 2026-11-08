@@ -312,7 +312,7 @@ async function deliver(db, env, workspaceId, contact, body) {
     [outId, body, contact.id, workspaceId]
   );
   const sandbox = channel.is_sandbox || channel.zernio_account_id === "6a180a034c7f364ffded3c9c";
-  const ALLOW = /* @__PURE__ */ new Set(["27672347593", "27612980377"]);
+  const ALLOW = new Set(String(env.SANDBOX_ALLOWLIST || "").split(",").map((s) => s.trim()).filter(Boolean));
   if (sandbox && !ALLOW.has(contact.wa_id)) throw new Error("sandbox line may only message allowlisted test numbers");
   const budget = await db.query(
     `SELECT count(*) FILTER (WHERE created_at >= now() - interval '1 hour') h,
@@ -762,8 +762,8 @@ async function maybeHandleAssistant(db, env, c) {
   const setting = s.rows[0];
   if (!setting || !setting.enabled || !setting.owner_phone) return false;
   if (String(setting.owner_phone).replace(/\D/g, "") !== c.waId.replace(/\D/g, "")) return false;
-  const org = await db.query(`SELECT o.plan FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [c.workspaceId]);
-  if ((org.rows[0]?.plan || "starter") !== "business-pro") return false;
+  const org = await db.query(`SELECT o.plan, o.subscription_status FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [c.workspaceId]);
+  if ((org.rows[0]?.plan || "starter") !== "business-pro" || org.rows[0]?.subscription_status !== "active") return false;
   const taskId = await startTask(db, c.workspaceId, "message", `Reply to owner: ${c.body.slice(0, 80)}`);
   try {
     await db.query(`CREATE TABLE IF NOT EXISTS cf_ai_usage(workspace_id uuid, day date, attempts int NOT NULL DEFAULT 0, PRIMARY KEY(workspace_id, day))`);
@@ -964,9 +964,9 @@ async function handleZernioWebhook(db, env, payload) {
       return;
     }
   }
-  const org = await db.query(`SELECT o.plan, o.id FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [channel.workspace_id]);
+  const org = await db.query(`SELECT o.plan, o.id, o.subscription_status FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [channel.workspace_id]);
   const plan = org.rows[0]?.plan || "starter";
-  const allowance = PLAN_ALLOWANCE[plan] ?? 500;
+  const allowance = org.rows[0]?.subscription_status === "active" ? PLAN_ALLOWANCE[plan] ?? 500 : 500;
   const used = await db.query(
     `SELECT count(*) c FROM receptionist_message m JOIN workspaces_workspace w ON w.id=m.workspace_id
      WHERE w.organization_id=$1 AND m.direction='outbound' AND m.sender_type='ai' AND m.is_draft=false AND m.created_at >= date_trunc('month', now())`,
@@ -1067,7 +1067,7 @@ ${RULES}`;
 }
 async function sendChannelMessage(db, env, channel, contactId, waId, text) {
   const sandbox = channel.is_sandbox || channel.zernio_account_id === SANDBOX_ACCOUNT_ID;
-  if (sandbox && !SANDBOX_SEND_ALLOWLIST.has(waId)) return { ok: false, messageId: "" };
+  if (sandbox && !sandboxAllow(env).has(waId)) return { ok: false, messageId: "" };
   const sentHour = await db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND is_draft=false AND created_at >= now() - interval '1 hour'`, [channel.workspace_id]);
   const sentDay = await db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND is_draft=false AND created_at >= now() - interval '1 day'`, [channel.workspace_id]);
   if (Number(sentHour.rows[0].c) >= MAX_SENDS_HOUR || Number(sentDay.rows[0].c) >= MAX_SENDS_DAY) return { ok: false, messageId: "" };
@@ -1189,13 +1189,13 @@ async function tenantWebhookSecret(db, payload) {
   }
   return "";
 }
-var SANDBOX_ACCOUNT_ID, SANDBOX_SEND_ALLOWLIST, OPT_OUT, PLAN_ALLOWANCE, MAX_SENDS_HOUR, MAX_SENDS_DAY, MAX_DRAFTS_DAY, MAX_AI_ATTEMPTS_DAY, ESCALATION, RULES, ZBASE;
+var SANDBOX_ACCOUNT_ID, sandboxAllow, OPT_OUT, PLAN_ALLOWANCE, MAX_SENDS_HOUR, MAX_SENDS_DAY, MAX_DRAFTS_DAY, MAX_AI_ATTEMPTS_DAY, ESCALATION, RULES, ZBASE;
 var init_receptionist = __esm({
   "src/receptionist.ts"() {
     init_freeai();
     init_presets();
     SANDBOX_ACCOUNT_ID = "6a180a034c7f364ffded3c9c";
-    SANDBOX_SEND_ALLOWLIST = /* @__PURE__ */ new Set(["27672347593", "27612980377"]);
+    sandboxAllow = (env) => new Set(String(env.SANDBOX_ALLOWLIST || "").split(",").map((s) => s.trim()).filter(Boolean));
     OPT_OUT = /* @__PURE__ */ new Set(["STOP", "STOP ALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"]);
     PLAN_ALLOWANCE = { starter: 500, growth: 1e3, "business-pro": 2500 };
     MAX_SENDS_HOUR = 60;
@@ -6421,9 +6421,14 @@ async function formData(req) {
   });
   return o;
 }
+var PLAN_PRICES = { starter: 499, growth: 999, "business-pro": 1999 };
+function itnAmountOk(plan, gross) {
+  const expected = PLAN_PRICES[plan];
+  const actual = parseFloat(gross || "NaN");
+  return expected !== void 0 && Number.isFinite(actual) && Math.abs(actual - expected) < 0.01;
+}
 function pfUrl(env, base, plan, org) {
-  const prices = { starter: 499, growth: 999, "business-pro": 1999 };
-  const amount = prices[plan];
+  const amount = PLAN_PRICES[plan];
   const params = [
     ["merchant_id", env.PF_MERCHANT_ID],
     ["merchant_key", env.PF_MERCHANT_KEY],
@@ -6472,6 +6477,7 @@ async function handlePayfastItn(db, env, req) {
   const reference = mpid.startsWith("RU-") ? "RU-" + (parts[1] || "") : "";
   const plan = parts.slice(2).join("-");
   if (!reference || !["starter", "growth", "business-pro"].includes(plan)) return new Response("unknown reference", { status: 400 });
+  if (!itnAmountOk(plan, post["amount_gross"])) return new Response("amount mismatch", { status: 400 });
   const r = await db.query(
     `UPDATE organizations_organization SET plan=$1, subscription_status='active', payfast_token=$2, updated_at=now() WHERE payment_reference=$3`,
     [plan, post["token"] || "", reference]
@@ -7373,11 +7379,11 @@ async function handle(req, env) {
     const pdb = pool(env);
     try {
       const w = await pdb.query(
-        `SELECT w.id, w.name, o.plan FROM workspaces_workspace w JOIN organizations_organization o ON o.id=w.organization_id WHERE w.id=$1 AND w.is_archived=false AND o.deleted_at IS NULL`,
+        `SELECT w.id, w.name, o.plan, o.subscription_status FROM workspaces_workspace w JOIN organizations_organization o ON o.id=w.organization_id WHERE w.id=$1 AND w.is_archived=false AND o.deleted_at IS NULL`,
         [fm[1]]
       );
       const biz = w.rows[0];
-      if (!biz || biz.plan !== "business-pro") return html(layout("Enquiries closed", `<div class="card"><p>This business is not taking online enquiries right now.</p></div>`), 404);
+      if (!biz || biz.plan !== "business-pro" || biz.subscription_status !== "active") return html(layout("Enquiries closed", `<div class="card"><p>This business is not taking online enquiries right now.</p></div>`), 404);
       if (req.method === "POST") {
         const f = await formData(req);
         const name = (f.name || "").trim().slice(0, 200), contact = (f.contact || "").trim().slice(0, 200), message = (f.message || "").trim().slice(0, 2e3);
@@ -7657,7 +7663,7 @@ ${!ch.rows.length ? `<div class="card" style="border-color:var(--brand)"><h2 sty
     }
     if (path === "/assistant") {
       const { getSettings: getSettings2, upsertSettings: upsertSettings2, assistantCounts: assistantCounts2 } = await Promise.resolve().then(() => (init_assistant(), assistant_exports));
-      if (mem.plan !== "business-pro") {
+      if (mem.plan !== "business-pro" || mem.subscription_status !== "active") {
         return html(layout("Assistant", `<div class="card"><h2 style="margin-top:0">Your own assistant</h2>
 <p>Chat with your own assistant on your business WhatsApp: it remembers your rules and decisions, keeps a task log, parks anything that sends, spends or deploys for your Go + Sure, and holds a write-only vault for your secrets.</p>
 <p class="mut">The assistant is part of the Business Pro plan. <a href="/billing">Upgrade in billing -</a></p></div>`, user));
@@ -7731,7 +7737,7 @@ ${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
     }
     if (path === "/analytics") return html(await analyticsPage(db, user, mem));
     if (path === "/frontdesk") {
-      if (mem.plan !== "business-pro") return html(layout("Leads", `
+      if (mem.plan !== "business-pro" || mem.subscription_status !== "active") return html(layout("Leads", `
 <div class="card"><h2>Leads is a Business Pro feature</h2>
 <p>Capture website enquiries, work a shared lead pipeline, and send considered follow-ups. <a href="/billing">Upgrade to Business Pro - R1,999/month</a>.</p></div>`, user));
       const leads = await db.query(`SELECT * FROM frontdesk_lead WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 200`, [mem.workspace_id]);
@@ -7765,7 +7771,7 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
     }
     const fsave = /^\/frontdesk\/([0-9a-f-]{36})\/save$/.exec(path);
     if (fsave && req.method === "POST") {
-      if (mem.plan !== "business-pro") return redirect2("/frontdesk");
+      if (mem.plan !== "business-pro" || mem.subscription_status !== "active") return redirect2("/frontdesk");
       const f = await formData(req);
       const stage = ["new", "contacted", "quoted", "won", "lost"].includes(f.stage) ? f.stage : "new";
       const cents = Math.max(0, Math.round(parseFloat(f.value || "0") * 100) || 0);
@@ -7774,7 +7780,7 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
     }
     const fdraft = /^\/frontdesk\/([0-9a-f-]{36})\/draft$/.exec(path);
     if (fdraft && req.method === "POST") {
-      if (mem.plan !== "business-pro") return redirect2("/frontdesk");
+      if (mem.plan !== "business-pro" || mem.subscription_status !== "active") return redirect2("/frontdesk");
       const lr = await db.query(`SELECT * FROM frontdesk_lead WHERE id=$1 AND workspace_id=$2`, [fdraft[1], mem.workspace_id]);
       if (!lr.rows[0]) return redirect2("/frontdesk");
       try {
@@ -7790,7 +7796,7 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
     }
     const fappr = /^\/frontdesk\/draft\/([0-9a-f-]{36})\/approve$/.exec(path);
     if (fappr && req.method === "POST") {
-      if (mem.plan !== "business-pro") return redirect2("/frontdesk");
+      if (mem.plan !== "business-pro" || mem.subscription_status !== "active") return redirect2("/frontdesk");
       await db.query(`UPDATE frontdesk_followup_draft SET status='approved', updated_at=now() WHERE id=$1 AND workspace_id=$2`, [fappr[1], mem.workspace_id]);
       return redirect2("/frontdesk");
     }
@@ -8350,6 +8356,7 @@ ${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 }
 export {
   DRAFT_RULES,
+  PLAN_PRICES,
   VERIFY_SQL,
   billingPage,
   dashboardPage,
@@ -8358,6 +8365,7 @@ export {
   formData,
   getUser,
   html,
+  itnAmountOk,
   json,
   landingPage,
   layout,

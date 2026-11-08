@@ -802,4 +802,6 @@ if INTELLIGENCE_ENABLED:
             )
 
 # Billing: WhatsApp number that receives "I want to pay" messages (EFT activation).
-REVUP_BILLING_WHATSAPP = env("REVUP_BILLING_WHATSAPP", default="27612980377")
+REVUP_BILLING_WHATSAPP = env("REVUP_BILLING_WHATSAPP", default="")
+# Opted-in numbers the sandbox line may message (comma-separated); kept out of the repo.
+RECEPTIONIST_SANDBOX_ALLOWLIST = env.list("RECEPTIONIST_SANDBOX_ALLOWLIST", default=[])

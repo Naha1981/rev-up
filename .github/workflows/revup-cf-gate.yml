@@ -44,7 +44,7 @@ jobs:
         working-directory: workers/revup-cf
         run: npm ci
 
-      - name: Run worker unit suite (evidence: raw TAP)
+      - name: "Run worker unit suite (evidence: raw TAP)"
         working-directory: workers/revup-cf
         run: |
           mkdir -p "$RUNNER_TEMP/gate"

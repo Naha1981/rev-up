@@ -1,6 +1,6 @@
-"""Zernio connected-account cost estimation.
+"""Messaging-partner connected-account cost estimation.
 
-Pricing (https://docs.zernio.com/pricing, spec-confirmed):
+Pricing (spec-confirmed 31 Oct 2026):
 - First 2 connected accounts across the whole Zernio team: free.
 - Accounts 3-10: $6 per account/month.
 - Accounts 11-100: $3 per account/month.

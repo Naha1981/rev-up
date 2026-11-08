@@ -2,7 +2,7 @@
 // assistant on the business's existing WhatsApp line. Ported from the
 // standalone own-assistant v1 into RevUp as a per-business feature:
 // every table is scoped by workspace_id, WhatsApp goes through the existing
-// Zernio channel path, AI goes through the existing free chain (Groq primary,
+// Messaging-partner channel path, AI goes through the existing free chain (Groq primary,
 // OpenRouter free backup only behind the approved data-use consent), and the
 // daily AI-attempt cap is the shared cf_ai_usage table. No new services.
 //
@@ -283,7 +283,7 @@ export async function handleAssistantMessage(
   return { reply: ai.value, provider: ai.provider, storedMemory: stored };
 }
 
-// ---------- webhook entry: owner gate + Pro gate + shared caps + Zernio send ----------
+// ---------- webhook entry: owner gate + Pro gate + shared caps + partner send ----------
 export interface AssistantCtx {
   workspaceId: string;
   waId: string;         // sender digits
@@ -304,8 +304,8 @@ export async function maybeHandleAssistant(db: Pool, env: any, c: AssistantCtx):
   if (!setting || !setting.enabled || !setting.owner_phone) return false;
   if (String(setting.owner_phone).replace(/\D/g, "") !== c.waId.replace(/\D/g, "")) return false;
 
-  const org = await db.query(`SELECT o.plan FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [c.workspaceId]);
-  if ((org.rows[0]?.plan || "starter") !== "business-pro") return false; // Pro-tier feature
+  const org = await db.query(`SELECT o.plan, o.subscription_status FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [c.workspaceId]);
+  if ((org.rows[0]?.plan || "starter") !== "business-pro" || org.rows[0]?.subscription_status !== "active") return false; // Pro-tier feature, paid orgs only
 
   const taskId = await startTask(db, c.workspaceId, "message", `Reply to owner: ${c.body.slice(0, 80)}`);
   try {

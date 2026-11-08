@@ -1,7 +1,7 @@
 """Platform-owner admin dashboard (staff-only).
 
 Customer surfaces never see this. This is the one place vendor names
-(Zernio) may appear, gated behind is_staff.
+(the messaging partner) may appear, gated behind is_staff.
 """
 
 from django.contrib.admin.views.decorators import staff_member_required

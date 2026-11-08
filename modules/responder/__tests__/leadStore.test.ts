@@ -10,7 +10,7 @@ import { parseEnquiry } from "../parser/index.js";
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "..", "fixtures");
 const enquiry = parseEnquiry(readFileSync(join(fixtures, "property24-basic.eml"), "utf8"));
-const opts = { agentName: "Thabiso", calendar: new StubCalendarProvider() };
+const opts = { agentName: "Sipho", calendar: new StubCalendarProvider() };
 
 test("snapshot -> revive round-trip preserves a booked conversation", async () => {
   const convo = new LeadConversation(enquiry, opts);

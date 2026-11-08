@@ -64,7 +64,7 @@ class Organization(models.Model):
     payfast_token = models.CharField(max_length=64, blank=True, default="")
     # When the subscription first went active (first confirmed payment). Week
     # one from this moment unlocks every feature on any plan; afterwards the
-    # org keeps its own plan's allowances (his rule, 5 Nov 2026).
+    # org keeps its own plan's allowances (product rule, 5 Nov 2026).
     activated_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:

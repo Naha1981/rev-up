@@ -28,7 +28,7 @@ function makeDb() {
       return { rows: [] };
     }
     // org plan
-    if (s.includes('from organizations_organization')) return { rows: [{ plan: makeDb.plan }] };
+    if (s.includes('from organizations_organization')) return { rows: [{ plan: makeDb.plan, subscription_status: makeDb.status || 'active' }] };
     // cf_ai_usage upsert
     if (s.startsWith('insert into cf_ai_usage')) {
       const key = params[0];
@@ -240,7 +240,7 @@ test('AI fully unavailable gives a plain honest reply', async () => {
 
 // --- webhook entry: owner gate + Pro gate ---
 const chan = { workspace_id: WS, zernio_account_id: 'acct1', is_sandbox: false };
-const ctx = { workspaceId: WS, waId: '27612980377', body: 'what are you running', contactId: 'c1', zernioMessageId: 'z1', channel: chan, businessName: 'Demo Dental' };
+const ctx = { workspaceId: WS, waId: '27000000001', body: 'what are you running', contactId: 'c1', zernioMessageId: 'z1', channel: chan, businessName: 'Demo Dental' };
 
 test('maybeHandleAssistant: no settings -> not handled (receptionist continues)', async () => {
   const db = makeDb();
@@ -248,19 +248,26 @@ test('maybeHandleAssistant: no settings -> not handled (receptionist continues)'
 });
 test('maybeHandleAssistant: non-owner number -> not handled', async () => {
   const db = makeDb();
-  await upsertSettings(db, WS, '27612980377', true);
+  await upsertSettings(db, WS, '27000000001', true);
   assert.equal(await maybeHandleAssistant(db, env, { ...ctx, waId: '27820000000' }), false);
 });
 test('maybeHandleAssistant: non-Pro plan -> not handled', async () => {
   const db = makeDb();
   makeDb.plan = 'growth';
-  await upsertSettings(db, WS, '27612980377', true);
+  await upsertSettings(db, WS, '27000000001', true);
   assert.equal(await maybeHandleAssistant(db, env, ctx), false);
   makeDb.plan = 'business-pro';
 });
+test('maybeHandleAssistant: unpaid org on Pro plan -> not handled', async () => {
+  const db = makeDb();
+  makeDb.status = 'pending_activation';
+  await upsertSettings(db, WS, '27000000001', true);
+  assert.equal(await maybeHandleAssistant(db, env, ctx), false);
+  makeDb.status = 'active';
+});
 test('maybeHandleAssistant: Pro owner message handled end to end, no AI for tasks query', async () => {
   const db = makeDb();
-  await upsertSettings(db, WS, '27612980377', true);
+  await upsertSettings(db, WS, '27000000001', true);
   const calls = [];
   const fetcher = groqOk('x', calls);
   const origFetch = globalThis.fetch;
@@ -277,7 +284,7 @@ test('maybeHandleAssistant: Pro owner message handled end to end, no AI for task
 });
 test('settings upsert normalises the phone', async () => {
   const db = makeDb();
-  await upsertSettings(db, WS, '+27 61 298 0377', true);
+  await upsertSettings(db, WS, '+27 00 000 0001', true);
   const s = await getSettings(db, WS);
-  assert.equal(s.owner_phone, '27612980377');
+  assert.equal(s.owner_phone, '27000000001');
 });

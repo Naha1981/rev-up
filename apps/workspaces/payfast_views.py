@@ -29,7 +29,7 @@ def checkout(request, workspace_id):
         return HttpResponseNotFound("Card payments are not available yet.")
     workspace = get_object_or_404(Workspace, id=workspace_id)
     if not WorkspaceMembership.objects.filter(user=request.user, workspace=workspace).exists():
-        raise HttpResponseNotFound()
+        return HttpResponseNotFound()
     card = next((c for c in PLAN_CARDS if c["id"] == request.POST.get("plan", "")), None)
     if card is None:
         return HttpResponseBadRequest("unknown plan")

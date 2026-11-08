@@ -1,5 +1,5 @@
 import { freeAiGenerate, rejectInventedPrices, FACT_RULES } from "./freeai";
-// WhatsApp receptionist: inbound Zernio webhook -> AI draft -> auto-reply.
+// WhatsApp receptionist: inbound messaging-partner webhook -> AI draft -> auto-reply.
 // Bounds (his standing rules): reply only to numbers that messaged first,
 // never cold outbound; sandbox line answers his own numbers only; per-workspace
 // hourly/daily send caps and per-plan monthly AI reply allowances.
@@ -7,7 +7,8 @@ import type { Pool } from "pg";
 import { getPreset } from "./presets";
 
 const SANDBOX_ACCOUNT_ID = "6a180a034c7f364ffded3c9c";
-const SANDBOX_SEND_ALLOWLIST = new Set(["27672347593", "27612980377"]);
+// Opted-in sandbox test numbers come from env (secret), never from the repo.
+const sandboxAllow = (env: any) => new Set(String(env.SANDBOX_ALLOWLIST || "").split(",").map((s: string) => s.trim()).filter(Boolean));
 const OPT_OUT = new Set(["STOP", "STOP ALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"]);
 const PLAN_ALLOWANCE: Record<string, number> = { starter: 500, growth: 1000, "business-pro": 2500 };
 const MAX_SENDS_HOUR = 60, MAX_SENDS_DAY = 300, MAX_DRAFTS_DAY = 300, MAX_AI_ATTEMPTS_DAY = 100;
@@ -151,10 +152,10 @@ export async function handleZernioWebhook(db: Pool, env: any, payload: any): Pro
     }
   }
 
-  // monthly plan allowance (org-wide AI replies)
-  const org = await db.query(`SELECT o.plan, o.id FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [channel.workspace_id]);
+  // monthly plan allowance (org-wide AI replies); unpaid orgs get starter level
+  const org = await db.query(`SELECT o.plan, o.id, o.subscription_status FROM organizations_organization o JOIN workspaces_workspace w ON w.organization_id=o.id WHERE w.id=$1`, [channel.workspace_id]);
   const plan = org.rows[0]?.plan || "starter";
-  const allowance = PLAN_ALLOWANCE[plan] ?? 500;
+  const allowance = org.rows[0]?.subscription_status === "active" ? (PLAN_ALLOWANCE[plan] ?? 500) : 500;
   const used = await db.query(
     `SELECT count(*) c FROM receptionist_message m JOIN workspaces_workspace w ON w.id=m.workspace_id
      WHERE w.organization_id=$1 AND m.direction='outbound' AND m.sender_type='ai' AND m.is_draft=false AND m.created_at >= date_trunc('month', now())`,
@@ -255,7 +256,7 @@ export async function handleZernioWebhook(db: Pool, env: any, payload: any): Pro
 // sends on ITS key and plan). Used by the receptionist and the owner assistant.
 export async function sendChannelMessage(db: Pool, env: any, channel: any, contactId: string, waId: string, text: string): Promise<{ ok: boolean; messageId: string }> {
   const sandbox = channel.is_sandbox || channel.zernio_account_id === SANDBOX_ACCOUNT_ID;
-  if (sandbox && !SANDBOX_SEND_ALLOWLIST.has(waId)) return { ok: false, messageId: "" };
+  if (sandbox && !sandboxAllow(env).has(waId)) return { ok: false, messageId: "" };
   const sentHour = await db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND is_draft=false AND created_at >= now() - interval '1 hour'`, [channel.workspace_id]);
   const sentDay = await db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound' AND is_draft=false AND created_at >= now() - interval '1 day'`, [channel.workspace_id]);
   if (Number(sentHour.rows[0].c) >= MAX_SENDS_HOUR || Number(sentDay.rows[0].c) >= MAX_SENDS_DAY) return { ok: false, messageId: "" };

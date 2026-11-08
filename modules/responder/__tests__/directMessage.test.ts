@@ -132,7 +132,7 @@ test("try-it: tester scenario - number words, intent, dietary+price asks, empty 
     const r = await selftest(
       port,
       "I'd like a table for four this Friday at 7pm. Do you have halaal chicken and a vegetarian main, and what do they cost?",
-      { "x-industry": "general", "x-business-name": "Naha Thabiso's Workspace" },
+      { "x-industry": "general", "x-business-name": "Demo Workspace" },
     );
     assert.equal(r.status, "replied");
     const text = r.replies[0]!.text;

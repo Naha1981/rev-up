@@ -664,20 +664,20 @@ class RealPayloadShapeTests(TestCase):
                     "direction": "incoming",
                     "text": "Hi, do you work Saturdays?",
                     "sender": {
-                        "id": "27672347593",
-                        "phoneNumber": "+27672347593",
-                        "name": "Thabiso",
+                        "id": "27000000002",
+                        "phoneNumber": "+27000000002",
+                        "name": "Sipho",
                     },
                     "attachments": [],
                     "isRead": False,
                 },
-                "conversation": {"id": "conv-1", "participantName": "Thabiso"},
+                "conversation": {"id": "conv-1", "participantName": "Sipho"},
                 "account": {"id": "x", "accountId": "acct-sandbox", "platform": "whatsapp"},
             }
         )
         contact = Contact.objects.get(workspace=self.ws)
-        self.assertEqual(contact.wa_id, "27672347593")
-        self.assertEqual(contact.name, "Thabiso")
+        self.assertEqual(contact.wa_id, "27000000002")
+        self.assertEqual(contact.name, "Sipho")
         self.assertTrue(Message.objects.filter(contact=contact, direction="outbound", is_draft=True).exists())
 
 
@@ -712,7 +712,7 @@ class SandboxSendTests(TestCase):
         )
         ws = self._fixtures()
         channel = self._channel(ws, SANDBOX_ACCOUNT_ID)
-        contact = Contact.objects.create(workspace=ws, wa_id="27672347593", zernio_conversation_id="conv1")
+        contact = Contact.objects.create(workspace=ws, wa_id="27000000002", zernio_conversation_id="conv1")
         self._inbound(ws, contact)
         draft = self._draft(ws, contact)
         self.assertTrue(send_draft(channel, contact, draft))
@@ -818,7 +818,7 @@ class SandboxSendTests(TestCase):
                 "id": "z-in-1",
                 "direction": "incoming",
                 "text": "Do you work Saturdays?",
-                "sender": {"phoneNumber": "+27672347593", "name": "Nahalabs"},
+                "sender": {"phoneNumber": "+27000000002", "name": "Nahalabs"},
                 "account": {"accountId": SANDBOX_ACCOUNT_ID},
             },
             "conversation": {"id": "conv-real-1", "participantName": "Nahalabs"},
@@ -826,7 +826,7 @@ class SandboxSendTests(TestCase):
         with patch("apps.receptionist.webhooks.draft_reply") as mock_draft:
             mock_draft.return_value = Mock(body="Yes, 8:00-13:00.", intake={}, escalate=False)
             handle_inbox_message(payload)
-        contact = Contact.objects.get(workspace=ws, wa_id="27672347593")
+        contact = Contact.objects.get(workspace=ws, wa_id="27000000002")
         self.assertEqual(contact.zernio_conversation_id, "conv-real-1")
         outbound = Message.objects.get(workspace=ws, direction=Message.Direction.OUTBOUND)
         self.assertFalse(outbound.is_draft)

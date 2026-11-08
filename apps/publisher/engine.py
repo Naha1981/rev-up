@@ -677,7 +677,7 @@ class PublishEngine:
 
         if account.platform not in ("facebook", "instagram", "tiktok", "linkedin_personal", "linkedin_company"):
             raise PublishError(
-                f"{account.get_platform_display()} is not one RevUp publishes through Zernio.",
+                f"{account.get_platform_display()} is not one RevUp publishes through the messaging partner.",
                 platform=account.get_platform_display(),
                 retryable=False,
             )
@@ -717,7 +717,7 @@ class PublishEngine:
             )
 
         # One key per logical publish, minted once and stored before the first
-        # call: every retry of THIS row resends it, and Zernio's 24h replay
+        # call: every retry of THIS row resends it, and the partner's 24h replay
         # window turns a duplicate attempt into the original post (HTTP 200).
         if not platform_post.idempotency_key:
             platform_post.idempotency_key = str(uuid4())

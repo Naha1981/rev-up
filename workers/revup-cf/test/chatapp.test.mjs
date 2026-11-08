@@ -28,7 +28,7 @@ test('popiaSnippet: caps length, collapses whitespace', () => {
   assert.equal(popiaSnippet(null), '');
 });
 test('firstName: first token only', () => {
-  assert.equal(firstName('Thabiso Naha'), 'Thabiso');
+  assert.equal(firstName('Sipho Naha'), 'Sipho');
   assert.equal(firstName(''), '');
   assert.equal(firstName(null), '');
 });

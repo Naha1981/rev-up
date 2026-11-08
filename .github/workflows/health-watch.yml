@@ -20,10 +20,10 @@ jobs:
       - name: Check live health
         id: probe
         run: |
-          status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 150 https://revup.nahalabs.co.za/health/ || echo "000")
+          status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 150 https://revup.nahalabs.co.za/health || echo "000")
           if [ "$status" = "000" ]; then
             sleep 20
-            status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 150 https://revup.nahalabs.co.za/health/ || echo "000")
+            status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 150 https://revup.nahalabs.co.za/health || echo "000")
           fi
           echo "status=$status" >> "$GITHUB_OUTPUT"
       - name: Open an alert issue on failure
@@ -47,7 +47,7 @@ jobs:
             await github.rest.issues.create({
               owner: context.repo.owner, repo: context.repo.repo,
               title: `RevUp health check failing (HTTP ${status})`,
-              body: `The live health endpoint https://revup.nahalabs.co.za/health/ returned HTTP ${status} at ${new Date().toISOString()}. This issue auto-closes when the site recovers.`,
+              body: `The live health endpoint https://revup.nahalabs.co.za/health returned HTTP ${status} at ${new Date().toISOString()}. This issue auto-closes when the site recovers.`,
               labels: ["health-watch"],
             });
       - name: Close the alert issue on recovery

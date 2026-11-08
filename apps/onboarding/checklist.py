@@ -8,7 +8,7 @@ from django.urls import reverse
 
 
 def _has_receptionist_whatsapp(workspace_id) -> bool:
-    """A WhatsApp number bound to the workspace's receptionist (Zernio channel)."""
+    """A WhatsApp number bound to the workspace's receptionist (messaging-partner channel)."""
     from apps.receptionist.models import ZernioChannel
 
     return ZernioChannel.objects.filter(workspace_id=workspace_id).exists()

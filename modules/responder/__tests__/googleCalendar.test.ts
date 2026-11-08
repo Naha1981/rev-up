@@ -31,7 +31,7 @@ function fakeAuth(calls: Call[], busy: { start: string; end: string }[]): Google
   return new GoogleAuth({ clientId: "c", clientSecret: "s", refreshToken: "r" }, fetchImpl);
 }
 
-const CFG = { calendarId: "primary", viewingDurationMin: 30, agentName: "Thabiso" };
+const CFG = { calendarId: "primary", viewingDurationMin: 30, agentName: "Sipho" };
 
 test("free/busy filtering drops occupied candidates", async () => {
   const calls: Call[] = [];
@@ -89,7 +89,7 @@ test("booking write flows through the conversation and lands in the handover not
       return { eventId: "evt-1", htmlLink: "https://calendar.google.com/event?eid=evt-1" };
     },
   };
-  const convo = new LeadConversation(enquiry, { agentName: "Thabiso", calendar });
+  const convo = new LeadConversation(enquiry, { agentName: "Sipho", calendar });
   convo.initialMessages();
   await convo.handleReply("R2.5m, pre-approved");
   const r = await convo.handleReply("1");
@@ -104,7 +104,7 @@ test("failed booking write still confirms the lead and flags the agent", async (
     getAvailableSlots: async (n: number) => candidateSlots(n),
     bookSlot: async () => { throw new Error("calendar down"); },
   };
-  const convo = new LeadConversation(enquiry, { agentName: "Thabiso", calendar });
+  const convo = new LeadConversation(enquiry, { agentName: "Sipho", calendar });
   convo.initialMessages();
   await convo.handleReply("R2.5m, cash");
   const r = await convo.handleReply("1");

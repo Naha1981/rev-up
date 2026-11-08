@@ -6,7 +6,7 @@
  *   Postgres state (when DATABASE_URL present, else in-memory)
  *
  * WhatsApp stays dry-run unless WHATSAPP_MODE=live. Live sends require
- * Thabiso's explicit go-ahead. The 067 number is never wired anywhere.
+ * the owner's explicit go-ahead. That number is never wired anywhere.
  *
  *   npm run build && node dist/server.js   (production)
  *   npx tsx server.ts                      (dev)

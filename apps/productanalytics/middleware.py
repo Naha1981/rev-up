@@ -74,7 +74,7 @@ class ProductAnalyticsMiddleware:
 
                     domain = urlparse(referrer).netloc[:120]
                 # Tracked outreach links carry the business code in
-                # utm_content (Thabiso's UTM spec, 3 Nov 2026); ?b= is a
+                # utm_content (UTM spec, 3 Nov 2026); ?b= is a
                 # short alias. Sanitize to a slug so junk stays unattributed.
                 code = (request.GET.get("utm_content") or request.GET.get("b", ""))[:32].lower()
                 if code and not re.fullmatch(r"[a-z0-9][a-z0-9-]*", code):

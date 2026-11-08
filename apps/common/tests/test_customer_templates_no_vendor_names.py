@@ -1,4 +1,4 @@
-"""Standing rule (Thabiso, 2026-10-31): never mention the tech stack on
+"""Standing product rule (2026-10-31): never mention the tech stack on
 customer-facing screens. This test scans every customer-facing template
 for vendor/tool names and fails if one leaks into visible copy.
 

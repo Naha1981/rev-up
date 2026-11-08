@@ -280,6 +280,12 @@ def workspace_billing(request, workspace_id):
         raise Http404
     org = workspace.organization
     if request.method == "POST":
+        membership = WorkspaceMembership.objects.filter(user=request.user, workspace=workspace).first()
+        if membership is None or membership.workspace_role not in (
+            WorkspaceMembership.WorkspaceRole.OWNER,
+            WorkspaceMembership.WorkspaceRole.MANAGER,
+        ):
+            raise Http404
         chosen = request.POST.get("plan", "")
         if chosen in org.PLAN_PRICES_RAND:
             org.plan = chosen
@@ -290,7 +296,7 @@ def workspace_billing(request, workspace_id):
         org.save()  # save() assigns the RU- reference when blank
     status, day, days_left = org.trial_state()
     card = next(c for c in PLAN_CARDS if c["id"] == org.plan)
-    number = getattr(django_settings, "REVUP_BILLING_WHATSAPP", "27612980377")
+    number = getattr(django_settings, "REVUP_BILLING_WHATSAPP", "")
     text = (
         f"Hi NahaLabs, I want to pay my RevUp {card['name']} subscription "
         f"(R{card['price']}/month). My payment reference is {org.payment_reference}."
@@ -306,7 +312,7 @@ def workspace_billing(request, workspace_id):
             "status": status,
             "trial_day": day,
             "days_left": days_left,
-            "pay_url": f"https://wa.me/{number}?text={quote_plus(text)}",
+            "pay_url": (f"https://wa.me/{number}?text={quote_plus(text)}" if number else ""),
             "usage": _usage_snapshot(org),
             "payfast_available": _payfast_available(),
             "payfast_sandbox": _payfast_sandbox(),

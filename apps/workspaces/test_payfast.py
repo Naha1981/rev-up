@@ -138,6 +138,18 @@ def test_checkout_renders_auto_submit_form_with_signed_params(merchant, db):
     assert "RevUp Growth (monthly)" in body
 
 
+def test_checkout_non_member_gets_404(merchant, db):
+    org, user, ws = _owner_with_workspace()
+    from django.utils import timezone
+
+    outsider = User.objects.create_user(
+        email=f"out-{timezone.now().timestamp()}@example.com", password="x" * 20, tos_accepted_at=timezone.now()
+    )
+    c = Client()
+    c.force_login(outsider)
+    assert c.post(f"/workspaces/{ws.id}/billing/payfast/", {"plan": "growth"}).status_code == 404
+
+
 def test_checkout_rejects_unknown_plan(merchant, db):
     org, user, ws = _owner_with_workspace()
     c = Client()

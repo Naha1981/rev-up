@@ -504,7 +504,7 @@ class PlatformPost(models.Model):
     # platform itself after publishing.
     provider = models.CharField(max_length=20, default="zernio", db_index=True)
     provider_post_id = models.CharField(max_length=64, blank=True, default="")
-    # One UUID per logical publish, sent to Zernio as its Idempotency-Key
+    # One UUID per logical publish, sent to the messaging partner as its Idempotency-Key
     # header (24h replay window). NULL until the first dispatch; the unique
     # constraint below treats NULLs as distinct, so undispatched rows never
     # collide.

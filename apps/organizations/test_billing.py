@@ -2,7 +2,7 @@
 
 from datetime import timedelta
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from apps.members.models import WorkspaceMembership
@@ -18,7 +18,7 @@ def _setup(email="owner@example.com", staff=False):
     user = get_user_model().objects.create_user(
         email=email, password="x" * 20, tos_accepted_at=timezone.now(), is_staff=staff
     )
-    WorkspaceMembership.objects.create(user=user, workspace=ws)
+    WorkspaceMembership.objects.create(user=user, workspace=ws, workspace_role="owner")
     from apps.members.models import OrgMembership
 
     OrgMembership.objects.create(user=user, organization=org, org_role=OrgMembership.OrgRole.OWNER)
@@ -70,7 +70,7 @@ class TrialStateTests(TestCase):
 
 
 class WeekOneEntitlementTests(TestCase):
-    """His rule (5 Nov 2026): week one of a paid subscription unlocks every
+    """Product rule (5 Nov 2026): week one of a paid subscription unlocks every
     feature on any plan; after that the org keeps its own plan's allowances."""
 
     def test_week_one_unlocks_all_allowances_on_starter(self):
@@ -94,6 +94,7 @@ class WeekOneEntitlementTests(TestCase):
 
 
 class BillingPageTests(TestCase):
+    @override_settings(REVUP_BILLING_WHATSAPP="27000000001")
     def test_page_shows_plans_reference_and_trial(self):
         org, ws, user = _setup()
         self.client.force_login(user)
@@ -103,7 +104,7 @@ class BillingPageTests(TestCase):
         self.assertContains(resp, "R1,999")
         self.assertContains(resp, org.payment_reference)
         self.assertContains(resp, "Early access: your last 7 days")
-        self.assertContains(resp, "wa.me/27612980377")
+        self.assertContains(resp, "wa.me/27000000001")
         self.assertContains(resp, "auto-posting")
 
     def test_choose_plan(self):
@@ -113,6 +114,21 @@ class BillingPageTests(TestCase):
         self.assertEqual(resp.status_code, 302)
         org.refresh_from_db()
         self.assertEqual(org.plan, "growth")
+
+    def test_viewer_member_cannot_choose_plan(self):
+        org, ws, user = _setup(email="viewer-owner@example.com")
+        viewer_email = "viewer@example.com"
+        from django.contrib.auth import get_user_model
+
+        viewer = get_user_model().objects.create_user(
+            email=viewer_email, password="x" * 20, tos_accepted_at=timezone.now()
+        )
+        WorkspaceMembership.objects.create(user=viewer, workspace=ws, workspace_role="viewer")
+        self.client.force_login(viewer)
+        resp = self.client.post(f"/workspaces/{ws.id}/billing/", {"plan": "business-pro"})
+        self.assertEqual(resp.status_code, 404)
+        org.refresh_from_db()
+        self.assertEqual(org.plan, "starter")
 
     def test_choose_rejects_unknown_plan(self):
         org, ws, user = _setup()
