@@ -8,6 +8,7 @@ import {
   esc, formData, html, json, redirect, layout, getUser, membership,
   newSession, sessionCookie, VERIFY_SQL, rateLimited, rateLimitExceeded, sha256hex,
 } from "./index";
+import { WALKTHROUGH_B64 } from "./walkthrough-media";
 
 export const CHATAPP_SCOPE = "revup:read";
 const CODE_TTL_MIN = 10;
@@ -499,6 +500,25 @@ function corsHeaders(): Record<string, string> {
 }
 
 // ---------- privacy policy (required for the ChatGPT app listing) ----------
+// Public walkthrough of the RevUp ChatGPT app for the directory listing review.
+// The recording uses a demo workspace with sample data only.
+export function walkthroughPage(): string {
+  return layout("RevUp in ChatGPT - walkthrough", `
+<div class="card"><h2>RevUp in ChatGPT - walkthrough</h2>
+<p class="mut">64 seconds &middot; Recorded 8 November 2026 &middot; Demo workspace with sample data</p>
+<video controls preload="metadata" poster="/static/brand/revup-light.png" style="width:100%;border-radius:12px;background:#171714" src="/static/brand/chatgpt-walkthrough.mp4"></video>
+<h3>What the video shows</h3>
+<ul>
+<li>Connecting a RevUp workspace to ChatGPT with read-only access.</li>
+<li>Today's enquiry summary and the lead pipeline by stage.</li>
+<li>Google review request performance.</li>
+<li>The demand radar feed for the workspace's industry.</li>
+<li>Upcoming bookings with requested vs confirmed counts.</li>
+</ul>
+<p>Every answer comes from the four read-only tools. Counts, short message snippets and first names only - never customer phone numbers, emails or addresses. All people and businesses in the recording are sample data.</p>
+</div>`);
+}
+
 export function privacyPage(): string {
   return layout("Privacy policy", `
 <div class="card"><h2>Privacy policy - RevUp</h2>
@@ -549,6 +569,12 @@ export async function handleChatAppRoute(req: Request, env: any, url: URL, poolF
     const t = (env as any).OPENAI_APPS_CHALLENGE || "";
     if (!t) return new Response("not found", { status: 404 });
     return new Response(t, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+  }
+  if (path === "/chatgpt-walkthrough") return html(walkthroughPage());
+  if (path === "/static/brand/chatgpt-walkthrough.mp4") {
+    return new Response(Uint8Array.from(atob(WALKTHROUGH_B64), (c) => c.charCodeAt(0)), {
+      headers: { "content-type": "video/mp4", "cache-control": "public, max-age=86400" },
+    });
   }
   if (path === "/privacy") return html(privacyPage());
   return null;
