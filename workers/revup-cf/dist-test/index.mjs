@@ -3172,6 +3172,538 @@ ${sampleBanner}
 </script>`;
 }
 
+// src/chatapp.ts
+var CHATAPP_SCOPE = "revup:read";
+var CODE_TTL_MIN = 10;
+var ACCESS_TTL_DAYS = 30;
+async function ensureChatAppTables(db) {
+  await db.query(`CREATE TABLE IF NOT EXISTS cf_oauth_client(
+    client_id text PRIMARY KEY,
+    client_name text NOT NULL DEFAULT '',
+    redirect_uris jsonb NOT NULL DEFAULT '[]'::jsonb,
+    created_at timestamptz NOT NULL DEFAULT now())`);
+  await db.query(`CREATE TABLE IF NOT EXISTS cf_oauth_code(
+    code_hash text PRIMARY KEY,
+    client_id text NOT NULL,
+    redirect_uri text NOT NULL,
+    code_challenge text NOT NULL,
+    workspace_id uuid NOT NULL,
+    scope text NOT NULL DEFAULT 'revup:read',
+    expires_at timestamptz NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now())`);
+  await db.query(`CREATE TABLE IF NOT EXISTS cf_oauth_token(
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    access_hash text UNIQUE NOT NULL,
+    refresh_hash text UNIQUE NOT NULL,
+    client_id text NOT NULL,
+    workspace_id uuid NOT NULL,
+    scope text NOT NULL DEFAULT 'revup:read',
+    expires_at timestamptz NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    revoked boolean NOT NULL DEFAULT false)`);
+}
+function base64url(buf) {
+  const b = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  let s = "";
+  for (const c of b) s += String.fromCharCode(c);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+async function pkceS256(verifier) {
+  return base64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
+}
+function validRedirectUri(uri, registered) {
+  return registered.includes(uri);
+}
+function popiaSnippet(s, max = 140) {
+  return String(s || "").replace(/\s+/g, " ").trim().slice(0, max);
+}
+function firstName2(s) {
+  return String(s || "").trim().split(/\s+/)[0] || "";
+}
+function authMetadata(base) {
+  return {
+    issuer: base,
+    authorization_response_iss_parameter_supported: true,
+    authorization_endpoint: `${base}/oauth/authorize`,
+    token_endpoint: `${base}/oauth/token`,
+    registration_endpoint: `${base}/oauth/register`,
+    token_endpoint_auth_methods_supported: ["none"],
+    grant_types_supported: ["authorization_code", "refresh_token"],
+    response_types_supported: ["code"],
+    code_challenge_methods_supported: ["S256"],
+    scopes_supported: [CHATAPP_SCOPE]
+  };
+}
+function protectedResourceMetadata(base) {
+  return {
+    resource: `${base}/mcp`,
+    authorization_servers: [base],
+    scopes_supported: [CHATAPP_SCOPE],
+    resource_name: "RevUp",
+    resource_documentation: `${base}/privacy`
+  };
+}
+function consentPage(qs, mem, clientName, err = "") {
+  return layout("Connect RevUp to ChatGPT", `
+${err ? `<p class="bad">${esc2(err)}</p>` : ""}
+<div class="card"><h2>Connect ${esc2(mem.org_name)} to ChatGPT</h2>
+<p><b>${esc2(clientName || "ChatGPT")}</b> is asking for <b>read-only</b> access to this workspace:</p>
+<ul>
+<li>Today's enquiry summary (counts and message snippets)</li>
+<li>Review stats (counts only)</li>
+<li>Your demand radar feed</li>
+<li>Upcoming bookings (service, time, status, first name)</li>
+</ul>
+<p class="mut">No write actions. No customer phone numbers, emails or addresses are shared. You can disconnect any time from ChatGPT's app settings.</p>
+<form method="post" action="/oauth/authorize?${qs}">
+<button name="action" value="approve">Allow read-only access</button>
+<button class="link" name="action" value="deny" formnovalidate>Cancel</button>
+</form></div>`);
+}
+function connectLoginPage(qs, err = "") {
+  return layout("Log in to connect ChatGPT", `
+${err ? `<p class="bad">${esc2(err)}</p>` : ""}
+<div class="card"><h2>Log in to RevUp to connect ChatGPT</h2>
+<form method="post" action="/oauth/authorize?${qs}">
+<label>Email<input type="email" name="email" required autocomplete="email"></label>
+<label>Password<input type="password" name="password" required autocomplete="current-password"></label>
+<button>Log in and continue</button>
+</form></div>`);
+}
+function oauthErr(redirectUri, state, error, desc, iss) {
+  if (redirectUri) {
+    const u = new URL(redirectUri);
+    u.searchParams.set("error", error);
+    u.searchParams.set("error_description", desc);
+    if (state) u.searchParams.set("state", state);
+    u.searchParams.set("iss", iss);
+    return new Response(null, { status: 302, headers: { location: u.toString() } });
+  }
+  return json({ error, error_description: desc }, 400);
+}
+async function handleAuthorize(req, env, url, poolFn) {
+  const db = poolFn(env);
+  try {
+    await ensureChatAppTables(db);
+    const p = url.searchParams;
+    const base = url.origin;
+    const clientId = p.get("client_id") || "";
+    const redirectUri = p.get("redirect_uri") || "";
+    const state = p.get("state") || "";
+    const challenge = p.get("code_challenge") || "";
+    const method = p.get("code_challenge_method") || "";
+    if ((p.get("response_type") || "") !== "code") return oauthErr(null, state, "unsupported_response_type", "response_type must be code", base);
+    const cr = await db.query(`SELECT client_id, client_name, redirect_uris FROM cf_oauth_client WHERE client_id=$1`, [clientId]);
+    const client = cr.rows[0];
+    if (!client) return json({ error: "invalid_client", error_description: "unknown client_id" }, 400);
+    if (!validRedirectUri(redirectUri, client.redirect_uris || [])) return json({ error: "invalid_request", error_description: "redirect_uri not registered" }, 400);
+    if (!challenge || method !== "S256") return oauthErr(redirectUri, state, "invalid_request", "PKCE S256 required", base);
+    const qs = url.search.replace(/^\?/, "");
+    if (req.method === "POST") {
+      const f = await formData(req);
+      if (f.email !== void 0) {
+        if (await rateLimitExceeded(db, "login", req, 20)) return html(connectLoginPage(qs, "Too many failed attempts from this network today - please try again tomorrow."), 429);
+        const r = await db.query(`SELECT id,password FROM accounts_user WHERE lower(email)=lower($1) AND is_active`, [(f.email || "").trim()]);
+        const row = r.rows[0];
+        let ok = false;
+        if (row && typeof row.password === "string" && row.password.startsWith("bcrypt_sha256$")) {
+          const v = await db.query(VERIFY_SQL, [f.password || "", row.password.slice("bcrypt_sha256$".length)]);
+          ok = v.rows[0]?.ok === true;
+        }
+        if (!ok) {
+          await rateLimited(db, "login", req, 20);
+          return html(connectLoginPage(qs, "Wrong email or password."), 401);
+        }
+        const token = await newSession(db, row.id, req);
+        return new Response(null, { status: 303, headers: { location: `/oauth/authorize?${qs}`, "set-cookie": sessionCookie(token) } });
+      }
+      if (f.action === "deny") return oauthErr(redirectUri, state, "access_denied", "The owner declined the connection.", base);
+      if (f.action !== "approve") return json({ error: "invalid_request" }, 400);
+    }
+    const user = await getUser(req, db);
+    if (!user) return html(connectLoginPage(qs));
+    const mem = await membership(db, user.id, req);
+    if (!mem) return html(layout("No workspace", `<p>Your account has no workspace yet.</p>`, user), 403);
+    if (mem.workspace_role && !["owner", "admin"].includes(mem.workspace_role) && req.method === "POST")
+      return html(consentPage(qs, mem, client.client_name, "Only a workspace owner or admin can connect apps."), 403);
+    if (req.method === "POST") {
+      const code = base64url(crypto.getRandomValues(new Uint8Array(32)));
+      await db.query(
+        `INSERT INTO cf_oauth_code(code_hash,client_id,redirect_uri,code_challenge,workspace_id,scope,expires_at)
+         VALUES($1,$2,$3,$4,$5,$6,now()+interval '${CODE_TTL_MIN} minutes')`,
+        [await sha256hex(code), clientId, redirectUri, challenge, mem.workspace_id, CHATAPP_SCOPE]
+      );
+      const u = new URL(redirectUri);
+      u.searchParams.set("code", code);
+      if (state) u.searchParams.set("state", state);
+      u.searchParams.set("iss", base);
+      return new Response(null, { status: 302, headers: { location: u.toString() } });
+    }
+    return html(consentPage(qs, mem, client.client_name));
+  } finally {
+    await db.end().catch(() => {
+    });
+  }
+}
+async function handleRegisterReal(req, env, poolFn) {
+  let body = {};
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "invalid_client_metadata", error_description: "JSON body required" }, 400);
+  }
+  const uris = Array.isArray(body.redirect_uris) ? body.redirect_uris.filter((u) => typeof u === "string" && u.startsWith("https://")) : [];
+  if (!uris.length) return json({ error: "invalid_redirect_uri", error_description: "at least one https redirect_uri required" }, 400);
+  const clientId = crypto.randomUUID();
+  const db = poolFn(env);
+  try {
+    await ensureChatAppTables(db);
+    await db.query(
+      `INSERT INTO cf_oauth_client(client_id,client_name,redirect_uris) VALUES($1,$2,$3)`,
+      [clientId, String(body.client_name || "").slice(0, 120), JSON.stringify(uris)]
+    );
+    return json({
+      client_id: clientId,
+      client_name: String(body.client_name || "").slice(0, 120),
+      redirect_uris: uris,
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+      scope: CHATAPP_SCOPE,
+      client_id_issued_at: Math.floor(Date.now() / 1e3)
+    }, 201);
+  } finally {
+    await db.end().catch(() => {
+    });
+  }
+}
+function tokenJson(access, refresh) {
+  return json({ access_token: access, token_type: "Bearer", expires_in: ACCESS_TTL_DAYS * 86400, refresh_token: refresh, scope: CHATAPP_SCOPE });
+}
+async function issueTokens(db, clientId, workspaceId) {
+  const access = base64url(crypto.getRandomValues(new Uint8Array(32)));
+  const refresh = base64url(crypto.getRandomValues(new Uint8Array(32)));
+  await db.query(
+    `INSERT INTO cf_oauth_token(access_hash,refresh_hash,client_id,workspace_id,scope,expires_at)
+     VALUES($1,$2,$3,$4,$5,now()+interval '${ACCESS_TTL_DAYS} days')`,
+    [await sha256hex(access), await sha256hex(refresh), clientId, workspaceId, CHATAPP_SCOPE]
+  );
+  return { access, refresh };
+}
+async function handleToken(req, env, poolFn) {
+  const f = await formData(req);
+  const db = poolFn(env);
+  try {
+    await ensureChatAppTables(db);
+    if (f.grant_type === "authorization_code") {
+      const ch = await sha256hex(f.code || "");
+      const r = await db.query(
+        `DELETE FROM cf_oauth_code WHERE code_hash=$1 AND client_id=$2 AND redirect_uri=$3 AND expires_at>now()
+         RETURNING code_challenge, workspace_id`,
+        [ch, f.client_id || "", f.redirect_uri || ""]
+      );
+      const row = r.rows[0];
+      if (!row) return json({ error: "invalid_grant", error_description: "code unknown, expired or already used" }, 400);
+      if (await pkceS256(f.code_verifier || "") !== row.code_challenge)
+        return json({ error: "invalid_grant", error_description: "PKCE verification failed" }, 400);
+      const t = await issueTokens(db, f.client_id || "", row.workspace_id);
+      return tokenJson(t.access, t.refresh);
+    }
+    if (f.grant_type === "refresh_token") {
+      const rh = await sha256hex(f.refresh_token || "");
+      const r = await db.query(`SELECT id, client_id, workspace_id FROM cf_oauth_token WHERE refresh_hash=$1 AND NOT revoked`, [rh]);
+      const row = r.rows[0];
+      if (!row) return json({ error: "invalid_grant" }, 400);
+      const access = base64url(crypto.getRandomValues(new Uint8Array(32)));
+      const refresh = base64url(crypto.getRandomValues(new Uint8Array(32)));
+      await db.query(
+        `UPDATE cf_oauth_token SET access_hash=$1, refresh_hash=$2, expires_at=now()+interval '${ACCESS_TTL_DAYS} days', created_at=now() WHERE id=$3`,
+        [await sha256hex(access), await sha256hex(refresh), row.id]
+      );
+      return tokenJson(access, refresh);
+    }
+    return json({ error: "unsupported_grant_type" }, 400);
+  } finally {
+    await db.end().catch(() => {
+    });
+  }
+}
+async function workspaceForToken(req, env, poolFn) {
+  const auth = req.headers.get("authorization") || "";
+  const tok = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!tok) return null;
+  const db = poolFn(env);
+  try {
+    const r = await db.query(
+      `SELECT t.workspace_id, o.name AS org_name, w.name AS workspace_name FROM cf_oauth_token t
+       JOIN workspaces_workspace w ON w.id=t.workspace_id
+       JOIN organizations_organization o ON o.id=w.organization_id
+       WHERE t.access_hash=$1 AND NOT t.revoked AND t.expires_at>now()`,
+      [await sha256hex(tok)]
+    );
+    return r.rows[0] || null;
+  } finally {
+    await db.end().catch(() => {
+    });
+  }
+}
+async function toolTodayEnquiries(db, ws) {
+  const [today, stages, latest] = await Promise.all([
+    db.query(`SELECT count(*) c FROM frontdesk_lead WHERE workspace_id=$1 AND (created_at AT TIME ZONE 'Africa/Johannesburg')::date = (now() AT TIME ZONE 'Africa/Johannesburg')::date`, [ws]),
+    db.query(`SELECT stage, count(*) c FROM frontdesk_lead WHERE workspace_id=$1 GROUP BY stage`, [ws]),
+    db.query(`SELECT message, stage, created_at FROM frontdesk_lead WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 3`, [ws])
+  ]);
+  const data = {
+    day: (/* @__PURE__ */ new Date()).toLocaleDateString("en-ZA", { timeZone: "Africa/Johannesburg" }),
+    enquiries_today: Number(today.rows[0].c),
+    all_time_by_stage: Object.fromEntries(stages.rows.map((r) => [r.stage, Number(r.c)])),
+    latest: latest.rows.map((r) => ({
+      at: new Date(r.created_at).toLocaleTimeString("en-ZA", { hour12: false, timeZone: "Africa/Johannesburg" }),
+      stage: r.stage,
+      snippet: popiaSnippet(r.message)
+    }))
+  };
+  const lines = [`${data.enquiries_today} new enquir${data.enquiries_today === 1 ? "y" : "ies"} today (${data.day}).`];
+  const stageStr = Object.entries(data.all_time_by_stage).map(([k, v]) => `${k}: ${v}`).join(", ");
+  if (stageStr) lines.push(`Pipeline (all time): ${stageStr}.`);
+  for (const l of data.latest) lines.push(`- ${l.at} [${l.stage}] ${l.snippet}`);
+  return { data, text: lines.join("\n") };
+}
+async function toolReviewStats(db, ws) {
+  const [links, clicked, contacts, events] = await Promise.all([
+    db.query(`SELECT count(*) c FROM receptionist_reviewlink WHERE workspace_id=$1`, [ws]),
+    db.query(`SELECT count(*) c FROM receptionist_reviewlink WHERE workspace_id=$1 AND clicked_at IS NOT NULL`, [ws]),
+    db.query(`SELECT count(*) c FROM receptionist_contact WHERE workspace_id=$1`, [ws]),
+    db.query(`SELECT step, status, count(*) c FROM receptionist_reviewevent WHERE workspace_id=$1 GROUP BY step, status`, [ws])
+  ]);
+  const data = {
+    review_links_sent: Number(links.rows[0].c),
+    links_clicked: Number(clicked.rows[0].c),
+    contacts_in_inbox: Number(contacts.rows[0].c),
+    events: events.rows.map((r) => ({ step: r.step, status: r.status, count: Number(r.c) }))
+  };
+  const ev = data.events.map((e) => `${e.step}/${e.status}: ${e.count}`).join(", ");
+  return {
+    data,
+    text: `Review links sent: ${data.review_links_sent} (${data.links_clicked} clicked). Contacts in inbox: ${data.contacts_in_inbox}.${ev ? ` Events - ${ev}.` : ""}`
+  };
+}
+async function toolRadarFeed(db, ws) {
+  const w = await db.query(`SELECT industry FROM workspaces_workspace WHERE id=$1`, [ws]);
+  const feed = await db.query(
+    `SELECT title, source, summary, published_at FROM radar_radarfeeditem WHERE workspace_id=$1 ORDER BY published_at DESC NULLS LAST, fetched_at DESC LIMIT 10`,
+    [ws]
+  );
+  const data = {
+    industry: w.rows[0]?.industry || "general",
+    items: feed.rows.map((r) => ({
+      title: popiaSnippet(r.title, 200),
+      source: popiaSnippet(r.source, 80),
+      published_at: r.published_at ? new Date(r.published_at).toISOString().slice(0, 10) : null,
+      snippet: popiaSnippet(r.summary)
+    }))
+  };
+  const lines = [`Demand radar (${data.industry}): ${data.items.length} recent signal${data.items.length === 1 ? "" : "s"}.`];
+  for (const i of data.items) lines.push(`- ${i.published_at || "undated"} \xB7 ${i.title}${i.source ? ` (${i.source})` : ""}`);
+  return { data, text: lines.join("\n") };
+}
+async function toolUpcomingBookings(db, ws) {
+  const r = await db.query(
+    `SELECT b.service, b.scheduled_start, b.preferred_time, b.status, c.name AS contact_name
+     FROM receptionist_booking b LEFT JOIN receptionist_contact c ON c.id=b.contact_id
+     WHERE b.workspace_id=$1 AND b.status IN ('requested','confirmed')
+     ORDER BY b.scheduled_start NULLS LAST, b.created_at LIMIT 10`,
+    [ws]
+  );
+  const data = {
+    upcoming: r.rows.map((b) => ({
+      service: popiaSnippet(b.service, 80),
+      when: b.scheduled_start ? new Date(b.scheduled_start).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" }) : popiaSnippet(b.preferred_time, 60),
+      status: b.status,
+      customer: firstName2(b.contact_name)
+    })),
+    requested: r.rows.filter((b) => b.status === "requested").length,
+    confirmed: r.rows.filter((b) => b.status === "confirmed").length
+  };
+  const lines = [`${data.upcoming.length} upcoming booking${data.upcoming.length === 1 ? "" : "s"} (${data.confirmed} confirmed, ${data.requested} awaiting confirmation).`];
+  for (const b of data.upcoming) lines.push(`- ${b.when || "time to confirm"} \xB7 ${b.service || "booking"} \xB7 ${b.status}${b.customer ? ` \xB7 ${b.customer}` : ""}`);
+  return { data, text: lines.join("\n") };
+}
+var WIDGET_URI = "ui://widget/revup-overview-v1.html";
+var WIDGET_HTML = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+body{font-family:system-ui,sans-serif;margin:0;padding:12px;background:#fff;color:#1d1d1f}
+h2{font-size:15px;margin:0 0 8px}.row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee;font-size:13px}
+.row:last-child{border:none}.mut{color:#6e6e73;font-size:12px}.n{font-weight:700;font-size:22px}
+.grid{display:flex;gap:12px;flex-wrap:wrap}.card{border:1px solid #e5e5ea;border-radius:10px;padding:10px 14px;min-width:110px}
+</style></head><body><div id="root"><p class="mut">Loading\u2026</p></div><script>
+const o=(window.openai&&window.openai.toolOutput)||{};
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let h='';
+if(o.enquiries_today!==undefined){h+='<h2>Today\\'s enquiries - '+esc(o.day)+'</h2><div class="grid"><div class="card"><div class="n">'+esc(o.enquiries_today)+'</div><div class="mut">today</div></div>';
+for(const[k,v]of Object.entries(o.all_time_by_stage||{}))h+='<div class="card"><div class="n">'+esc(v)+'</div><div class="mut">'+esc(k)+'</div></div>';
+h+='</div>';for(const l of(o.latest||[]))h+='<div class="row"><span>'+esc(l.snippet)+'</span><span class="mut">'+esc(l.at)+' \xB7 '+esc(l.stage)+'</span></div>';}
+else if(o.review_links_sent!==undefined){h+='<h2>Review stats</h2><div class="grid"><div class="card"><div class="n">'+esc(o.review_links_sent)+'</div><div class="mut">links sent</div></div><div class="card"><div class="n">'+esc(o.links_clicked)+'</div><div class="mut">clicked</div></div><div class="card"><div class="n">'+esc(o.contacts_in_inbox)+'</div><div class="mut">contacts</div></div></div>';}
+else if(o.items){h+='<h2>Demand radar - '+esc(o.industry)+'</h2>';for(const i of o.items)h+='<div class="row"><span>'+esc(i.title)+'</span><span class="mut">'+esc(i.published_at||'')+'</span></div>';}
+else if(o.upcoming){h+='<h2>Upcoming bookings</h2>';for(const b of o.upcoming)h+='<div class="row"><span>'+esc(b.service||'booking')+(b.customer?' \xB7 '+esc(b.customer):'')+'</span><span class="mut">'+esc(b.when||'')+' \xB7 '+esc(b.status)+'</span></div>';if(!o.upcoming.length)h+='<p class="mut">No upcoming bookings.</p>';}
+else h='<p class="mut">No data.</p>';
+document.getElementById('root').innerHTML=h;
+</script></body></html>`;
+var TOOLS = [
+  {
+    name: "get_today_enquiry_summary",
+    title: "Today's enquiry summary",
+    description: "Use this when the owner asks how many website enquiries came in today, or wants the latest enquiry messages. Returns today's count, the all-time lead pipeline by stage, and short snippets of the 3 newest enquiry messages. Read-only; contains no contact details.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    _meta: { "openai/outputTemplate": WIDGET_URI, "ui.resourceUri": WIDGET_URI, "openai/widgetDescription": "Cards with today's enquiry count, pipeline stages and the newest enquiry snippets.", "openai/toolInvocation/invoking": "Checking today's enquiries", "openai/toolInvocation/invoked": "Enquiry summary ready" },
+    run: toolTodayEnquiries
+  },
+  {
+    name: "get_review_stats",
+    title: "Review stats",
+    description: "Use this when the owner asks about Google review performance: how many review links were sent, how many customers clicked, inbox size, and review/reminder event counts. Read-only; counts only.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    _meta: { "openai/outputTemplate": WIDGET_URI, "ui.resourceUri": WIDGET_URI, "openai/widgetDescription": "Cards with review links sent, clicked and contacts in inbox.", "openai/toolInvocation/invoking": "Pulling review stats", "openai/toolInvocation/invoked": "Review stats ready" },
+    run: toolReviewStats
+  },
+  {
+    name: "get_radar_feed",
+    title: "Demand radar feed",
+    description: "Use this when the owner asks what is happening in their industry or area: the latest South African demand signals and news the radar collected for their business. Read-only.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    _meta: { "openai/outputTemplate": WIDGET_URI, "ui.resourceUri": WIDGET_URI, "openai/widgetDescription": "List of the newest demand radar signals with source and date.", "openai/toolInvocation/invoking": "Scanning the demand radar", "openai/toolInvocation/invoked": "Radar feed ready" },
+    run: toolRadarFeed
+  },
+  {
+    name: "get_upcoming_bookings",
+    title: "Upcoming bookings",
+    description: "Use this when the owner asks about today's or this week's bookings: service, time, status and customer first name for the next bookings, with requested vs confirmed counts. Read-only.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    _meta: { "openai/outputTemplate": WIDGET_URI, "ui.resourceUri": WIDGET_URI, "openai/widgetDescription": "List of upcoming bookings with service, time and status.", "openai/toolInvocation/invoking": "Checking the diary", "openai/toolInvocation/invoked": "Bookings ready" },
+    run: toolUpcomingBookings
+  }
+];
+function rpcResult(id, result) {
+  return json({ jsonrpc: "2.0", id, result });
+}
+function rpcError(id, code, message) {
+  return json({ jsonrpc: "2.0", id: id ?? null, error: { code, message } });
+}
+function mcpUnauthorized(base) {
+  return new Response(JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32001, message: "OAuth required" } }), {
+    status: 401,
+    headers: {
+      "content-type": "application/json",
+      "www-authenticate": `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`
+    }
+  });
+}
+async function handleMcp(req, env, url, poolFn) {
+  const base = url.origin;
+  if (req.method === "GET") return json({ error: "SSE not supported; POST JSON-RPC here" }, 405);
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders() });
+  let msg;
+  try {
+    msg = await req.json();
+  } catch {
+    return rpcError(null, -32700, "Parse error");
+  }
+  if (Array.isArray(msg)) return rpcError(null, -32600, "Batches not supported");
+  const id = msg.id;
+  if (id === void 0 || id === null) {
+    if (msg.method === "notifications/initialized" || msg.method === "notifications/cancelled") return new Response(null, { status: 202 });
+  }
+  switch (msg.method) {
+    case "initialize":
+      return rpcResult(id, {
+        protocolVersion: msg.params?.protocolVersion || "2025-06-18",
+        capabilities: { tools: {}, resources: {} },
+        serverInfo: { name: "revup", title: "RevUp", version: "1.0.0" },
+        instructions: "RevUp read-only tools for the connected business workspace: today's enquiries, review stats, demand radar, upcoming bookings. All tools are read-only and POPIA-safe (counts and short snippets only, no contact details)."
+      });
+    case "ping":
+      return rpcResult(id, {});
+    case "tools/list":
+      return rpcResult(id, { tools: TOOLS.map(({ run, ...t }) => t) });
+    case "resources/list":
+      return rpcResult(id, { resources: [{ uri: WIDGET_URI, name: "RevUp overview", mimeType: "text/html+skybridge", description: "Visual summary for RevUp read-only tools." }] });
+    case "resources/read":
+      if (msg.params?.uri !== WIDGET_URI) return rpcError(id, -32602, "Unknown resource");
+      return rpcResult(id, { contents: [{ uri: WIDGET_URI, mimeType: "text/html+skybridge", text: WIDGET_HTML }] });
+    case "tools/call": {
+      const ws = await workspaceForToken(req, env, poolFn);
+      if (!ws) return mcpUnauthorized(base);
+      const tool = TOOLS.find((t) => t.name === msg.params?.name);
+      if (!tool) return rpcError(id, -32602, "Unknown tool");
+      const db = poolFn(env);
+      try {
+        const { data, text } = await tool.run(db, ws.workspace_id);
+        return rpcResult(id, {
+          content: [{ type: "text", text }],
+          structuredContent: { ...data, workspace: ws.workspace_name, business: ws.org_name }
+        });
+      } catch (e) {
+        return rpcResult(id, { content: [{ type: "text", text: `RevUp could not load that right now: ${String(e).slice(0, 160)}` }], isError: true });
+      } finally {
+        await db.end().catch(() => {
+        });
+      }
+    }
+    default:
+      return rpcError(id, -32601, "Method not found");
+  }
+}
+function corsHeaders() {
+  return { "access-control-allow-origin": "*", "access-control-allow-methods": "GET,POST,OPTIONS", "access-control-allow-headers": "authorization,content-type,mcp-protocol-version,mcp-session-id" };
+}
+function privacyPage() {
+  return layout("Privacy policy", `
+<div class="card"><h2>Privacy policy - RevUp</h2>
+<p class="mut">Last updated 8 November 2026 \xB7 NahaLabs, South Africa</p>
+<p>RevUp is a business tool from NahaLabs that helps South African businesses answer enquiries, collect Google reviews, follow up leads and manage bookings. This policy explains what we collect and why, in line with the Protection of Personal Information Act (POPIA).</p>
+<h3>What we collect</h3>
+<ul>
+<li>Account details you give us: name, email, business name.</li>
+<li>Customer information your customers send you through RevUp: enquiry messages, WhatsApp conversations, booking details.</li>
+<li>Usage and technical data needed to run the service.</li>
+</ul>
+<h3>How we use it</h3>
+<ul>
+<li>To provide the features you switched on: replying to enquiries, requesting reviews, reminders, bookings and posts.</li>
+<li>We never sell personal information and never use your customer data to advertise.</li>
+</ul>
+<h3>ChatGPT app connection</h3>
+<p>If you connect RevUp to ChatGPT, the connection is read-only. It shares counts and short message snippets only - never customer phone numbers, email addresses or full records. You can disconnect at any time from ChatGPT's app settings, which stops all further sharing immediately.</p>
+<h3>Your rights</h3>
+<p>You may ask to see, correct or delete your information at any time. Customers of a business using RevUp can ask that business directly, or contact us and we will route the request.</p>
+<h3>Contact</h3>
+<p>Information officer: Thabiso Naha \xB7 <a href="mailto:hello@nahalabs.co.za">hello@nahalabs.co.za</a> \xB7 South Africa. Complaints may also be lodged with the Information Regulator (South Africa).</p>
+</div>`);
+}
+async function handleChatAppRoute(req, env, url, poolFn) {
+  const path = url.pathname;
+  const base = url.origin;
+  if (path === "/.well-known/oauth-protected-resource") {
+    const r = json({ ...protectedResourceMetadata(base) });
+    for (const [k, v] of Object.entries(corsHeaders())) r.headers.set(k, v);
+    return r;
+  }
+  if (path === "/.well-known/oauth-authorization-server") {
+    const r = json(authMetadata(base));
+    for (const [k, v] of Object.entries(corsHeaders())) r.headers.set(k, v);
+    return r;
+  }
+  if (path === "/oauth/register" && req.method === "POST") return handleRegisterReal(req, env, poolFn);
+  if (path === "/oauth/authorize" && (req.method === "GET" || req.method === "POST")) return handleAuthorize(req, env, url, poolFn);
+  if (path === "/oauth/token" && req.method === "POST") return handleToken(req, env, poolFn);
+  if (path === "/mcp" || path === "/mcp/") return handleMcp(req, env, url, poolFn);
+  if (path === "/privacy") return html(privacyPage());
+  return null;
+}
+
 // src/index.ts
 init_freeai();
 
@@ -3357,7 +3889,7 @@ async function producePiece(env, db, ws, pieceId, business, idea) {
     [draft.caption, JSON.stringify(draft.hashtags), (review.pass ? "Checked: " : "Checked, needs your eye: ") + review.note, review.pass ? "ready" : "returned", pieceId, ws]
   );
 }
-var esc2 = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+var esc3 = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 var PAGE_CSS = `<style>
 /* Apple-style: borderless soft cards, generous space, one accent, quiet type */
 .tchips{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 16px}
@@ -3388,23 +3920,23 @@ function firstLine(caption) {
   return t.length > 150 ? t.slice(0, 150).trimEnd() + "\u2026" : t;
 }
 function teamPageBody(ideas, pieces, msg = "") {
-  const chips = LIVE_AGENTS.map((a) => `<span class="tchip"><span class="tav">${esc2(a.name[0])}</span>${esc2(a.name)}</span>`).join("");
+  const chips = LIVE_AGENTS.map((a) => `<span class="tchip"><span class="tav">${esc3(a.name[0])}</span>${esc3(a.name)}</span>`).join("");
   const ideaRows = ideas.slice(0, 3).map((i) => `
-<details class="tidea"><summary><span class="tidea-t">${esc2(i.title)}</span><span class="tchev">&#9656;</span></summary>
-<div class="tidea-b"><p>${esc2(i.angle)}</p><p class="mut">${esc2(i.rationale)}</p>
+<details class="tidea"><summary><span class="tidea-t">${esc3(i.title)}</span><span class="tchev">&#9656;</span></summary>
+<div class="tidea-b"><p>${esc3(i.angle)}</p><p class="mut">${esc3(i.rationale)}</p>
 <form class="inline" method="post" action="/team/idea/${i.id}/write"><button>Write this up</button></form>
 <form class="inline" method="post" action="/team/idea/${i.id}/park"><button class="link">Park</button></form></div></details>`).join("");
   const pieceRows = pieces.map((p) => {
     const tags = Array.isArray(p.hashtags) ? p.hashtags.join(" ") : "";
     const cls = p.status === "ready" || p.status === "sent_for_approval" ? "ok" : p.status === "returned" ? "warn" : "";
     return `
-<details class="tpiece"><summary><span class="pill ${cls}">${esc2(PIECE_LABEL[p.status] || p.status)}</span><span class="tpiece-t">${esc2(firstLine(p.caption))}</span><span class="tchev">&#9656;</span></summary>
-<div class="tpiece-b"><p style="white-space:pre-wrap">${esc2(p.caption)}</p>${tags ? `<p class="mut">${esc2(tags)}</p>` : ""}
-<p class="mut">${esc2(p.review_note)}</p>
+<details class="tpiece"><summary><span class="pill ${cls}">${esc3(PIECE_LABEL[p.status] || p.status)}</span><span class="tpiece-t">${esc3(firstLine(p.caption))}</span><span class="tchev">&#9656;</span></summary>
+<div class="tpiece-b"><p style="white-space:pre-wrap">${esc3(p.caption)}</p>${tags ? `<p class="mut">${esc3(tags)}</p>` : ""}
+<p class="mut">${esc3(p.review_note)}</p>
 ${p.status === "ready" || p.status === "returned" ? `<form class="inline" method="post" action="/team/piece/${p.id}/send"><button>Send to approvals</button></form>` : ""}</div></details>`;
   }).join("");
   return `${PAGE_CSS}
-${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
 <div class="tchips">${chips}</div>
 <form method="post" action="/team/research"><button>Get fresh ideas</button></form>
 ${ideaRows ? `<p class="tlbl">Fresh ideas</p>${ideaRows}` : ""}
@@ -5732,7 +6264,7 @@ async function sha256hex(s) {
 function md5(input) {
   return import_spark_md5.default.hash(input);
 }
-function esc3(s) {
+function esc2(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
 function navLinks(user) {
@@ -5766,8 +6298,8 @@ function navLinks(user) {
   return h;
 }
 function layout(title, body, user) {
-  const nav = user ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links">${navLinks(user)}${user._cur_ws ? `<a href="/switch" title="Switch business" style="border:1px solid var(--line);border-radius:8px;padding:2px 8px">${esc3(user._cur_ws)}${(user._ws_count || 0) > 1 ? " &#9662;" : ""}</a>` : ""}<form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>` : `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a class="btn btn-ghost" href="/login">Log in</a><a class="btn btn-primary" href="/signup">Get started</a></div></nav>`;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc3(title)} \xB7 RevUp</title><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&display=swap" rel="stylesheet"><style>
+  const nav = user ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links">${navLinks(user)}${user._cur_ws ? `<a href="/switch" title="Switch business" style="border:1px solid var(--line);border-radius:8px;padding:2px 8px">${esc2(user._cur_ws)}${(user._ws_count || 0) > 1 ? " &#9662;" : ""}</a>` : ""}<form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>` : `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a class="btn btn-ghost" href="/login">Log in</a><a class="btn btn-primary" href="/signup">Get started</a></div></nav>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc2(title)} \xB7 RevUp</title><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&display=swap" rel="stylesheet"><style>
 :root{--brand:#F97316;--brand-dark:#EA580C;--brand-soft:#FFF7ED;--ink:#1C1917;--ink2:#57534E;--ink3:#A8A29E;--line:#E7E5E4;--bg:#FAFAF9}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:Manrope,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6}
@@ -5810,7 +6342,7 @@ form.inline{display:inline}
 .stat{font-size:28px;font-weight:500;margin:2px 0;font-variant-numeric:tabular-nums}
 .stat-t{font-size:20px;font-weight:500;margin:2px 0}
 label{font-size:13px;font-weight:500;color:var(--ink2)}
-</style></head><body><div class="wrap">${nav}<h1>${esc3(title)}</h1>${body}</div></body></html>`;
+</style></head><body><div class="wrap">${nav}<h1>${esc2(title)}</h1>${body}</div></body></html>`;
 }
 function html(body, status = 200) {
   return new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8" } });
@@ -5818,7 +6350,7 @@ function html(body, status = 200) {
 function json(o, status = 200) {
   return new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
 }
-function redirect(to) {
+function redirect2(to) {
   return new Response(null, { status: 303, headers: { location: to } });
 }
 async function getUser(req, db) {
@@ -5989,15 +6521,15 @@ The visitor's own contact detail above is NOT the business's - never quote it ba
   return r.value;
 }
 var enquiryForm = (biz, err = "") => layout(`Enquire - ${biz}`, `
-<div class="card"><h2>Send ${esc3(biz)} an enquiry</h2>
-${err ? `<p class="bad">${esc3(err)}</p>` : ""}
+<div class="card"><h2>Send ${esc2(biz)} an enquiry</h2>
+${err ? `<p class="bad">${esc2(err)}</p>` : ""}
 <form method="post">
 <label>Your name<input name="name" required maxlength="200"></label>
 <label>WhatsApp number or email<input name="contact" required maxlength="200"></label>
 <label>How can they help?<textarea name="message" rows="4" required maxlength="2000"></textarea></label>
 <button>Send enquiry</button></form></div>`);
 var signupPage = (err = "") => layout("Create your RevUp account", `
-${err ? `<p class="bad">${esc3(err)}</p>` : ""}
+${err ? `<p class="bad">${esc2(err)}</p>` : ""}
 <div class="card"><form method="post" action="/signup">
 <label>Your name<input name="name" required maxlength="150"></label>
 <label>Email<input name="email" type="email" required maxlength="254"></label>
@@ -6007,7 +6539,7 @@ ${err ? `<p class="bad">${esc3(err)}</p>` : ""}
 <p class="mut">One monthly price from day one - no setup fee. Choose your plan during setup and activate it with your first payment.</p>
 </form></div>`);
 var loginPage = (err = "") => layout("Log in to RevUp", `
-${err ? `<p class="bad">${esc3(err)}</p>` : ""}
+${err ? `<p class="bad">${esc2(err)}</p>` : ""}
 <div class="card"><form method="post" action="/login">
 <label>Email<input name="email" type="email" required></label>
 <label>Password<input name="password" type="password" required></label>
@@ -6024,13 +6556,13 @@ async function dashboardPage(db, user, mem, msg = "") {
     db.query(`SELECT count(*) c FROM composer_post WHERE workspace_id=$1`, [mem.workspace_id])
   ]);
   return layout("Dashboard", `
-${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
-<p class="mut">${esc3(mem.org_name)}${mem.workspace_name && mem.workspace_name !== mem.org_name ? ` \xB7 ${esc3(mem.workspace_name)}` : ""} \xB7 <span class="pill">${esc3(mem.plan)}</span> <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc3(statusLabel(mem.subscription_status))}</span></p>
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
+<p class="mut">${esc2(mem.org_name)}${mem.workspace_name && mem.workspace_name !== mem.org_name ? ` \xB7 ${esc2(mem.workspace_name)}` : ""} \xB7 <span class="pill">${esc2(mem.plan)}</span> <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc2(statusLabel(mem.subscription_status))}</span></p>
 <div class="grid">
 <div class="card"><h2>Posts</h2><p class="stat">${posts.rows[0].c}</p><p class="mut">total in this workspace</p></div>
 <div class="card"><h2>Awaiting approval</h2><p class="stat">${pending.rows[0].c}</p><p class="mut"><a href="/approvals">review now \u2192</a></p></div>
 <div class="card"><h2>Review links</h2><p class="stat">${links.rows[0].c}</p><p class="mut">${clicks.rows[0].c} clicked \xB7 <a href="/reviews">manage \u2192</a></p></div>
-<div class="card"><h2>Subscription</h2><p class="stat-t">${esc3(mem.plan)}</p><p class="mut"><a href="/billing">billing \u2192</a></p></div>
+<div class="card"><h2>Subscription</h2><p class="stat-t">${esc2(mem.plan)}</p><p class="mut"><a href="/billing">billing \u2192</a></p></div>
 </div>`, user);
 }
 var GOALS = [
@@ -6058,14 +6590,14 @@ async function onboardingPage(db, user, mem, msg = "") {
   const rec = recommendPlan(savedGoals);
   const cur = mem.plan || rec;
   return layout("Onboarding", `
-${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <div class="card"><form method="post" action="/onboarding">
 <h2 style="margin-top:0">Your business</h2>
-<label>Business name<input name="business_name" value="${esc3(b.business_name || mem.org_name)}" required></label>
+<label>Business name<input name="business_name" value="${esc2(b.business_name || mem.org_name)}" required></label>
 <label>Industry<select name="industry">${INDUSTRIES.map(([v, l]) => `<option value="${v}"${(ws.industry || b.industry || "general") === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>
-<label>Website<input name="website_url" value="${esc3(ws.website_url || "")}" placeholder="https://\u2026"></label>
-<label>Google review link<input name="google_review_url" value="${esc3(b.google_review_url || "")}" placeholder="https://g.page/r/\u2026"></label>
-<label>Timezone<input name="timezone" value="${esc3(ws.timezone || "Africa/Johannesburg")}"></label>
+<label>Website<input name="website_url" value="${esc2(ws.website_url || "")}" placeholder="https://\u2026"></label>
+<label>Google review link<input name="google_review_url" value="${esc2(b.google_review_url || "")}" placeholder="https://g.page/r/\u2026"></label>
+<label>Timezone<input name="timezone" value="${esc2(ws.timezone || "Africa/Johannesburg")}"></label>
 <h2>What do you want RevUp to do for you?</h2>
 ${GOALS.map(([v, l]) => `<label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" name="goal_${v}"${savedGoals.includes(v) ? " checked" : ""} style="width:auto"> ${l}</label>`).join("")}
 <h2>Choose your plan</h2>
@@ -6105,13 +6637,13 @@ async function waitlistPage(db, user, mem, msg = "") {
   );
   const badge = { waiting: "<b>waiting</b>", offered: '<span class="pill warn">offered</span>', accepted: '<span class="ok">accepted</span>', cancelled: '<span class="mut">cancelled</span>', expired: '<span class="mut">expired</span>' };
   const rows = r.rows.map((w) => `<tr>
-<td><b>${esc3(w.contact_name || w.wa_id)}</b><br><span class="mut">party of ${w.party_size}${w.wanted_time ? " \xB7 " + esc3(w.wanted_time) : ""}</span></td>
-<td>${badge[w.status] || esc3(w.status)}${w.status === "offered" ? `<br><span class="mut">${w.offer_minutes} min to answer</span>` : ""}</td>
+<td><b>${esc2(w.contact_name || w.wa_id)}</b><br><span class="mut">party of ${w.party_size}${w.wanted_time ? " \xB7 " + esc2(w.wanted_time) : ""}</span></td>
+<td>${badge[w.status] || esc2(w.status)}${w.status === "offered" ? `<br><span class="mut">${w.offer_minutes} min to answer</span>` : ""}</td>
 <td>${w.status === "waiting" ? `<form class="inline" method="post" action="/waitlist/${w.id}/offer"><button>Offer a table</button></form>` : ""}
 ${w.status === "offered" ? `<form class="inline" method="post" action="/waitlist/${w.id}/accept"><button>They accepted</button></form>` : ""}
 ${["waiting", "offered"].includes(w.status) ? `<form class="inline" method="post" action="/waitlist/${w.id}/cancel"><button class="link">Remove</button></form>` : ""}</td></tr>`).join("");
   return layout("Waitlist", `
-${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">Add a waiting party</h2>
 <form method="post" action="/waitlist">
 <label>Name<input name="name" maxlength="120"></label>
@@ -6133,14 +6665,14 @@ async function loyaltyPage(db, user, mem, msg = "") {
      JOIN receptionist_contact c ON c.id=v.contact_id WHERE v.workspace_id=$1 ORDER BY v.created_at DESC LIMIT 30`,
     [mem.workspace_id]
   );
-  const aRows = accounts.rows.map((a) => `<tr><td><b>${esc3(a.contact_name || a.wa_id)}</b></td><td>${a.balance} pts</td><td class="mut">${a.lifetime_points} lifetime</td>
+  const aRows = accounts.rows.map((a) => `<tr><td><b>${esc2(a.contact_name || a.wa_id)}</b></td><td>${a.balance} pts</td><td class="mut">${a.lifetime_points} lifetime</td>
 <td>${a.balance >= s.points_for_voucher ? `<form class="inline" method="post" action="/loyalty/vouchers/new"><input type="hidden" name="contact_id" value="${a.contact_id}"><button>Issue R${s.voucher_value_rand} voucher</button></form>` : `<span class="mut">${s.points_for_voucher - a.balance} to go</span>`}</td></tr>`).join("");
-  const vRows = vouchers.rows.map((v) => `<tr><td><b>${esc3(v.code)}</b></td><td>${esc3(v.contact_name)}</td><td>R${v.amount_rand}</td>
-<td>${v.status === "active" ? '<span class="ok">active</span>' : esc3(v.status)}</td>
+  const vRows = vouchers.rows.map((v) => `<tr><td><b>${esc2(v.code)}</b></td><td>${esc2(v.contact_name)}</td><td>R${v.amount_rand}</td>
+<td>${v.status === "active" ? '<span class="ok">active</span>' : esc2(v.status)}</td>
 <td class="mut">to ${new Date(v.expires_at).toLocaleDateString("en-ZA")}</td>
 <td>${v.status === "active" ? `<form class="inline" method="post" action="/loyalty/vouchers/${v.id}/redeem"><button class="link">Redeem</button></form>` : ""}</td></tr>`).join("");
   return layout("Loyalty", `
-${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">Rules</h2>
 <form method="post" action="/loyalty/settings">
 <label>Programme <select name="enabled"><option value="on" ${s.enabled ? "selected" : ""}>on</option><option value="off" ${!s.enabled ? "selected" : ""}>off</option></select></label>
@@ -6159,9 +6691,9 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
 async function supportPage(db, user, mem) {
   const r = await db.query(`SELECT * FROM receptionist_supportmessage WHERE workspace_id=$1 ORDER BY created_at LIMIT 100`, [mem.workspace_id]);
   const rows = r.rows.map((m) => {
-    const src = Array.isArray(m.sources) && m.sources.length ? `<br><span class="mut">Grounded in: ${m.sources.map((x) => esc3(x)).join(" \xB7 ")}</span>` : "";
+    const src = Array.isArray(m.sources) && m.sources.length ? `<br><span class="mut">Grounded in: ${m.sources.map((x) => esc2(x)).join(" \xB7 ")}</span>` : "";
     const conf = m.role === "assistant" ? `<br><span class="mut">Confidence ${m.confidence}%${m.escalated ? " \xB7 flagged for a human" : ""}</span>` : "";
-    return m.role === "owner" ? `<div class="card" style="background:var(--brand-soft)"><b>You:</b> ${esc3(m.text)}</div>` : `<div class="card"><b>Support:</b> ${esc3(m.text)}${src}${conf}</div>`;
+    return m.role === "owner" ? `<div class="card" style="background:var(--brand-soft)"><b>You:</b> ${esc2(m.text)}</div>` : `<div class="card"><b>Support:</b> ${esc2(m.text)}${src}${conf}</div>`;
   }).join("");
   return layout("Support", `
 <div class="card"><h2 style="margin-top:0">Ask about your numbers</h2>
@@ -6192,11 +6724,11 @@ async function competitorsPage(db, user, mem, msg = "") {
       [c.id]
     );
     const promos = await db.query(`SELECT * FROM receptionist_competitorpromo WHERE competitor_id=$1 ORDER BY created_at DESC LIMIT 5`, [c.id]);
-    const dishRows = dishes.rows.map((d) => `<tr><td>${esc3(d.name)}</td><td>R${Number(d.price).toFixed(2)}</td>
-<td>${d.own_name ? `${esc3(d.own_name)} (yours R${Number(d.own_price).toFixed(2)})` : '<span class="mut">not mapped</span>'}</td></tr>`).join("");
-    const promoRows = promos.rows.map((p) => `<li>${esc3(p.text)}${p.valid_until ? ` <span class="mut">to ${new Date(p.valid_until).toLocaleDateString("en-ZA")}</span>` : ""}</li>`).join("");
-    const menuOpts = ['<option value="">(map to your menu)</option>', ...menu.rows.map((m) => `<option value="${m.id}">${esc3(m.name)} R${Number(m.price).toFixed(2)}</option>`)].join("");
-    compCards.push(`<div class="card"><h3 style="margin-top:0">${esc3(c.name)} <span class="mut">${esc3(c.area || "")}${c.rating !== null ? ` \xB7 their Google ${c.rating}` : ""}</span></h3>
+    const dishRows = dishes.rows.map((d) => `<tr><td>${esc2(d.name)}</td><td>R${Number(d.price).toFixed(2)}</td>
+<td>${d.own_name ? `${esc2(d.own_name)} (yours R${Number(d.own_price).toFixed(2)})` : '<span class="mut">not mapped</span>'}</td></tr>`).join("");
+    const promoRows = promos.rows.map((p) => `<li>${esc2(p.text)}${p.valid_until ? ` <span class="mut">to ${new Date(p.valid_until).toLocaleDateString("en-ZA")}</span>` : ""}</li>`).join("");
+    const menuOpts = ['<option value="">(map to your menu)</option>', ...menu.rows.map((m) => `<option value="${m.id}">${esc2(m.name)} R${Number(m.price).toFixed(2)}</option>`)].join("");
+    compCards.push(`<div class="card"><h3 style="margin-top:0">${esc2(c.name)} <span class="mut">${esc2(c.area || "")}${c.rating !== null ? ` \xB7 their Google ${c.rating}` : ""}</span></h3>
 ${dishes.rows.length ? `<table><tr><th>Their dish</th><th>Price</th><th>Mapped to</th></tr>${dishRows}</table>` : `<p class="mut">No dishes logged yet.</p>`}
 <form method="post" action="/competitors/${c.id}/dishes" style="margin-top:10px">
 <input name="name" required maxlength="120" placeholder="Their dish" style="width:180px">
@@ -6212,15 +6744,15 @@ ${promos.rows.length ? `<ul>${promoRows}</ul>` : ""}
   const oppRows = opps.rows.map((o) => {
     const ev = Array.isArray(o.evidence) ? o.evidence : [];
     return `<tr>
-<td><b>${esc3(o.title)}</b><br><span class="mut">${kindLabel[o.kind] || esc3(o.kind)}${o.competitor_name ? " \xB7 " + esc3(o.competitor_name) : ""} \xB7 confidence ${o.confidence}%${o.impact_rand !== null ? ` \xB7 about R${Number(o.impact_rand).toLocaleString("en-ZA")}/month` : ""}</span><br>
-${esc3(o.detail)}${ev.length ? `<br><span class="mut">${ev.map((e) => esc3(e)).join("<br>")}</span>` : ""}</td>
+<td><b>${esc2(o.title)}</b><br><span class="mut">${kindLabel[o.kind] || esc2(o.kind)}${o.competitor_name ? " \xB7 " + esc2(o.competitor_name) : ""} \xB7 confidence ${o.confidence}%${o.impact_rand !== null ? ` \xB7 about R${Number(o.impact_rand).toLocaleString("en-ZA")}/month` : ""}</span><br>
+${esc2(o.detail)}${ev.length ? `<br><span class="mut">${ev.map((e) => esc2(e)).join("<br>")}</span>` : ""}</td>
 <td>${o.status === "new" ? "<b>new</b>" : o.status === "acted" ? '<span class="ok">acted on</span>' : '<span class="mut">dismissed</span>'}</td>
 <td>${o.status === "new" ? `<form class="inline" method="post" action="/opportunities/${o.id}/draft"><button>Draft a campaign</button></form>
 <form class="inline" method="post" action="/opportunities/${o.id}/acted"><button class="link">Acted on</button></form>
 <form class="inline" method="post" action="/opportunities/${o.id}/dismissed"><button class="link">Dismiss</button></form>` : o.campaign_id ? `<a href="/campaigns">campaign</a>` : ""}</td></tr>`;
   }).join("");
   return layout("Competitors", `
-${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <h2>Opportunities</h2>
 <div class="card">${opps.rows.length ? `<table><tr><th>Opportunity</th><th>Status</th><th></th></tr>${oppRows}</table>` : `<p class="mut">No opportunities right now. Log competitors, their dishes and their promos below and the board fills itself.</p>`}</div>
 <h2>Competitors</h2>
@@ -6250,8 +6782,8 @@ async function campaignsPage(db, user, mem, msg = "") {
     const fmt = (v) => v ? `${v.sent}/${v.total} sent${Number(v.failed) ? `, ${v.failed} failed` : ""}${Number(v.skipped) ? `, ${v.skipped} skipped` : ""} \xB7 ${v.bookings} bookings \xB7 R${Number(v.revenue).toLocaleString("en-ZA")}` : "";
     const variantB = c.body_b ? `<br><span class="mut">B: ${fmt(st.b)}</span>` : "";
     rows.push(`<tr>
-<td><b>${esc3(c.name)}</b><br><span class="mut">${segLabel[c.segment] || esc3(c.segment)}${c.scheduled_at ? " \xB7 " + new Date(c.scheduled_at).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" }) : ""}</span></td>
-<td>${c.status === "sent" ? '<span class="ok">sent</span>' : c.status === "draft" ? "<b>draft</b>" : c.status === "cancelled" ? '<span class="mut">cancelled</span>' : `<span class="pill warn">${esc3(c.status)}</span>`}</td>
+<td><b>${esc2(c.name)}</b><br><span class="mut">${segLabel[c.segment] || esc2(c.segment)}${c.scheduled_at ? " \xB7 " + new Date(c.scheduled_at).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" }) : ""}</span></td>
+<td>${c.status === "sent" ? '<span class="ok">sent</span>' : c.status === "draft" ? "<b>draft</b>" : c.status === "cancelled" ? '<span class="mut">cancelled</span>' : `<span class="pill warn">${esc2(c.status)}</span>`}</td>
 <td>${fmt(st.a)}${variantB}</td>
 <td>${c.status === "draft" ? `<form class="inline" method="post" action="/campaigns/${c.id}/approve"><input type="datetime-local" name="when" style="width:auto"><button>Approve & send</button></form>` : ""}
 ${["draft", "scheduled"].includes(c.status) ? `<form class="inline" method="post" action="/campaigns/${c.id}/cancel"><button class="link">Cancel</button></form>` : ""}</td></tr>`);
@@ -6260,7 +6792,7 @@ ${["draft", "scheduled"].includes(c.status) ? `<form class="inline" method="post
   const nDormant = (await segmentContacts(db, mem.workspace_id, "dormant")).length;
   const nVip = (await segmentContacts(db, mem.workspace_id, "vip")).length;
   return layout("Campaigns", `
-${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">New campaign</h2>
 <form method="post" action="/campaigns">
 <label>Name<input name="name" required maxlength="120" placeholder="November win-back"></label>
@@ -6284,11 +6816,11 @@ async function quotesPage(db, user, mem, msg = "") {
     [mem.workspace_id]
   );
   const contacts = await db.query(`SELECT id, name, wa_id FROM receptionist_contact WHERE workspace_id=$1 ORDER BY updated_at DESC LIMIT 100`, [mem.workspace_id]);
-  const opts = ['<option value="">(no linked customer)</option>', ...contacts.rows.map((c) => `<option value="${c.id}">${esc3(c.name || c.wa_id)}</option>`)].join("");
+  const opts = ['<option value="">(no linked customer)</option>', ...contacts.rows.map((c) => `<option value="${c.id}">${esc2(c.name || c.wa_id)}</option>`)].join("");
   const rows = r.rows.map((q) => {
     const chase = q.status === "sent" && q.follow_up_on && new Date(q.follow_up_on) <= /* @__PURE__ */ new Date(today + "T00:00:00");
     return `<tr${chase ? ' style="background:#fff7ed"' : ""}>
-<td><b>${esc3(q.customer_name)}</b><br><span class="mut">${esc3(q.title || "Quote")}</span></td>
+<td><b>${esc2(q.customer_name)}</b><br><span class="mut">${esc2(q.title || "Quote")}</span></td>
 <td>R${(q.amount_cents / 100).toLocaleString("en-ZA", { minimumFractionDigits: 2 })}</td>
 <td>${q.status === "sent" ? '<span class="pill warn">sent</span>' : q.status === "won" ? '<span class="ok">won</span>' : q.status === "lost" ? '<span class="mut">lost</span>' : "<b>draft</b>"}
 ${chase ? `<br><span class="bad">chase today</span>` : q.follow_up_on ? `<br><span class="mut">chase ${new Date(q.follow_up_on).toLocaleDateString("en-ZA")}</span>` : ""}</td>
@@ -6297,7 +6829,7 @@ ${["draft", "sent"].includes(q.status) ? `<form class="inline" method="post" act
   }).join("");
   const won = r.rows.filter((q) => q.status === "won").reduce((t, q) => t + q.amount_cents, 0) / 100;
   return layout("Quotes", `
-${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">New quote</h2>
 <form method="post" action="/quotes">
 <label>Customer name<input name="customer_name" required maxlength="200"></label>
@@ -6320,8 +6852,8 @@ async function reviewsPage(db, user, mem, base, msg = "") {
     [mem.workspace_id]
   );
   const rows = links.rows.map((l) => `<tr>
-<td>${esc3(l.contact_name)}</td>
-<td><a href="${base}/r/${esc3(l.short_code)}" target="_blank">/r/${esc3(l.short_code)}</a></td>
+<td>${esc2(l.contact_name)}</td>
+<td><a href="${base}/r/${esc2(l.short_code)}" target="_blank">/r/${esc2(l.short_code)}</a></td>
 <td>${l.clicked_at ? `<span class="ok">clicked ${new Date(l.clicked_at).toLocaleString("en-ZA")}</span>` : `<span class="mut">not yet</span>`}</td>
 <td class="mut">${new Date(l.created_at).toLocaleDateString("en-ZA")}</td></tr>`).join("");
   const contacts = await db.query(
@@ -6335,17 +6867,17 @@ async function reviewsPage(db, user, mem, base, msg = "") {
      WHERE e.workspace_id=$1 ORDER BY e.created_at DESC LIMIT 20`,
     [mem.workspace_id]
   );
-  const contactOpts = contacts.rows.filter((c) => !c.opted_out).map((c) => `<option value="${c.id}">${esc3(c.name || c.wa_id)}</option>`).join("");
+  const contactOpts = contacts.rows.filter((c) => !c.opted_out).map((c) => `<option value="${c.id}">${esc2(c.name || c.wa_id)}</option>`).join("");
   const evRows = events.rows.map((e) => `<tr>
-<td>${esc3(e.contact_name)}</td><td>${esc3(e.step.replace("_", " "))}</td>
-<td>${e.status === "sent" ? `<span class="ok">sent</span>` : e.status === "failed" ? `<span class="bad">failed</span>` : esc3(e.status)}</td>
+<td>${esc2(e.contact_name)}</td><td>${esc2(e.step.replace("_", " "))}</td>
+<td>${e.status === "sent" ? `<span class="ok">sent</span>` : e.status === "failed" ? `<span class="bad">failed</span>` : esc2(e.status)}</td>
 <td class="mut">${new Date(e.scheduled_for).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" })}</td>
-<td class="mut">${e.error ? esc3(e.error) : ""}</td></tr>`).join("");
+<td class="mut">${e.error ? esc2(e.error) : ""}</td></tr>`).join("");
   const issues = contacts.rows.filter((c) => c.review_status === "issue_flagged");
   const statusLabel2 = { new: "new", check_in_sent: "check-in sent", review_requested: "review asked", clicked: "clicked", unsubscribed: "opted out", issue_flagged: "issue" };
   return layout("Reviews", `
-${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
-${b.google_review_url ? `<p>Google review destination: <a href="${esc3(b.google_review_url)}">${esc3(b.google_review_url)}</a></p>` : `<div class="card" style="border-color:var(--brand)"><h2 style="margin-top:0">First: where should reviews go?</h2><p class="mut">Paste your Google review link (from Google Business Profile \u2192 "Ask for reviews"). Every tracked link you create sends customers here.</p><form method="post" action="/reviews/destination"><input name="google_review_url" placeholder="https://g.page/r/\u2026" required><button>Save and continue</button></form></div>`}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
+${b.google_review_url ? `<p>Google review destination: <a href="${esc2(b.google_review_url)}">${esc2(b.google_review_url)}</a></p>` : `<div class="card" style="border-color:var(--brand)"><h2 style="margin-top:0">First: where should reviews go?</h2><p class="mut">Paste your Google review link (from Google Business Profile \u2192 "Ask for reviews"). Every tracked link you create sends customers here.</p><form method="post" action="/reviews/destination"><input name="google_review_url" placeholder="https://g.page/r/\u2026" required><button>Save and continue</button></form></div>`}
 ${b.google_review_url ? `<h2>New review link</h2>
 <div class="card"><form method="post" action="/reviews/links">
 <label>Customer name<input name="name" required maxlength="200"></label>
@@ -6365,26 +6897,26 @@ ${b.review_requests_enabled && contacts.rows.length ? `<form method="post" actio
 </div>
 
 ${issues.length ? `<h2>Needs a personal call</h2>
-<div class="card">${issues.map((c) => `<p><b>${esc3(c.name || c.wa_id)}</b>: ${esc3(c.issue_note || "negative reply")} <form method="post" action="/reviews/resolve" style="display:inline"><input type="hidden" name="contact_id" value="${c.id}"><button class="link">Resolved</button></form></p>`).join("")}</div>` : ""}
+<div class="card">${issues.map((c) => `<p><b>${esc2(c.name || c.wa_id)}</b>: ${esc2(c.issue_note || "negative reply")} <form method="post" action="/reviews/resolve" style="display:inline"><input type="hidden" name="contact_id" value="${c.id}"><button class="link">Resolved</button></form></p>`).join("")}</div>` : ""}
 
 <h2>Pipeline activity</h2>
 <div class="card">${events.rows.length ? `<table><tr><th>Customer</th><th>Step</th><th>Status</th><th>When</th><th>Note</th></tr>${evRows}</table>` : `<p class="mut">Nothing yet. Mark a visit done above to start the flow.</p>`}</div>
 
 <h2>Customers</h2>
-<div class="card">${contacts.rows.length ? `<table><tr><th>Name</th><th>Phone</th><th>Review status</th></tr>${contacts.rows.map((c) => `<tr><td>${esc3(c.name || "-")}</td><td class="mut">${esc3(c.wa_id)}</td><td>${c.opted_out ? '<span class="bad">opted out</span>' : esc3(statusLabel2[c.review_status] || c.review_status || "new")}</td></tr>`).join("")}</table>` : `<p class="mut">No customers yet.</p>`}</div>`, user);
+<div class="card">${contacts.rows.length ? `<table><tr><th>Name</th><th>Phone</th><th>Review status</th></tr>${contacts.rows.map((c) => `<tr><td>${esc2(c.name || "-")}</td><td class="mut">${esc2(c.wa_id)}</td><td>${c.opted_out ? '<span class="bad">opted out</span>' : esc2(statusLabel2[c.review_status] || c.review_status || "new")}</td></tr>`).join("")}</table>` : `<p class="mut">No customers yet.</p>`}</div>`, user);
 }
 function newPostPage(user, mem, pre, msg = "") {
   return layout("New post", `
-${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <div class="card"><form method="post" action="/posts/draft">
-<label>Topic<input name="topic" maxlength="200" value="${esc3(pre.topic || "")}" placeholder="e.g. teeth whitening special this month" required></label>
+<label>Topic<input name="topic" maxlength="200" value="${esc2(pre.topic || "")}" placeholder="e.g. teeth whitening special this month" required></label>
 <button class="btn-secondary">Draft with AI</button>
 </form></div>
-${pre.media ? `<div class="card"><h2 style="margin-top:0">Attached image</h2><img src="/media/${esc3(pre.media)}/raw" style="max-width:280px;border-radius:8px"></div>` : ""}
+${pre.media ? `<div class="card"><h2 style="margin-top:0">Attached image</h2><img src="/media/${esc2(pre.media)}/raw" style="max-width:280px;border-radius:8px"></div>` : ""}
 <div class="card"><form method="post" action="/posts/new">
-${pre.media ? `<input type="hidden" name="media_id" value="${esc3(pre.media)}">` : ""}
-<label>Title<input name="title" maxlength="200" value="${esc3(pre.title || "")}" placeholder="Internal title"></label>
-<label>Caption<textarea name="caption" rows="6" placeholder="What should go out?">${esc3(pre.caption || "")}</textarea></label>
+${pre.media ? `<input type="hidden" name="media_id" value="${esc2(pre.media)}">` : ""}
+<label>Title<input name="title" maxlength="200" value="${esc2(pre.title || "")}" placeholder="Internal title"></label>
+<label>Caption<textarea name="caption" rows="6" placeholder="What should go out?">${esc2(pre.caption || "")}</textarea></label>
 <button>Save draft</button>
 <p class="mut">Creates a draft for every connected channel. Scheduling and publishing run on the current pipeline.</p>
 </form></div>`, user);
@@ -6399,15 +6931,15 @@ async function intakeBoards(db, mem) {
       [mem.workspace_id]
     );
     if (!r.rows.length) return "";
-    const rows = r.rows.map((t) => `<tr><td><b>${esc3(t.contact_name || t.wa_id)}</b></td><td>${cols(t)}</td>
-<td>${t.status === "resolved" ? '<span class="ok">resolved</span>' : esc3(t.status)}</td>
+    const rows = r.rows.map((t) => `<tr><td><b>${esc2(t.contact_name || t.wa_id)}</b></td><td>${cols(t)}</td>
+<td>${t.status === "resolved" ? '<span class="ok">resolved</span>' : esc2(t.status)}</td>
 <td>${t.status !== "resolved" ? `<form class="inline" method="post" action="/inbox/intake/${table}/${t.id}/resolve"><button class="link">Resolve</button></form>` : ""}</td></tr>`).join("");
     return `<h2>${title}</h2><div class="card"><table><tr><th>Customer</th><th>Details</th><th>Status</th><th></th></tr>${rows}</table></div>`;
   };
   let h = "";
-  if (industry === "funeral") h += await board("receptionist_funeralclaim", "Funeral claims", (t) => esc3([t.deceased_name, t.claimant_name && `claimant: ${t.claimant_name}`, t.policy_number && `policy: ${t.policy_number}`].filter(Boolean).join(" \xB7 ")));
-  if (industry === "dental") h += await board("receptionist_dentalappointment", "Appointment requests", (t) => esc3([t.patient_name, t.reason].filter(Boolean).join(" \xB7 ")));
-  if (industry === "trades") h += await board("receptionist_tradedispatch", "Job dispatch", (t) => esc3([t.job_type, t.address].filter(Boolean).join(" \xB7 ")));
+  if (industry === "funeral") h += await board("receptionist_funeralclaim", "Funeral claims", (t) => esc2([t.deceased_name, t.claimant_name && `claimant: ${t.claimant_name}`, t.policy_number && `policy: ${t.policy_number}`].filter(Boolean).join(" \xB7 ")));
+  if (industry === "dental") h += await board("receptionist_dentalappointment", "Appointment requests", (t) => esc2([t.patient_name, t.reason].filter(Boolean).join(" \xB7 ")));
+  if (industry === "trades") h += await board("receptionist_tradedispatch", "Job dispatch", (t) => esc2([t.job_type, t.address].filter(Boolean).join(" \xB7 ")));
   return h;
 }
 async function inboxPage(db, user, mem) {
@@ -6419,8 +6951,8 @@ async function inboxPage(db, user, mem) {
     [mem.workspace_id]
   );
   const rows = r.rows.map((c) => `<tr>
-<td><a href="/inbox/${c.id}">${esc3(c.name || c.wa_id)}</a></td>
-<td class="mut">${esc3((c.last_body || "").slice(0, 80))}</td>
+<td><a href="/inbox/${c.id}">${esc2(c.name || c.wa_id)}</a></td>
+<td class="mut">${esc2((c.last_body || "").slice(0, 80))}</td>
 <td class="mut">${c.last_at ? new Date(c.last_at).toLocaleString("en-ZA") : ""}</td></tr>`).join("");
   return layout("Inbox", `
 <div class="card">${r.rows.length ? `<table><tr><th>Customer</th><th>Latest</th><th>When</th></tr>${rows}</table>` : `<p class="mut">No customer conversations yet. When customers WhatsApp the business, they appear here.</p>`}</div>
@@ -6450,19 +6982,19 @@ async function conversationPage(db, user, mem, contactId, env) {
     const out = m.direction === "outbound";
     return `<div style="display:flex;justify-content:${out ? "flex-end" : "flex-start"};margin:6px 0">
 <div style="max-width:70%;padding:8px 12px;border-radius:12px;${out ? "background:var(--brand);color:#fff" : "background:#fff;border:1px solid var(--line)"}">
-<div class="mut" style="font-size:11px;${out ? "color:#ffe7d6" : ""}">${esc3(who[m.sender_type] || m.sender_type)} \xB7 ${new Date(m.created_at).toLocaleString("en-ZA")}</div>
-<div>${esc3(m.body)}</div></div></div>`;
+<div class="mut" style="font-size:11px;${out ? "color:#ffe7d6" : ""}">${esc2(who[m.sender_type] || m.sender_type)} \xB7 ${new Date(m.created_at).toLocaleString("en-ZA")}</div>
+<div>${esc2(m.body)}</div></div></div>`;
   }).join("");
-  return html(layout(`Chat: ${esc3(c.rows[0].name || c.rows[0].wa_id)}`, `
+  return html(layout(`Chat: ${esc2(c.rows[0].name || c.rows[0].wa_id)}`, `
 <p><a href="/inbox">&larr; all conversations</a></p>
 <div class="card"><h2 style="margin-top:0">Customer card</h2>
 <form method="post" action="/inbox/${c.rows[0].id}/card">
-<label>Name<input name="name" maxlength="120" value="${esc3(c.rows[0].name || "")}"></label>
+<label>Name<input name="name" maxlength="120" value="${esc2(c.rows[0].name || "")}"></label>
 <label>Birthday<input name="birthday" type="date" value="${c.rows[0].birthday ? new Date(c.rows[0].birthday).toISOString().slice(0, 10) : ""}"></label>
-<label>Dietary / preferences<input name="dietary_notes" maxlength="200" value="${esc3(c.rows[0].dietary_notes || "")}"></label>
-<label>Lifetime spend (R)<input name="total_spend" inputmode="decimal" value="${esc3(String(c.rows[0].total_spend ?? "0"))}" style="width:140px"></label>
+<label>Dietary / preferences<input name="dietary_notes" maxlength="200" value="${esc2(c.rows[0].dietary_notes || "")}"></label>
+<label>Lifetime spend (R)<input name="total_spend" inputmode="decimal" value="${esc2(String(c.rows[0].total_spend ?? "0"))}" style="width:140px"></label>
 <label><input type="checkbox" name="is_vip" ${c.rows[0].is_vip ? "checked" : ""} style="width:auto"> VIP</label>
-<label>Private notes<textarea name="notes">${esc3(c.rows[0].notes || "")}</textarea></label>
+<label>Private notes<textarea name="notes">${esc2(c.rows[0].notes || "")}</textarea></label>
 <button>Save card</button></form>
 <p class="mut">${c.rows[0].visit_count || 0} visits${c.rows[0].opted_out ? " \xB7 opted out of automated messages" : ""}</p></div>
 <div class="card">${bubbles || `<p class="mut">No messages.</p>`}</div>`, user));
@@ -6476,19 +7008,19 @@ async function radarPage(db, user, mem, msg) {
     [mem.workspace_id]
   );
   const items = feed.rows.map((r) => `<tr>
-<td><a href="${esc3(r.link)}" target="_blank" rel="noopener">${esc3(r.title)}</a><br><span class="mut">${esc3((r.summary || "").slice(0, 120))}</span></td>
-<td class="mut">${esc3(r.source || "")}</td>
+<td><a href="${esc2(r.link)}" target="_blank" rel="noopener">${esc2(r.title)}</a><br><span class="mut">${esc2((r.summary || "").slice(0, 120))}</span></td>
+<td class="mut">${esc2(r.source || "")}</td>
 <td class="mut">${r.published_at ? new Date(r.published_at).toLocaleDateString("en-ZA") : ""}</td></tr>`).join("");
   return layout("Radar", `
-${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <div class="card"><h2>Your industry</h2>
 <form method="post"><label>Industry<select name="industry">${INDUSTRIES.map(([v, l]) => `<option value="${v}"${ind === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>
 <button>Save</button></form>
 <p class="mut">Tunes your demand radar, reply tone and post ideas.</p></div>
-<div class="card"><h2>Post ideas for ${esc3(industryLabel(ind))}</h2>
-<ul>${(p.post_themes || []).map((t) => `<li>${esc3(t)}</li>`).join("")}</ul>
-${(p.hashtags || []).length ? `<p class="mut">Default hashtags: ${esc3(p.hashtags.join(" "))}</p>` : ""}
-<p class="mut">Reply tone: ${esc3(p.responder_tone || "warm and professional")}</p></div>
+<div class="card"><h2>Post ideas for ${esc2(industryLabel(ind))}</h2>
+<ul>${(p.post_themes || []).map((t) => `<li>${esc2(t)}</li>`).join("")}</ul>
+${(p.hashtags || []).length ? `<p class="mut">Default hashtags: ${esc2(p.hashtags.join(" "))}</p>` : ""}
+<p class="mut">Reply tone: ${esc2(p.responder_tone || "warm and professional")}</p></div>
 <div class="card"><h2>Demand signals</h2>
 ${feed.rows.length ? `<table><tr><th>Signal</th><th>Source</th><th>When</th></tr>${items}</table>` : `<p class="mut">No signals yet for this business. The radar collects South African news and demand signals for your industry; they appear here as they arrive.</p>`}</div>`, user);
 }
@@ -6502,7 +7034,7 @@ async function analyticsPage(db, user, mem) {
     db.query(`SELECT count(*) c FROM receptionist_message WHERE workspace_id=$1 AND direction='outbound'`, [mem.workspace_id]),
     db.query(`SELECT date_trunc('day', clicked_at) d, count(*) c FROM receptionist_reviewlink WHERE workspace_id=$1 AND clicked_at IS NOT NULL GROUP BY 1 ORDER BY 1 DESC LIMIT 14`, [mem.workspace_id])
   ]);
-  const statusRows = byStatus.rows.map((r) => `<tr><td>${esc3(r.status)}</td><td>${r.c}</td></tr>`).join("");
+  const statusRows = byStatus.rows.map((r) => `<tr><td>${esc2(r.status)}</td><td>${r.c}</td></tr>`).join("");
   const clickRows = clicksByDay.rows.map((r) => `<tr><td>${new Date(r.d).toLocaleDateString("en-ZA")}</td><td>${r.c}</td></tr>`).join("");
   return layout("Analytics", `
 <div class="grid">
@@ -6529,9 +7061,9 @@ async function postsPage(db, user, mem) {
     const sts = (x.statuses || "").split(", ").filter(Boolean);
     const allDraft = sts.length > 0 && sts.every((st) => st === "draft");
     return `<tr>
-<td><b>${esc3(x.title || "(untitled)")}</b><br><span class="mut">${esc3((x.caption || "").slice(0, 120))}</span></td>
-<td>${sts.map((st) => `<span class="pill ${st === "approved" || st === "published" ? "ok" : ""}">${esc3(st)}</span> `).join("")}</td>
-<td class="mut">${esc3(x.channels || "-")}</td>
+<td><b>${esc2(x.title || "(untitled)")}</b><br><span class="mut">${esc2((x.caption || "").slice(0, 120))}</span></td>
+<td>${sts.map((st) => `<span class="pill ${st === "approved" || st === "published" ? "ok" : ""}">${esc2(st)}</span> `).join("")}</td>
+<td class="mut">${esc2(x.channels || "-")}</td>
 <td class="mut">${x.scheduled_at ? new Date(x.scheduled_at).toLocaleString("en-ZA") : new Date(x.created_at).toLocaleDateString("en-ZA")}</td>
 <td>${allDraft ? `<form class="inline" method="post" action="/posts/${x.id}/submit"><button>Submit for review</button></form>` : ""}</td></tr>`;
   }).join("");
@@ -6553,14 +7085,14 @@ async function approvalsPage(db, user, mem, msg = "") {
     [mem.workspace_id]
   );
   const rows = r.rows.map((x) => `<tr>
-<td><b>${esc3(x.title || "(untitled)")}</b><br><span class="mut">${esc3((x.caption || "").slice(0, 140))}</span></td>
-<td>${esc3(x.platform || x.provider || "")}<br><span class="mut">${esc3(x.account_name || "")}</span></td>
-<td class="mut">${esc3(x.author || "")}</td>
+<td><b>${esc2(x.title || "(untitled)")}</b><br><span class="mut">${esc2((x.caption || "").slice(0, 140))}</span></td>
+<td>${esc2(x.platform || x.provider || "")}<br><span class="mut">${esc2(x.account_name || "")}</span></td>
+<td class="mut">${esc2(x.author || "")}</td>
 <td>${x.scheduled_at ? new Date(x.scheduled_at).toLocaleString("en-ZA") : '<span class="mut">unscheduled</span>'}</td>
 <td><form class="inline" method="post" action="/approvals/${x.pp_id}/approve"><button>Approve</button></form>
 <form class="inline" method="post" action="/approvals/${x.pp_id}/reject" onsubmit="return confirm('Reject this post?')"><button style="background:#f87171">Reject</button></form></td></tr>`).join("");
   return layout("Approvals", `
-${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <div class="card">${r.rows.length ? `<table><tr><th>Post</th><th>Channel</th><th>Author</th><th>Scheduled</th><th></th></tr>${rows}</table>` : `<p class="ok">Nothing waiting for review.</p>`}</div>`, user);
 }
 async function billingPage(db, user, mem, base, env) {
@@ -6575,8 +7107,8 @@ async function billingPage(db, user, mem, base, env) {
 ${p.slug === mem.plan ? mem.subscription_status === "active" ? `<p class="pill">current plan</p>` : `<a class="btn btn-primary" href="${pfUrl(env, base, p.slug, mem)}">Activate with PayFast</a>` : `<a class="btn btn-primary" href="${pfUrl(env, base, p.slug, mem)}">Subscribe with PayFast</a>`}
 </div>`).join("");
   return layout("Billing", `
-<p>Plan <b>${esc3(mem.plan)}</b> \xB7 status <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc3(statusLabel(mem.subscription_status))}</span>
-${mem.payment_reference ? ` \xB7 ref <span class="mut">${esc3(mem.payment_reference)}</span>` : ""}</p>
+<p>Plan <b>${esc2(mem.plan)}</b> \xB7 status <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc2(statusLabel(mem.subscription_status))}</span>
+${mem.payment_reference ? ` \xB7 ref <span class="mut">${esc2(mem.payment_reference)}</span>` : ""}</p>
 ${mem.activated_at ? `<p class="mut">Active since ${new Date(mem.activated_at).toLocaleDateString("en-ZA")}</p>` : ""}
 <div class="grid">${cards}</div>
 <p class="mut">Payments are processed by PayFast in rand. You can cancel any time.</p>`, user);
@@ -6628,7 +7160,7 @@ async function handle(req, env) {
     } catch {
       await db2.end().catch(() => {
       });
-      return redirect("/");
+      return redirect2("/");
     }
   }
   if ((path === "/webhooks/zernio" || path === "/webhooks/zernio/") && req.method === "POST") {
@@ -6673,6 +7205,8 @@ async function handle(req, env) {
       return json({ ok: false, error: String(e).slice(0, 200) }, 500);
     }
   }
+  const chatAppRes = await handleChatAppRoute(req, env, url, pool);
+  if (chatAppRes) return chatAppRes;
   if (path === "/health") {
     try {
       const db2 = pool(env);
@@ -6870,7 +7404,7 @@ async function handle(req, env) {
             [crypto.randomUUID(), message, "fd-" + leadId, cid, fm[1]]
           );
         }
-        return html(layout("Thank you", `<div class="card"><h2>Thank you, ${esc3(name)}</h2><p>${esc3(biz.name)} has your enquiry and will get back to you shortly.</p></div>`));
+        return html(layout("Thank you", `<div class="card"><h2>Thank you, ${esc2(name)}</h2><p>${esc2(biz.name)} has your enquiry and will get back to you shortly.</p></div>`));
       }
       return html(enquiryForm(biz.name));
     } finally {
@@ -6897,7 +7431,7 @@ async function handle(req, env) {
     if (path === "/static/qrcode.js") return new Response(QRCODE_LIB, { headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "public, max-age=86400" } });
     const user = await getUser(req, db);
     if (!user && path === "/") return html(landingPage());
-    if (!user) return redirect("/login");
+    if (!user) return redirect2("/login");
     const mem = await membership(db, user.id, req);
     if (!mem) return html(layout("No workspace", `<p>Your account has no workspace yet. <a href="/signup">Create one</a>.</p>`, user), 403);
     user._cur_ws = mem.workspace_name;
@@ -6949,7 +7483,7 @@ async function handle(req, env) {
         `INSERT INTO cf_page(id,workspace_id,title,slug,angle,industry,status,brand,sections,source_url) VALUES($1,$2,$3,$4,$5,$6,'draft',$7,$8,$9)`,
         [pageId, mem.workspace_id, title, slug, brief.angle, brief.industry, JSON.stringify(brand), JSON.stringify(gen.sections), sourceUrl]
       );
-      return redirect("/pages/" + pageId);
+      return redirect2("/pages/" + pageId);
     }
     const pam = /^\/pages\/([0-9a-f-]{36})(?:\/(publish|unpublish|delete))?$/.exec(path);
     if (pam) {
@@ -6960,15 +7494,15 @@ async function handle(req, env) {
       const action = pam[2] || "";
       if (req.method === "POST" && action === "publish") {
         await db.query(`UPDATE cf_page SET status='published', published_at=COALESCE(published_at,now()), updated_at=now() WHERE id=$1`, [page.id]);
-        return redirect("/pages/" + page.id);
+        return redirect2("/pages/" + page.id);
       }
       if (req.method === "POST" && action === "unpublish") {
         await db.query(`UPDATE cf_page SET status='draft', updated_at=now() WHERE id=$1`, [page.id]);
-        return redirect("/pages/" + page.id);
+        return redirect2("/pages/" + page.id);
       }
       if (req.method === "POST" && action === "delete") {
         await db.query(`UPDATE cf_page SET status='archived', updated_at=now() WHERE id=$1`, [page.id]);
-        return redirect("/pages?msg=Page deleted");
+        return redirect2("/pages?msg=Page deleted");
       }
       if (req.method === "POST") {
         const f = await formData(req);
@@ -6985,7 +7519,7 @@ async function handle(req, env) {
           color: (f.color || "#F97316").slice(0, 7)
         });
         await db.query(`UPDATE cf_page SET sections=$1, brand=$2, updated_at=now() WHERE id=$3`, [JSON.stringify(sections), JSON.stringify(brand), page.id]);
-        return redirect("/pages/" + page.id);
+        return redirect2("/pages/" + page.id);
       }
       return html(layout(page.title, await pageDetailBody(db, page, base, url.searchParams.get("msg") || ""), user));
     }
@@ -6993,12 +7527,12 @@ async function handle(req, env) {
       if (req.method === "POST") {
         const f = await formData(req);
         const ok = (mem.workspaces || []).some((w) => w.id === f.workspace_id);
-        if (!ok) return redirect("/switch");
+        if (!ok) return redirect2("/switch");
         return new Response(null, { status: 303, headers: { location: "/", "set-cookie": `cf_ws=${f.workspace_id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${180 * 86400}` } });
       }
       const rows = (mem.workspaces || []).map((w) => `<tr>
-<td><b>${esc3(w.name)}</b><br><span class="mut">${esc3(w.org)}</span></td>
-<td>${esc3(w.plan)} \xB7 ${esc3(statusLabel(w.status))}</td>
+<td><b>${esc2(w.name)}</b><br><span class="mut">${esc2(w.org)}</span></td>
+<td>${esc2(w.plan)} \xB7 ${esc2(statusLabel(w.status))}</td>
 <td>${w.id === mem.workspace_id ? `<span class="ok">Current</span>` : `<form method="post"><input type="hidden" name="workspace_id" value="${w.id}"><button>Switch</button></form>`}</td></tr>`).join("");
       return html(layout("Switch business", `
 <div class="card"><table><tr><th>Business</th><th>Plan</th><th></th></tr>${rows}</table>
@@ -7016,12 +7550,12 @@ async function handle(req, env) {
             [crypto.randomUUID(), mem.workspace_id, slug, name, target || "https://revup.nahalabs.co.za/?ref=" + slug]
           );
         }
-        return redirect("/prospects");
+        return redirect2("/prospects");
       }
       const links = await db.query(`SELECT * FROM cf_prospect_link WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 100`, [mem.workspace_id]);
       const rows = links.rows.map((l) => `<tr>
-<td><b>${esc3(l.prospect_name)}</b></td>
-<td><a href="${base}/t/${esc3(l.slug)}" target="_blank" rel="noopener">/t/${esc3(l.slug)}</a></td>
+<td><b>${esc2(l.prospect_name)}</b></td>
+<td><a href="${base}/t/${esc2(l.slug)}" target="_blank" rel="noopener">/t/${esc2(l.slug)}</a></td>
 <td>${l.click_count > 0 ? `<span class="ok">${l.click_count} click${l.click_count === 1 ? "" : "s"}</span> <span class="mut">${l.last_clicked_at ? "last " + new Date(l.last_clicked_at).toLocaleString("en-ZA") : ""}</span>` : `<span class="mut">no clicks yet</span>`}</td></tr>`).join("");
       return html(layout("Prospect links", `
 <div class="card"><h2 style="margin-top:0">New tracked link</h2>
@@ -7039,42 +7573,42 @@ async function handle(req, env) {
         const f = await formData(req);
         if (f.action === "save_key") {
           const key = (f.api_key || "").trim();
-          if (!key) return redirect("/receptionist/connect?err=" + encodeURIComponent("Paste the key from your messaging account first."));
+          if (!key) return redirect2("/receptionist/connect?err=" + encodeURIComponent("Paste the key from your messaging account first."));
           const v = await validateTenantKey(key, mem.workspace_id, mem.workspace_name);
-          if (v.error) return redirect("/receptionist/connect?err=" + encodeURIComponent(v.error));
+          if (v.error) return redirect2("/receptionist/connect?err=" + encodeURIComponent(v.error));
           await db.query(
             `INSERT INTO receptionist_tenantmessagingconnection(id,workspace_id,api_key,profile_id,status,last_error,created_at,updated_at)
                VALUES($1,$2,$3,$4,'key_valid','',now(),now())
                ON CONFLICT (workspace_id) DO UPDATE SET api_key=EXCLUDED.api_key, profile_id=EXCLUDED.profile_id, status='key_valid', last_error='', updated_at=now()`,
             [crypto.randomUUID(), mem.workspace_id, key, v.profileId]
           );
-          return redirect("/receptionist/connect?msg=" + encodeURIComponent("Key saved. Now connect your WhatsApp."));
+          return redirect2("/receptionist/connect?msg=" + encodeURIComponent("Key saved. Now connect your WhatsApp."));
         }
         if (f.action === "start") {
-          if (!conn || !conn.profile_id) return redirect("/receptionist/connect?err=" + encodeURIComponent("Save your API key first."));
+          if (!conn || !conn.profile_id) return redirect2("/receptionist/connect?err=" + encodeURIComponent("Save your API key first."));
           const cb = `${base}/receptionist/connect/callback?ws=${mem.workspace_id}&u=${user.id}&p=${conn.profile_id}`;
           let authUrl = "";
           try {
             authUrl = await tenantConnectUrl(conn.api_key, conn.profile_id, cb);
           } catch (e) {
-            return redirect("/receptionist/connect?err=" + encodeURIComponent(e.status === 402 ? "Your messaging plan covers 2 numbers. Add a card in your messaging account to connect more." : "Could not start the connection. Please try again."));
+            return redirect2("/receptionist/connect?err=" + encodeURIComponent(e.status === 402 ? "Your messaging plan covers 2 numbers. Add a card in your messaging account to connect more." : "Could not start the connection. Please try again."));
           }
           await db.query(`UPDATE receptionist_tenantmessagingconnection SET status='connecting', updated_at=now() WHERE workspace_id=$1`, [mem.workspace_id]);
           return new Response(null, { status: 303, headers: { location: authUrl } });
         }
-        return redirect("/receptionist/connect");
+        return redirect2("/receptionist/connect");
       }
       const step = conn ? conn.status === "connected" ? 3 : 2 : 1;
       return html(layout("Connect WhatsApp", `
-${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}${err ? `<p class="bad">${esc3(err)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}${err ? `<p class="bad">${esc2(err)}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">Connect your own WhatsApp number</h2>
 <p class="mut">Three one-time steps. Your customers then chat with YOUR number, and the receptionist answers them with your business details.</p>
 <h3>1. Create your messaging account ${step > 1 ? '<span class="ok">&#10003;</span>' : ""}</h3>
 <p class="mut">Open a free account with our messaging partner, then copy your API key from its settings.</p>
 <h3>2. Paste your API key ${step > 2 ? '<span class="ok">&#10003;</span>' : ""}</h3>
-${conn && conn.status === "connected" ? `<p class="ok">Number connected: +${esc3(conn.phone_number || "")}</p>` : `<form method="post"><input type="hidden" name="action" value="save_key"><label>API key<input name="api_key" required maxlength="200" autocomplete="off"></label><button>Save key</button></form>`}
+${conn && conn.status === "connected" ? `<p class="ok">Number connected: +${esc2(conn.phone_number || "")}</p>` : `<form method="post"><input type="hidden" name="action" value="save_key"><label>API key<input name="api_key" required maxlength="200" autocomplete="off"></label><button>Save key</button></form>`}
 ${conn && conn.status !== "connected" ? `<h3>3. Connect WhatsApp</h3><form method="post"><input type="hidden" name="action" value="start"><button class="btn btn-primary">Connect WhatsApp</button><p class="mut">You will scan a QR code with the WhatsApp app on your phone - the same way WhatsApp Web pairs.</p></form>` : ""}
-${conn && conn.status === "connected" && conn.last_error ? `<p class="warn">${esc3(conn.last_error)}</p>` : ""}
+${conn && conn.status === "connected" && conn.last_error ? `<p class="warn">${esc2(conn.last_error)}</p>` : ""}
 </div>`, user));
     }
     if (path === "/receptionist/connect/callback") {
@@ -7082,21 +7616,21 @@ ${conn && conn.status === "connected" && conn.last_error ? `<p class="warn">${es
       if (ws !== mem.workspace_id || u !== user.id) return html(layout("Connect WhatsApp", `<p class="bad">The connection did not match this business. Please try again.</p>`), 400);
       const connQ = await db.query(`SELECT * FROM receptionist_tenantmessagingconnection WHERE workspace_id=$1 LIMIT 1`, [ws]);
       const conn = connQ.rows[0];
-      if (!conn || p !== conn.profile_id) return redirect("/receptionist/connect?err=" + encodeURIComponent("Your connection session expired. Please try again."));
+      if (!conn || p !== conn.profile_id) return redirect2("/receptionist/connect?err=" + encodeURIComponent("Your connection session expired. Please try again."));
       const error = url.searchParams.get("error") || "";
       if (error) {
         await db.query(`UPDATE receptionist_tenantmessagingconnection SET status='key_valid', updated_at=now() WHERE workspace_id=$1`, [ws]);
         const msg = /already/i.test(error) ? "This number is connected somewhere else. Disconnect it there first, then try again." : "The connection was cancelled before it finished. Nothing was connected.";
-        return redirect("/receptionist/connect?err=" + encodeURIComponent(msg));
+        return redirect2("/receptionist/connect?err=" + encodeURIComponent(msg));
       }
       const connected = url.searchParams.get("connected") || "", profileId = url.searchParams.get("profileId") || "", accountId = url.searchParams.get("accountId") || "";
       if (connected !== "whatsapp" || !profileId || !accountId || profileId !== conn.profile_id)
-        return redirect("/receptionist/connect?err=" + encodeURIComponent("The connection came back incomplete. Please try again."));
+        return redirect2("/receptionist/connect?err=" + encodeURIComponent("The connection came back incomplete. Please try again."));
       try {
         const r = await tenantConfirmAndBind(db, conn, profileId, accountId, `${base}/webhooks/zernio`);
-        return redirect("/receptionist/connect?" + (r.ok ? "msg" : "err") + "=" + encodeURIComponent(r.msg));
+        return redirect2("/receptionist/connect?" + (r.ok ? "msg" : "err") + "=" + encodeURIComponent(r.msg));
       } catch (e) {
-        return redirect("/receptionist/connect?err=" + encodeURIComponent("Your number connected, but we could not confirm it yet. Refresh in a moment."));
+        return redirect2("/receptionist/connect?err=" + encodeURIComponent("Your number connected, but we could not confirm it yet. Refresh in a moment."));
       }
     }
     if (path === "/receptionist") {
@@ -7109,15 +7643,15 @@ ${conn && conn.status === "connected" && conn.last_error ? `<p class="warn">${es
       const allowance = { starter: 500, growth: 1e3, "business-pro": 2500 };
       const pl = planRow.rows[0]?.plan || "starter";
       const lim = allowance[pl] ?? 500;
-      const chan = ch.rows.map((c) => `<tr><td>+${esc3(c.phone_number || "")}</td><td>${esc3(c.label || "")}</td><td>${c.is_sandbox ? "demo line" : "live"}</td></tr>`).join("");
+      const chan = ch.rows.map((c) => `<tr><td>+${esc2(c.phone_number || "")}</td><td>${esc2(c.label || "")}</td><td>${c.is_sandbox ? "demo line" : "live"}</td></tr>`).join("");
       const p = prof.rows[0];
       return html(layout("Receptionist", `
 ${!ch.rows.length ? `<div class="card" style="border-color:var(--brand)"><h2 style="margin-top:0">Connect your WhatsApp</h2><p>Your receptionist answers customers on your own business WhatsApp number. <a href="/receptionist/connect">Connect it yourself in three steps</a> - it takes a few minutes.</p></div>` : ""}
 <div class="card"><h2 style="margin-top:0">Your receptionist</h2>
-<p>${p ? `${esc3(p.business_name || mem.org_name)} \xB7 ${esc3(p.industry || "general")} \xB7 ${p.is_active ? '<span class="ok">answering</span>' : '<span class="warn">paused</span>'}` : "Tell RevUp about your business in onboarding so the receptionist knows what to say."}</p>
+<p>${p ? `${esc2(p.business_name || mem.org_name)} \xB7 ${esc2(p.industry || "general")} \xB7 ${p.is_active ? '<span class="ok">answering</span>' : '<span class="warn">paused</span>'}` : "Tell RevUp about your business in onboarding so the receptionist knows what to say."}</p>
 <p class="mut">Business details, hours and prices come from <a href="/onboarding">onboarding</a>. Conversations live in your <a href="/inbox">inbox</a> - step in any time.</p></div>
 <div class="grid">
-<div class="card"><h2>AI replies this month</h2><p class="stat">${usedM.rows[0].c} / ${lim}</p><p class="mut">on the ${esc3(pl)} plan</p></div>
+<div class="card"><h2>AI replies this month</h2><p class="stat">${usedM.rows[0].c} / ${lim}</p><p class="mut">on the ${esc2(pl)} plan</p></div>
 <div class="card"><h2>Connected numbers</h2>${ch.rows.length ? `<table><tr><th>Number</th><th>Label</th><th>Type</th></tr>${chan}</table>` : `<p class="mut">None yet.</p>`}</div>
 </div>`, user));
     }
@@ -7131,18 +7665,18 @@ ${!ch.rows.length ? `<div class="card" style="border-color:var(--brand)"><h2 sty
       if (req.method === "POST") {
         const f = await formData(req);
         const phone = String(f.owner_phone || "").replace(/\D/g, "").slice(0, 32);
-        if (!phone || phone.length < 9) return redirect("/assistant?msg=" + encodeURIComponent("Enter your WhatsApp number with country code, e.g. 27612345678."));
+        if (!phone || phone.length < 9) return redirect2("/assistant?msg=" + encodeURIComponent("Enter your WhatsApp number with country code, e.g. 27612345678."));
         await upsertSettings2(db, mem.workspace_id, phone, f.enabled === "on");
-        return redirect("/assistant?msg=" + encodeURIComponent("Assistant settings saved."));
+        return redirect2("/assistant?msg=" + encodeURIComponent("Assistant settings saved."));
       }
       const [settings, counts] = await Promise.all([getSettings2(db, mem.workspace_id), assistantCounts2(db, mem.workspace_id)]);
       const msg = url.searchParams.get("msg") || "";
       return html(layout("Assistant", `
-${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">Your own assistant</h2>
 <p>Message your business WhatsApp number from your own phone. The assistant answers only you: it remembers your rules and decisions, keeps a task log, parks anything that sends, spends or deploys until you reply <b>Go + Sure</b>, and holds a write-only vault for your secrets.</p>
 <form method="post" action="/assistant">
-<label>Your WhatsApp number (country code, e.g. 27612345678)<input name="owner_phone" value="${esc3(settings?.owner_phone || "")}" maxlength="32" placeholder="27\u2026"></label>
+<label>Your WhatsApp number (country code, e.g. 27612345678)<input name="owner_phone" value="${esc2(settings?.owner_phone || "")}" maxlength="32" placeholder="27\u2026"></label>
 <label><input type="checkbox" name="enabled" ${!settings || settings.enabled ? "checked" : ""}> Assistant answering</label>
 <button class="btn btn-primary" type="submit">Save</button></form></div>
 <div class="grid">
@@ -7181,7 +7715,7 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
           client.release();
         }
         const planName = PLAN_CARDS.find((p) => p.slug === plan)?.name || plan;
-        return redirect("/?msg=" + encodeURIComponent(`${planName} chosen - activate it with your first monthly payment on the billing page. Add your Google review link under Reviews whenever you are ready.`));
+        return redirect2("/?msg=" + encodeURIComponent(`${planName} chosen - activate it with your first monthly payment on the billing page. Add your Google review link under Reviews whenever you are ready.`));
       }
       return html(await onboardingPage(db, user, mem));
     }
@@ -7191,7 +7725,7 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
         const ind = (f.industry || "general").trim();
         await db.query(`UPDATE workspaces_workspace SET industry=$1, updated_at=now() WHERE id=$2`, [ind, mem.workspace_id]);
         await db.query(`UPDATE receptionist_businessprofile SET industry=$1, updated_at=now() WHERE workspace_id=$2`, [ind, mem.workspace_id]);
-        return redirect("/radar?msg=" + encodeURIComponent("Industry saved - radar, reply tone and post ideas updated."));
+        return redirect2("/radar?msg=" + encodeURIComponent("Industry saved - radar, reply tone and post ideas updated."));
       }
       return html(await radarPage(db, user, mem, url.searchParams.get("msg") || ""));
     }
@@ -7211,12 +7745,12 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
       for (const d of drafts.rows) (byLead[d.lead_id] = byLead[d.lead_id] || []).push(d);
       const rows = leads.rows.map((l) => {
         const ds = (byLead[l.id] || []).map((d) => `<div style="border:1px solid var(--line);border-radius:8px;padding:8px;margin:6px 0">
-<div class="mut" style="font-size:11px">Follow-up draft \xB7 ${esc3(d.status)} \xB7 ${new Date(d.created_at).toLocaleString("en-ZA")}</div>
-<div style="white-space:pre-wrap">${esc3(d.body)}</div>
+<div class="mut" style="font-size:11px">Follow-up draft \xB7 ${esc2(d.status)} \xB7 ${new Date(d.created_at).toLocaleString("en-ZA")}</div>
+<div style="white-space:pre-wrap">${esc2(d.body)}</div>
 ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/approve" style="margin-top:6px"><button>Mark approved</button></form>` : ""}</div>`).join("");
         return `<tr>
-<td><b>${esc3(l.name)}</b><br><span class="mut">${esc3(l.contact)}</span></td>
-<td>${esc3(l.message.slice(0, 100))}${ds}</td>
+<td><b>${esc2(l.name)}</b><br><span class="mut">${esc2(l.contact)}</span></td>
+<td>${esc2(l.message.slice(0, 100))}${ds}</td>
 <td><form method="post" action="/frontdesk/${l.id}/save" style="display:flex;gap:6px;align-items:center">
 <select name="stage">${STAGES.map((s) => `<option${l.stage === s ? " selected" : ""}>${s}</option>`).join("")}</select>
 <input name="value" type="number" min="0" step="0.01" value="${(l.value_cents / 100).toFixed(2)}" style="width:90px" title="Value (ZAR)">
@@ -7231,18 +7765,18 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
     }
     const fsave = /^\/frontdesk\/([0-9a-f-]{36})\/save$/.exec(path);
     if (fsave && req.method === "POST") {
-      if (mem.plan !== "business-pro") return redirect("/frontdesk");
+      if (mem.plan !== "business-pro") return redirect2("/frontdesk");
       const f = await formData(req);
       const stage = ["new", "contacted", "quoted", "won", "lost"].includes(f.stage) ? f.stage : "new";
       const cents = Math.max(0, Math.round(parseFloat(f.value || "0") * 100) || 0);
       await db.query(`UPDATE frontdesk_lead SET stage=$1, value_cents=$2, updated_at=now() WHERE id=$3 AND workspace_id=$4`, [stage, cents, fsave[1], mem.workspace_id]);
-      return redirect("/frontdesk");
+      return redirect2("/frontdesk");
     }
     const fdraft = /^\/frontdesk\/([0-9a-f-]{36})\/draft$/.exec(path);
     if (fdraft && req.method === "POST") {
-      if (mem.plan !== "business-pro") return redirect("/frontdesk");
+      if (mem.plan !== "business-pro") return redirect2("/frontdesk");
       const lr = await db.query(`SELECT * FROM frontdesk_lead WHERE id=$1 AND workspace_id=$2`, [fdraft[1], mem.workspace_id]);
-      if (!lr.rows[0]) return redirect("/frontdesk");
+      if (!lr.rows[0]) return redirect2("/frontdesk");
       try {
         const body = await groqFollowup(env, db, mem.workspace_id, mem.workspace_name, lr.rows[0]);
         await db.query(
@@ -7250,43 +7784,43 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
           [crypto.randomUUID(), fdraft[1], mem.workspace_id, body]
         );
       } catch (e) {
-        return redirect("/frontdesk?err=" + encodeURIComponent("Drafting failed - try again."));
+        return redirect2("/frontdesk?err=" + encodeURIComponent("Drafting failed - try again."));
       }
-      return redirect("/frontdesk");
+      return redirect2("/frontdesk");
     }
     const fappr = /^\/frontdesk\/draft\/([0-9a-f-]{36})\/approve$/.exec(path);
     if (fappr && req.method === "POST") {
-      if (mem.plan !== "business-pro") return redirect("/frontdesk");
+      if (mem.plan !== "business-pro") return redirect2("/frontdesk");
       await db.query(`UPDATE frontdesk_followup_draft SET status='approved', updated_at=now() WHERE id=$1 AND workspace_id=$2`, [fappr[1], mem.workspace_id]);
-      return redirect("/frontdesk");
+      return redirect2("/frontdesk");
     }
     if (path === "/media") {
       if (req.method === "POST") {
         const fd = await req.formData();
         const file = fd.get("file");
-        if (!(file instanceof File) || !file.size) return redirect("/media?err=" + encodeURIComponent("Choose an image first."));
-        if (!(file.type || "").startsWith("image/")) return redirect("/media?err=" + encodeURIComponent("Images only (jpg, png, webp, gif)."));
-        if (file.size > 2 * 1024 * 1024) return redirect("/media?err=" + encodeURIComponent("That image is over 2 MB - please use a smaller one."));
+        if (!(file instanceof File) || !file.size) return redirect2("/media?err=" + encodeURIComponent("Choose an image first."));
+        if (!(file.type || "").startsWith("image/")) return redirect2("/media?err=" + encodeURIComponent("Images only (jpg, png, webp, gif)."));
+        if (file.size > 2 * 1024 * 1024) return redirect2("/media?err=" + encodeURIComponent("That image is over 2 MB - please use a smaller one."));
         const caps = await db.query(`SELECT count(*) c, COALESCE(sum(size),0) b FROM cf_media WHERE workspace_id=$1`, [mem.workspace_id]);
-        if (Number(caps.rows[0].c) >= 25) return redirect("/media?err=" + encodeURIComponent("Library full (25 images on the free library) - delete one first."));
-        if (Number(caps.rows[0].b) + file.size > 50 * 1024 * 1024) return redirect("/media?err=" + encodeURIComponent("Library storage limit reached (50 MB) - delete something first."));
+        if (Number(caps.rows[0].c) >= 25) return redirect2("/media?err=" + encodeURIComponent("Library full (25 images on the free library) - delete one first."));
+        if (Number(caps.rows[0].b) + file.size > 50 * 1024 * 1024) return redirect2("/media?err=" + encodeURIComponent("Library storage limit reached (50 MB) - delete something first."));
         const buf = Buffer.from(await file.arrayBuffer());
         await db.query(
           `INSERT INTO cf_media(id,workspace_id,filename,mime,size,data) VALUES($1,$2,$3,$4,$5,$6)`,
           [crypto.randomUUID(), mem.workspace_id, (file.name || "image").slice(0, 200), file.type, file.size, buf]
         );
-        return redirect("/media?msg=" + encodeURIComponent("Image added to your library."));
+        return redirect2("/media?msg=" + encodeURIComponent("Image added to your library."));
       }
       const items = await db.query(`SELECT id, filename, mime, size, created_at FROM cf_media WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 60`, [mem.workspace_id]);
       const msg = url.searchParams.get("msg") || "", err = url.searchParams.get("err") || "";
       const cards = items.rows.map((m) => `<div class="card" style="padding:10px">
-<img src="/media/${m.id}/raw" alt="${esc3(m.filename)}" style="width:100%;height:140px;object-fit:cover;border-radius:8px;background:var(--line)">
-<p style="margin:6px 0 2px"><b>${esc3(m.filename)}</b><br><span class="mut">${Math.round(m.size / 1024)} KB \xB7 ${new Date(m.created_at).toLocaleDateString("en-ZA")}</span></p>
+<img src="/media/${m.id}/raw" alt="${esc2(m.filename)}" style="width:100%;height:140px;object-fit:cover;border-radius:8px;background:var(--line)">
+<p style="margin:6px 0 2px"><b>${esc2(m.filename)}</b><br><span class="mut">${Math.round(m.size / 1024)} KB \xB7 ${new Date(m.created_at).toLocaleDateString("en-ZA")}</span></p>
 <p style="margin:4px 0"><a href="/posts/new?media=${m.id}">Use in a post</a></p>
 <form method="post" action="/media/${m.id}/delete" onsubmit="return confirm('Delete this image?')"><button class="link" style="color:var(--bad)">Delete</button></form>
 </div>`).join("");
       return html(layout("Media library", `
-${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}${err ? `<p class="bad">${esc3(err)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}${err ? `<p class="bad">${esc2(err)}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">Add an image</h2>
 <form method="post" enctype="multipart/form-data"><input type="file" name="file" accept="image/*" required><button>Upload</button></form>
 <p class="mut">Images up to 2 MB. Your library holds 25 images (50 MB) - plenty for a month of posts.</p></div>
@@ -7301,16 +7835,16 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}${err ? `<p class="bad">${esc3(err
     const mdel = /^\/media\/([0-9a-f-]{36})\/delete$/.exec(path);
     if (mdel && req.method === "POST") {
       await db.query(`DELETE FROM cf_media WHERE id=$1 AND workspace_id=$2`, [mdel[1], mem.workspace_id]);
-      return redirect("/media?msg=" + encodeURIComponent("Image deleted."));
+      return redirect2("/media?msg=" + encodeURIComponent("Image deleted."));
     }
     if (path === "/posts") {
       const msg = url.searchParams.get("msg") || "";
-      return html((msg ? `<p class="ok">${esc3(msg)}</p>` : "") + await postsPage(db, user, mem));
+      return html((msg ? `<p class="ok">${esc2(msg)}</p>` : "") + await postsPage(db, user, mem));
     }
     if (path === "/posts/new") {
       if (req.method === "POST") {
         const f = await formData(req);
-        if (!(f.title || "").trim() && !(f.caption || "").trim()) return redirect("/posts/new");
+        if (!(f.title || "").trim() && !(f.caption || "").trim()) return redirect2("/posts/new");
         const postId = crypto.randomUUID();
         const client = await db.connect();
         try {
@@ -7332,7 +7866,7 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}${err ? `<p class="bad">${esc3(err
             );
           }
           await client.query("COMMIT");
-          return redirect("/posts?msg=" + encodeURIComponent("Draft created."));
+          return redirect2("/posts?msg=" + encodeURIComponent("Draft created."));
         } catch (e) {
           await client.query("ROLLBACK");
           throw e;
@@ -7373,9 +7907,9 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}${err ? `<p class="bad">${esc3(err
             [crypto.randomUUID(), mem.workspace_id, i.title, i.angle, i.rationale]
           );
         }
-        return redirect("/team?msg=" + encodeURIComponent("Your Researcher brought " + ideas.length + " fresh ideas."));
+        return redirect2("/team?msg=" + encodeURIComponent("Your Researcher brought " + ideas.length + " fresh ideas."));
       } catch (e) {
-        return redirect("/team?msg=" + encodeURIComponent("Research failed (" + String(e?.message || e) + ") - try again shortly."));
+        return redirect2("/team?msg=" + encodeURIComponent("Research failed (" + String(e?.message || e) + ") - try again shortly."));
       }
     }
     const ideaWrite = /^\/team\/idea\/([0-9a-f-]{36})\/write$/.exec(path);
@@ -7383,7 +7917,7 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}${err ? `<p class="bad">${esc3(err
       await ensureSocialTeamSchema(db);
       const ir = await db.query(`SELECT id, title, angle, rationale, status FROM socialteam_idea WHERE id=$1 AND workspace_id=$2`, [ideaWrite[1], mem.workspace_id]);
       const idea = ir.rows[0];
-      if (!idea || idea.status !== "fresh") return redirect("/team");
+      if (!idea || idea.status !== "fresh") return redirect2("/team");
       try {
         const bp = await db.query(`SELECT business_name FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [mem.workspace_id]);
         const business = bp.rows[0]?.business_name || mem.org_name || "local business";
@@ -7391,21 +7925,21 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}${err ? `<p class="bad">${esc3(err
         await db.query(`INSERT INTO socialteam_piece(id, workspace_id, idea_id) VALUES($1,$2,$3)`, [pieceId, mem.workspace_id, idea.id]);
         await producePiece(env, db, mem.workspace_id, pieceId, business, idea);
         await db.query(`UPDATE socialteam_idea SET status='used', updated_at=now() WHERE id=$1`, [idea.id]);
-        return redirect("/team?msg=" + encodeURIComponent("Written and checked - ready for your eye below."));
+        return redirect2("/team?msg=" + encodeURIComponent("Written and checked - ready for your eye below."));
       } catch (e) {
-        return redirect("/team?msg=" + encodeURIComponent("Writing failed (" + String(e?.message || e) + ") - try again shortly."));
+        return redirect2("/team?msg=" + encodeURIComponent("Writing failed (" + String(e?.message || e) + ") - try again shortly."));
       }
     }
     const ideaPark = /^\/team\/idea\/([0-9a-f-]{36})\/park$/.exec(path);
     if (ideaPark && req.method === "POST") {
       await db.query(`UPDATE socialteam_idea SET status='parked', updated_at=now() WHERE id=$1 AND workspace_id=$2`, [ideaPark[1], mem.workspace_id]);
-      return redirect("/team");
+      return redirect2("/team");
     }
     const pieceSend = /^\/team\/piece\/([0-9a-f-]{36})\/send$/.exec(path);
     if (pieceSend && req.method === "POST") {
       const pr = await db.query(`SELECT id, caption, hashtags, status FROM socialteam_piece WHERE id=$1 AND workspace_id=$2`, [pieceSend[1], mem.workspace_id]);
       const piece = pr.rows[0];
-      if (!piece || piece.status !== "ready" && piece.status !== "returned") return redirect("/team");
+      if (!piece || piece.status !== "ready" && piece.status !== "returned") return redirect2("/team");
       const tags = Array.isArray(piece.hashtags) ? piece.hashtags.join(" ") : "";
       const caption = piece.caption + (tags ? "\n\n" + tags : "");
       const client = await db.connect();
@@ -7437,7 +7971,7 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}${err ? `<p class="bad">${esc3(err
         );
         await client.query(`UPDATE socialteam_piece SET status='sent_for_approval', updated_at=now() WHERE id=$1`, [piece.id]);
         await client.query("COMMIT");
-        return redirect(moved ? "/approvals" : "/team?msg=" + encodeURIComponent("Saved as a post draft - connect a social account to send it for approval."));
+        return redirect2(moved ? "/approvals" : "/team?msg=" + encodeURIComponent("Saved as a post draft - connect a social account to send it for approval."));
       } catch (e) {
         await client.query("ROLLBACK");
         throw e;
@@ -7450,19 +7984,19 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}${err ? `<p class="bad">${esc3(err
     if (cardPost && req.method === "POST") {
       const f = await formData(req);
       const spend = Number(String(f.total_spend || "0").replace(",", "."));
-      if (isNaN(spend) || spend < 0 || spend > 1e8) return redirect("/inbox/" + cardPost[1]);
+      if (isNaN(spend) || spend < 0 || spend > 1e8) return redirect2("/inbox/" + cardPost[1]);
       const bday = /^\d{4}-\d{2}-\d{2}$/.test(f.birthday || "") ? f.birthday : null;
       await db.query(
         `UPDATE receptionist_contact SET name=$1, birthday=$2, dietary_notes=$3, notes=$4, total_spend=$5, is_vip=$6, updated_at=now()
            WHERE id=$7 AND workspace_id=$8`,
         [String(f.name || "").trim().slice(0, 120), bday, String(f.dietary_notes || "").trim().slice(0, 200), String(f.notes || "").trim(), spend, f.is_vip === "on", cardPost[1], mem.workspace_id]
       );
-      return redirect("/inbox/" + cardPost[1]);
+      return redirect2("/inbox/" + cardPost[1]);
     }
     const ires = /^\/inbox\/intake\/(receptionist_funeralclaim|receptionist_dentalappointment|receptionist_tradedispatch)\/([0-9a-f-]{36})\/resolve$/.exec(path);
     if (ires && req.method === "POST") {
       await db.query(`UPDATE ${ires[1]} SET status='resolved' WHERE id=$1 AND workspace_id=$2`, [ires[2], mem.workspace_id]);
-      return redirect("/inbox");
+      return redirect2("/inbox");
     }
     const cm = /^\/inbox\/([0-9a-f-]{36})$/.exec(path);
     if (cm) return conversationPage(db, user, mem, cm[1], env);
@@ -7490,7 +8024,7 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}${err ? `<p class="bad">${esc3(err
           );
         }
         await client.query("COMMIT");
-        return redirect(moved ? "/approvals" : "/posts?msg=" + encodeURIComponent("Nothing to submit (no draft channels)."));
+        return redirect2(moved ? "/approvals" : "/posts?msg=" + encodeURIComponent("Nothing to submit (no draft channels)."));
       } catch (e) {
         await client.query("ROLLBACK");
         throw e;
@@ -7507,14 +8041,14 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}${err ? `<p class="bad">${esc3(err
       );
       const msg = url.searchParams.get("msg") || "";
       const rows = bk.rows.map((b) => `<tr>
-<td><b>${esc3(b.contact_name || b.wa_id)}</b><br><span class="mut">${esc3(b.service || "booking")}</span></td>
-<td class="mut">${b.status === "confirmed" && b.scheduled_start ? new Date(b.scheduled_start).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" }) : esc3(b.preferred_time || "to confirm")}</td>
+<td><b>${esc2(b.contact_name || b.wa_id)}</b><br><span class="mut">${esc2(b.service || "booking")}</span></td>
+<td class="mut">${b.status === "confirmed" && b.scheduled_start ? new Date(b.scheduled_start).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" }) : esc2(b.preferred_time || "to confirm")}</td>
 <td>${b.status === "confirmed" ? '<span class="ok">confirmed</span>' : b.status === "done" ? "done" : b.status === "cancelled" ? '<span class="mut">cancelled</span>' : "<b>requested</b>"}</td>
 <td>${b.status === "requested" ? `<form class="inline" method="post" action="/bookings/${b.id}/confirm"><input type="datetime-local" name="when" required style="width:auto"><button>Confirm</button></form>` : ""}
 ${b.status === "confirmed" ? `<form class="inline" method="post" action="/bookings/${b.id}/done"><button>Mark done</button></form>` : ""}
 ${["requested", "confirmed"].includes(b.status) ? `<form class="inline" method="post" action="/bookings/${b.id}/cancel"><button class="link">Cancel</button></form>` : ""}</td></tr>`).join("");
       return html(layout("Bookings", `
-${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
+${msg ? `<p class="ok">${esc2(msg)}</p>` : ""}
 <p class="mut">Booking requests land here from your WhatsApp receptionist. Confirm a time, and when the job is finished mark it done - that starts the review request flow automatically.</p>
 <div class="card">${bk.rows.length ? `<table><tr><th>Customer</th><th>Time</th><th>Status</th><th></th></tr>${rows}</table>` : `<p class="mut">No bookings yet. When a customer books on WhatsApp, it shows up here.</p>`}</div>`, user));
     }
@@ -7522,13 +8056,13 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
     if (bact && req.method === "POST") {
       const own = await db.query(`SELECT id, contact_id, status FROM receptionist_booking WHERE id=$1 AND workspace_id=$2`, [bact[1], mem.workspace_id]);
       const b = own.rows[0];
-      if (!b) return redirect("/bookings");
+      if (!b) return redirect2("/bookings");
       if (bact[2] === "confirm" && b.status === "requested") {
         const f = await formData(req);
         const when = String(f.when || "").trim();
-        if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(when)) return redirect("/bookings");
+        if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(when)) return redirect2("/bookings");
         await db.query(`UPDATE receptionist_booking SET status='confirmed', scheduled_start=($1 || ':00+02')::timestamptz WHERE id=$2`, [when.slice(0, 16), b.id]);
-        return redirect("/bookings?msg=" + encodeURIComponent("Booking confirmed."));
+        return redirect2("/bookings?msg=" + encodeURIComponent("Booking confirmed."));
       }
       if (bact[2] === "done" && b.status === "confirmed") {
         await db.query(`UPDATE receptionist_booking SET status='done' WHERE id=$1`, [b.id]);
@@ -7540,28 +8074,28 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
         const svc = await db.query(`SELECT service FROM receptionist_booking WHERE id=$1`, [b.id]);
         const remId = await scheduleServiceReminder(db, mem.workspace_id, b.id, b.contact_id, svc.rows[0]?.service || "");
         const extra = remId ? " A service reminder is scheduled too." : "";
-        return redirect("/bookings?msg=" + encodeURIComponent((evId ? "Marked done - the review check-in goes out in 15 minutes." : "Marked done. (This customer opted out of messages.)") + extra + loyaltyNote));
+        return redirect2("/bookings?msg=" + encodeURIComponent((evId ? "Marked done - the review check-in goes out in 15 minutes." : "Marked done. (This customer opted out of messages.)") + extra + loyaltyNote));
       }
       if (bact[2] === "cancel" && ["requested", "confirmed"].includes(b.status)) {
         await db.query(`UPDATE receptionist_booking SET status='cancelled' WHERE id=$1`, [b.id]);
-        return redirect("/bookings?msg=" + encodeURIComponent("Booking cancelled."));
+        return redirect2("/bookings?msg=" + encodeURIComponent("Booking cancelled."));
       }
-      return redirect("/bookings");
+      return redirect2("/bookings");
     }
     if (path === "/waitlist") {
       if (req.method === "POST") {
         const f = await formData(req);
         const wa = String(f.wa_id || "").replace(/\D/g, "");
-        if (!wa) return redirect("/waitlist");
+        if (!wa) return redirect2("/waitlist");
         await waitlistAdd(db, mem.workspace_id, wa, String(f.name || "").trim(), Number(f.party_size) || 2, String(f.wanted_time || "").trim());
-        return redirect("/waitlist?msg=" + encodeURIComponent("Added to the waitlist."));
+        return redirect2("/waitlist?msg=" + encodeURIComponent("Added to the waitlist."));
       }
       return html(await waitlistPage(db, user, mem, url.searchParams.get("msg") || ""));
     }
     const wact = /^\/waitlist\/([0-9a-f-]{36})\/(offer|accept|cancel)$/.exec(path);
     if (wact && req.method === "POST") {
       const okd = await waitlistAction(db, mem.workspace_id, wact[1], wact[2]);
-      return redirect("/waitlist?msg=" + encodeURIComponent(okd ? "Done." : "That change does not apply to this entry."));
+      return redirect2("/waitlist?msg=" + encodeURIComponent(okd ? "Done." : "That change does not apply to this entry."));
     }
     if (path === "/loyalty") return html(await loyaltyPage(db, user, mem, url.searchParams.get("msg") || ""));
     if (path === "/loyalty/settings" && req.method === "POST") {
@@ -7571,44 +8105,44 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
         `UPDATE receptionist_loyaltysettings SET enabled=$1, points_per_visit=$2, welcome_bonus=$3, points_for_voucher=$4, voucher_value_rand=$5, voucher_valid_days=$6 WHERE workspace_id=$7`,
         [f.enabled === "on", Math.max(0, Number(f.points_per_visit) || 0), Math.max(0, Number(f.welcome_bonus) || 0), Math.max(1, Number(f.points_for_voucher) || 100), Math.max(1, Number(f.voucher_value_rand) || 50), Math.max(1, Number(f.voucher_valid_days) || 90), mem.workspace_id]
       );
-      return redirect("/loyalty?msg=" + encodeURIComponent("Rules saved."));
+      return redirect2("/loyalty?msg=" + encodeURIComponent("Rules saved."));
     }
     if (path === "/loyalty/vouchers/new" && req.method === "POST") {
       const f = await formData(req);
       try {
         const v = await issueVoucher(db, mem.workspace_id, String(f.contact_id || ""));
-        return redirect("/loyalty?msg=" + encodeURIComponent(`Voucher ${v.code} issued - R${v.amount_rand}.`));
+        return redirect2("/loyalty?msg=" + encodeURIComponent(`Voucher ${v.code} issued - R${v.amount_rand}.`));
       } catch (e) {
-        return redirect("/loyalty?msg=" + encodeURIComponent(String(e?.message || e)));
+        return redirect2("/loyalty?msg=" + encodeURIComponent(String(e?.message || e)));
       }
     }
     const vred = /^\/loyalty\/vouchers\/([0-9a-f-]{36})\/redeem$/.exec(path);
     if (vred && req.method === "POST") {
       const okd = await redeemVoucher(db, mem.workspace_id, vred[1]);
-      return redirect("/loyalty?msg=" + encodeURIComponent(okd ? "Voucher redeemed." : "That voucher is not usable."));
+      return redirect2("/loyalty?msg=" + encodeURIComponent(okd ? "Voucher redeemed." : "That voucher is not usable."));
     }
     if (path === "/quotes") {
       if (req.method === "POST") {
         const f = await formData(req);
-        if (!String(f.customer_name || "").trim()) return redirect("/quotes");
+        if (!String(f.customer_name || "").trim()) return redirect2("/quotes");
         await quoteCreate(db, mem.workspace_id, String(f.customer_name).trim(), /^[0-9a-f-]{36}$/.test(f.contact_id || "") ? f.contact_id : null, String(f.title || "").trim(), Number(f.amount) || 0, String(f.follow_up_on || ""));
-        return redirect("/quotes?msg=" + encodeURIComponent("Quote saved."));
+        return redirect2("/quotes?msg=" + encodeURIComponent("Quote saved."));
       }
       return html(await quotesPage(db, user, mem, url.searchParams.get("msg") || ""));
     }
     const qact = /^\/quotes\/([0-9a-f-]{36})\/(sent|won|lost)$/.exec(path);
     if (qact && req.method === "POST") {
       const out = await quoteAction(db, env, mem.workspace_id, qact[1], qact[2]);
-      return redirect("/quotes?msg=" + encodeURIComponent(out === "marked sent" ? "Marked sent (WhatsApp too, when the customer is linked and reachable)." : out === "no change" ? "That change does not apply to this quote." : `Quote ${out}.`));
+      return redirect2("/quotes?msg=" + encodeURIComponent(out === "marked sent" ? "Marked sent (WhatsApp too, when the customer is linked and reachable)." : out === "no change" ? "That change does not apply to this quote." : `Quote ${out}.`));
     }
     if (path === "/campaigns") {
       if (req.method === "POST") {
         const f = await formData(req);
         try {
           await campaignCreate(db, mem.workspace_id, String(f.name || ""), String(f.segment || ""), String(f.body_a || ""), String(f.body_b || ""));
-          return redirect("/campaigns?msg=" + encodeURIComponent("Draft saved. Approve it when you are ready to send."));
+          return redirect2("/campaigns?msg=" + encodeURIComponent("Draft saved. Approve it when you are ready to send."));
         } catch (e) {
-          return redirect("/campaigns?msg=" + encodeURIComponent(String(e?.message || e)));
+          return redirect2("/campaigns?msg=" + encodeURIComponent(String(e?.message || e)));
         }
       }
       return html(await campaignsPage(db, user, mem, url.searchParams.get("msg") || ""));
@@ -7618,24 +8152,24 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
       const f = await formData(req);
       try {
         await campaignApprove(db, mem.workspace_id, capp[1], String(f.when || ""));
-        return redirect("/campaigns?msg=" + encodeURIComponent("Approved. The send starts within 15 minutes."));
+        return redirect2("/campaigns?msg=" + encodeURIComponent("Approved. The send starts within 15 minutes."));
       } catch (e) {
-        return redirect("/campaigns?msg=" + encodeURIComponent(String(e?.message || e)));
+        return redirect2("/campaigns?msg=" + encodeURIComponent(String(e?.message || e)));
       }
     }
     const ccan = /^\/campaigns\/([0-9a-f-]{36})\/cancel$/.exec(path);
     if (ccan && req.method === "POST") {
       await campaignCancel(db, mem.workspace_id, ccan[1]);
-      return redirect("/campaigns?msg=" + encodeURIComponent("Cancelled."));
+      return redirect2("/campaigns?msg=" + encodeURIComponent("Cancelled."));
     }
     if (path === "/competitors") {
       if (req.method === "POST") {
         const f = await formData(req);
         try {
           await competitorAdd(db, mem.workspace_id, String(f.name || ""), String(f.area || ""), String(f.website || ""), String(f.rating || ""), "");
-          return redirect("/competitors?msg=" + encodeURIComponent("Competitor saved."));
+          return redirect2("/competitors?msg=" + encodeURIComponent("Competitor saved."));
         } catch (e) {
-          return redirect("/competitors?msg=" + encodeURIComponent(String(e?.message || e)));
+          return redirect2("/competitors?msg=" + encodeURIComponent(String(e?.message || e)));
         }
       }
       return html(await competitorsPage(db, user, mem, url.searchParams.get("msg") || ""));
@@ -7645,9 +8179,9 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
       const f = await formData(req);
       try {
         await dishAdd(db, mem.workspace_id, cdish[1], String(f.name || ""), Number(f.price), String(f.own_item_id || ""));
-        return redirect("/competitors?msg=" + encodeURIComponent("Dish logged."));
+        return redirect2("/competitors?msg=" + encodeURIComponent("Dish logged."));
       } catch (e) {
-        return redirect("/competitors?msg=" + encodeURIComponent(String(e?.message || e)));
+        return redirect2("/competitors?msg=" + encodeURIComponent(String(e?.message || e)));
       }
     }
     const cpromo = /^\/competitors\/([0-9a-f-]{36})\/promos$/.exec(path);
@@ -7655,9 +8189,9 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
       const f = await formData(req);
       try {
         await promoAdd(db, mem.workspace_id, cpromo[1], String(f.text || ""), String(f.valid_until || ""));
-        return redirect("/competitors?msg=" + encodeURIComponent("Promotion logged."));
+        return redirect2("/competitors?msg=" + encodeURIComponent("Promotion logged."));
       } catch (e) {
-        return redirect("/competitors?msg=" + encodeURIComponent(String(e?.message || e)));
+        return redirect2("/competitors?msg=" + encodeURIComponent(String(e?.message || e)));
       }
     }
     const oppact = /^\/opportunities\/([0-9a-f-]{36})\/(acted|dismissed|draft)$/.exec(path);
@@ -7665,12 +8199,12 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
       try {
         if (oppact[2] === "draft") {
           await opportunityDraftCampaign(db, mem.workspace_id, oppact[1]);
-          return redirect("/campaigns?msg=" + encodeURIComponent("Draft campaign ready - approve it when you are ready to send."));
+          return redirect2("/campaigns?msg=" + encodeURIComponent("Draft campaign ready - approve it when you are ready to send."));
         }
         await opportunityAction(db, mem.workspace_id, oppact[1], oppact[2]);
-        return redirect("/competitors?msg=" + encodeURIComponent("Marked."));
+        return redirect2("/competitors?msg=" + encodeURIComponent("Marked."));
       } catch (e) {
-        return redirect("/competitors?msg=" + encodeURIComponent(String(e?.message || e)));
+        return redirect2("/competitors?msg=" + encodeURIComponent(String(e?.message || e)));
       }
     }
     if (path === "/support") {
@@ -7678,7 +8212,7 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
         const f = await formData(req);
         const q = String(f.question || "").trim();
         if (q) await supportHandle(db, mem.workspace_id, q.slice(0, 1e3));
-        return redirect("/support");
+        return redirect2("/support");
       }
       return html(await supportPage(db, user, mem));
     }
@@ -7690,33 +8224,33 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
       const f = await formData(req);
       const mode = f.mode === "draft" ? "draft" : "suggest";
       await db.query(`UPDATE receptionist_businessprofile SET revenue_mode=$1, updated_at=now() WHERE workspace_id=$2`, [mode, mem.workspace_id]);
-      return redirect("/competitors?msg=" + encodeURIComponent(mode === "draft" ? "Revenue Employee will prepare campaign drafts for strong opportunities. You still approve every send." : "Revenue Employee will suggest opportunities only."));
+      return redirect2("/competitors?msg=" + encodeURIComponent(mode === "draft" ? "Revenue Employee will prepare campaign drafts for strong opportunities. You still approve every send." : "Revenue Employee will suggest opportunities only."));
     }
     if (path === "/reviews") return html(await reviewsPage(db, user, mem, base, url.searchParams.get("msg") || ""));
     if (path === "/reviews/toggle" && req.method === "POST") {
       const cur = await db.query(`SELECT review_requests_enabled FROM receptionist_businessprofile WHERE workspace_id=$1 LIMIT 1`, [mem.workspace_id]);
-      if (!cur.rows[0]) return redirect("/reviews");
+      if (!cur.rows[0]) return redirect2("/reviews");
       await db.query(`UPDATE receptionist_businessprofile SET review_requests_enabled=$1, updated_at=now() WHERE workspace_id=$2`, [!cur.rows[0].review_requests_enabled, mem.workspace_id]);
-      return redirect("/reviews?msg=" + encodeURIComponent(!cur.rows[0].review_requests_enabled ? "Review requests are ON." : "Review requests are OFF."));
+      return redirect2("/reviews?msg=" + encodeURIComponent(!cur.rows[0].review_requests_enabled ? "Review requests are ON." : "Review requests are OFF."));
     }
     if (path === "/reviews/pipeline" && req.method === "POST") {
       const f = await formData(req);
       const id = await startPipeline(db, mem.workspace_id, f.contact_id || "", null);
-      return redirect("/reviews?msg=" + encodeURIComponent(id ? "Visit marked done - check-in goes out in 15 minutes." : "That customer has opted out, so nothing was scheduled."));
+      return redirect2("/reviews?msg=" + encodeURIComponent(id ? "Visit marked done - check-in goes out in 15 minutes." : "That customer has opted out, so nothing was scheduled."));
     }
     if (path === "/reviews/resolve" && req.method === "POST") {
       const f = await formData(req);
       const c = await db.query(`SELECT id FROM receptionist_contact WHERE id=$1 AND workspace_id=$2`, [f.contact_id || "", mem.workspace_id]);
       if (c.rows[0]) await resolveIssue(db, c.rows[0].id);
-      return redirect("/reviews?msg=" + encodeURIComponent("Issue marked resolved - the customer is back in the normal flow."));
+      return redirect2("/reviews?msg=" + encodeURIComponent("Issue marked resolved - the customer is back in the normal flow."));
     }
     if (path === "/reviews/run-due" && req.method === "POST") {
       const out = await runDueReviewEvents(db, env, base, mem.workspace_id);
-      return redirect("/reviews?msg=" + encodeURIComponent(`Ran ${out.due} due step(s): ` + Object.entries(out.results).map(([k, v]) => `${k} ${v}`).join(", ")));
+      return redirect2("/reviews?msg=" + encodeURIComponent(`Ran ${out.due} due step(s): ` + Object.entries(out.results).map(([k, v]) => `${k} ${v}`).join(", ")));
     }
     if (path === "/reviews/destination" && req.method === "POST") {
       const f = await formData(req);
-      if (!/^https:\/\//.test(f.google_review_url || "")) return redirect("/reviews");
+      if (!/^https:\/\//.test(f.google_review_url || "")) return redirect2("/reviews");
       const bp = await db.query(`SELECT 1 FROM receptionist_businessprofile WHERE workspace_id=$1 LIMIT 1`, [mem.workspace_id]);
       if (bp.rows[0]) {
         await db.query(`UPDATE receptionist_businessprofile SET google_review_url=$1, updated_at=now() WHERE workspace_id=$2`, [f.google_review_url, mem.workspace_id]);
@@ -7727,13 +8261,13 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
           [crypto.randomUUID(), mem.workspace_id, mem.org_name, f.google_review_url]
         );
       }
-      return redirect("/reviews");
+      return redirect2("/reviews");
     }
     if (path === "/reviews/links" && req.method === "POST") {
       const f = await formData(req);
       const bp = await db.query(`SELECT google_review_url FROM receptionist_businessprofile WHERE workspace_id=$1 LIMIT 1`, [mem.workspace_id]);
       const dest = bp.rows[0]?.google_review_url;
-      if (!dest) return redirect("/onboarding");
+      if (!dest) return redirect2("/onboarding");
       const client = await db.connect();
       try {
         await client.query("BEGIN");
@@ -7752,7 +8286,7 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
           [crypto.randomUUID(), mem.workspace_id, contactId, code, dest]
         );
         await client.query("COMMIT");
-        return redirect(`/reviews?created=${code}`);
+        return redirect2(`/reviews?created=${code}`);
       } catch (e) {
         await client.query("ROLLBACK");
         throw e;
@@ -7788,7 +8322,7 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
         };
         if (!(allowed[pp.status] || []).includes(target)) {
           await client.query("ROLLBACK");
-          return redirect(`/approvals?done=${encodeURIComponent("already " + pp.status)}`);
+          return redirect2(`/approvals?done=${encodeURIComponent("already " + pp.status)}`);
         }
         await client.query(`UPDATE composer_platform_post SET status=$1, updated_at=now() WHERE id=$2`, [target, ppId]);
         await client.query(
@@ -7797,7 +8331,7 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
           [crypto.randomUUID(), pp.post_id, ppId, user.id, target]
         );
         await client.query("COMMIT");
-        return redirect(`/approvals?done=${target}`);
+        return redirect2(`/approvals?done=${target}`);
       } catch (e) {
         await client.query("ROLLBACK");
         throw e;
@@ -7808,7 +8342,7 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
     if (path === "/billing") return html(await billingPage(db, user, mem, base, env));
     return html(layout("Not found", `<p class="bad">Nothing here yet.</p>`, user), 404);
   } catch (e) {
-    return html(layout("Error", `<p class="bad">${esc3(String(e).slice(0, 300))}</p>`), 500);
+    return html(layout("Error", `<p class="bad">${esc2(String(e).slice(0, 300))}</p>`), 500);
   } finally {
     await db.end().catch(() => {
     });
@@ -7816,15 +8350,28 @@ ${msg ? `<p class="ok">${esc3(msg)}</p>` : ""}
 }
 export {
   DRAFT_RULES,
+  VERIFY_SQL,
   billingPage,
   dashboardPage,
   index_default as default,
+  esc2 as esc,
+  formData,
+  getUser,
+  html,
+  json,
   landingPage,
   layout,
   md5,
+  membership,
   navLinks,
+  newSession,
   onboardingPage,
   pfUrl,
+  pool,
   rateLimitExceeded,
-  recommendPlan
+  rateLimited,
+  recommendPlan,
+  redirect2 as redirect,
+  sessionCookie,
+  sha256hex
 };

@@ -22,7 +22,7 @@ interface Env {
 }
 
 // ---------- db ----------
-function pool(env: Env) {
+export function pool(env: Env) {
   // Workers close sockets when a request ends, so pooling is per-request (a shared
   // pool hands out dead clients). idleTimeoutMillis 0 disables the reaper: a 1s
   // reaper raced mid-request checkout and hung the reconnect. end() must not
@@ -35,7 +35,7 @@ function pool(env: Env) {
 }
 
 // ---------- crypto ----------
-async function sha256hex(s: string): Promise<string> {
+export async function sha256hex(s: string): Promise<string> {
   const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -43,13 +43,14 @@ async function sha256hex(s: string): Promise<string> {
 // md5 via spark-md5 — PayFast signatures only; WebCrypto has no md5.
 import SparkMD5 from "spark-md5";
 import { wifiCardPage } from "./wificard";
+import { handleChatAppRoute } from "./chatapp";
 import { freeAiGenerate, rejectInventedPrices, FACT_RULES } from "./freeai";
 import { ensureSocialTeamSchema, teamPage, runResearcher, producePiece } from "./socialteam";
 import { QRCODE_LIB } from "./qrcodejs";
 export function md5(input: string): string { return SparkMD5.hash(input); }
 
 // ---------- html ----------
-function esc(s: any): string {
+export function esc(s: any): string {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
 }
 export function navLinks(user: any): string {
@@ -133,18 +134,18 @@ form.inline{display:inline}
 label{font-size:13px;font-weight:500;color:var(--ink2)}
 </style></head><body><div class="wrap">${nav}<h1>${esc(title)}</h1>${body}</div></body></html>`;
 }
-function html(body: string, status = 200): Response {
+export function html(body: string, status = 200): Response {
   return new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8" } });
 }
-function json(o: any, status = 200): Response {
+export function json(o: any, status = 200): Response {
   return new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
 }
-function redirect(to: string): Response {
+export function redirect(to: string): Response {
   return new Response(null, { status: 303, headers: { location: to } });
 }
 
 // ---------- auth ----------
-async function getUser(req: Request, db: Pool): Promise<any | null> {
+export async function getUser(req: Request, db: Pool): Promise<any | null> {
   const m = /(?:^|;\s*)cf_session=([a-f0-9]{64})/.exec(req.headers.get("cookie") || "");
   if (!m) return null;
   const th = await sha256hex(m[1]);
@@ -155,14 +156,14 @@ async function getUser(req: Request, db: Pool): Promise<any | null> {
   const u = await db.query(`SELECT id,email,name,is_superuser FROM accounts_user WHERE id=$1 AND is_active`, [r.rows[0].user_id]);
   return u.rows[0] || null;
 }
-async function newSession(db: Pool, userId: string, req: Request): Promise<string> {
+export async function newSession(db: Pool, userId: string, req: Request): Promise<string> {
   const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
   const th = await sha256hex(token);
   await db.query(`INSERT INTO cf_sessions(token_hash,user_id,device_info,expires_at) VALUES($1,$2,$3,now()+interval '14 days')`,
     [th, userId, (req.headers.get("user-agent") || "").slice(0, 200)]);
   return token;
 }
-async function rateLimited(db: Pool, bucket: string, req: Request, limit: number): Promise<boolean> {
+export async function rateLimited(db: Pool, bucket: string, req: Request, limit: number): Promise<boolean> {
   const ip = (req.headers.get("cf-connecting-ip") || "unknown").slice(0, 64);
   const day = new Date().toISOString().slice(0, 10);
   const r = await db.query(
@@ -181,15 +182,15 @@ export async function rateLimitExceeded(db: Pool, bucket: string, req: Request, 
   return r.rows[0] ? Number(r.rows[0].count) > limit : false;
 }
 
-function sessionCookie(token: string): string {
+export function sessionCookie(token: string): string {
   return `cf_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${14 * 86400}`;
 }
 // Django BCryptSHA256: bcrypt(base64(sha256(pw))). pgcrypto crypt() only accepts
 // $2a$ salts, so swap the $2b$ prefix — identical output for ASCII inputs.
-const VERIFY_SQL = `SELECT crypt(encode(digest($1,'sha256'),'hex'), '$2a$' || substring($2 from 5)) = '$2a$' || substring($2 from 5) AS ok`;
+export const VERIFY_SQL = `SELECT crypt(encode(digest($1,'sha256'),'hex'), '$2a$' || substring($2 from 5)) = '$2a$' || substring($2 from 5) AS ok`;
 const MAKE_HASH_SQL = `SELECT 'bcrypt_sha256$' || '$2b$' || substring(crypt(encode(digest($1,'sha256'),'hex'), gen_salt('bf',12)) from 5) AS hash`;
 
-async function membership(db: Pool, userId: string, req?: Request): Promise<any | null> {
+export async function membership(db: Pool, userId: string, req?: Request): Promise<any | null> {
   const r = await db.query(
     `SELECT w.id AS workspace_id, w.name AS workspace_name, w.approval_workflow_mode,
             o.id AS org_id, o.name AS org_name, o.plan, o.subscription_status, o.payment_reference,
@@ -207,7 +208,7 @@ async function membership(db: Pool, userId: string, req?: Request): Promise<any 
 }
 
 // ---------- forms ----------
-async function formData(req: Request): Promise<Record<string, string>> {
+export async function formData(req: Request): Promise<Record<string, string>> {
   const fd = await req.formData();
   const o: Record<string, string> = {};
   fd.forEach((v, k) => { o[k] = String(v); });
@@ -981,6 +982,10 @@ async function handle(req: Request, env: Env): Promise<Response> {
         return json({ ok: false, error: String(e).slice(0, 200) }, 500);
       }
     }
+
+    // ChatGPT app: OAuth 2.1 + read-only MCP server + privacy page (all public endpoints).
+    const chatAppRes = await handleChatAppRoute(req, env, url, pool);
+    if (chatAppRes) return chatAppRes;
 
     if (path === "/health") {
       try {
