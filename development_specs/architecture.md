@@ -79,7 +79,6 @@ project/
 ├── docker-compose.prod.yml
 ├── .env.example
 ├── railway.toml
-├── render.yaml
 ├── Procfile                    # Heroku
 ├── app.json                    # Heroku "Deploy" button manifest
 └── README.md
@@ -235,7 +234,7 @@ Ephemeral filesystem - `STORAGE_BACKEND` must be `s3`. App detects Railway via `
 
 ### 6.4 Self-Hosted: Render
 
-Config: `render.yaml` blueprint in repo. Three services: web ($7), worker ($7), PostgreSQL ($7).
+Config: the Render service (web + PostgreSQL) is managed in the Render dashboard, not a repo blueprint (the stale render.yaml was removed). The public front door is the Cloudflare Worker; Render is the rollback stack.
 
 Free tier sleeps (breaks worker) - must use paid. Ephemeral disk - requires S3.
 

@@ -269,23 +269,51 @@ async function handlePayfastItn(db: Pool, env: Env, req: Request): Promise<Respo
   const received = post["signature"] || "";
   const baseStr = pairs.filter(([k]) => k !== "signature").map(([k, v]) => `${k}=${pfQuotePlus(dec(v).trim())}`).join("&");
   const ours = md5(baseStr + `&passphrase=${pfQuotePlus(env.PF_PASSPHRASE)}`);
-  if (!received || received !== ours) return new Response("bad signature", { status: 400 });
+  if (!received || !timingSafeEq(received, ours)) return new Response("bad signature", { status: 400 });
   const check = await fetch("https://sandbox.payfast.co.za/eng/query/validate", {
     method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: raw,
   });
   if ((await check.text()).trim() !== "VALID") return new Response("payfast validate-back rejected", { status: 400 });
-  if (post["payment_status"] !== "COMPLETE") return new Response(`status ${post["payment_status"] || "?"}`, { status: 400 });
   const mpid = post["m_payment_id"] || "";
   const parts = mpid.split("-");
   const reference = mpid.startsWith("RU-") ? "RU-" + (parts[1] || "") : "";
   const plan = parts.slice(2).join("-");
   if (!reference || !["starter", "growth", "business-pro"].includes(plan)) return new Response("unknown reference", { status: 400 });
-  if (!itnAmountOk(plan, post["amount_gross"])) return new Response("amount mismatch", { status: 400 });
-  const r = await db.query(
-    `UPDATE organizations_organization SET plan=$1, subscription_status='active', payfast_token=$2, updated_at=now() WHERE payment_reference=$3`,
-    [plan, post["token"] || "", reference]);
-  if (!r.rowCount) return new Response("unknown reference", { status: 400 });
+  const status = post["payment_status"] || "";
+  if (status !== "COMPLETE" && status !== "CANCELLED") return new Response(`status ${status || "?"}`, { status: 400 });
+  // Amount is verified for activations; a cancellation ITN may carry the
+  // recurring amount or none, and lapsing never depends on it.
+  if (status === "COMPLETE" && !itnAmountOk(plan, post["amount_gross"])) return new Response("amount mismatch", { status: 400 });
+  const pfId = post["pf_payment_id"] || "";
+  if (pfId) {
+    const seen = await db.query(`SELECT 1 FROM organizations_organizationpayment WHERE pf_payment_id=$1`, [pfId]);
+    if (seen.rowCount) return new Response("OK"); // ITN replay: already applied
+  }
+  if (status === "CANCELLED") {
+    await db.query(
+      `UPDATE organizations_organization SET subscription_status='expired', payfast_token='', updated_at=now() WHERE payment_reference=$1 AND subscription_status='active'`,
+      [reference]);
+  } else {
+    const r = await db.query(
+      `UPDATE organizations_organization SET plan=$1, subscription_status='active', payfast_token=$2, activated_at=COALESCE(activated_at, now()), updated_at=now() WHERE payment_reference=$3`,
+      [plan, post["token"] || "", reference]);
+    if (!r.rowCount) return new Response("unknown reference", { status: 400 });
+  }
+  if (pfId) {
+    await db.query(
+      `INSERT INTO organizations_organizationpayment(organization_id, pf_payment_id, plan, amount_gross, status, created_at)
+       SELECT id, $1, $2, $3, $4, now() FROM organizations_organization WHERE payment_reference=$5 ON CONFLICT (pf_payment_id) DO NOTHING`,
+      [pfId, plan, post["amount_gross"] || "0", status, reference]);
+  }
   return new Response("OK");
+}
+
+// Constant-time string compare (PayFast signatures): no early exit on mismatch.
+export function timingSafeEq(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
 }
 
 // ---------- AI drafting (Groq free tier, Django-faithful contract) ----------

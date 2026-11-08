@@ -231,3 +231,9 @@ test('itnAmountOk: missing/garbage amount rejected', () => {
   assert.ok(!itnAmountOk('starter', 'abc'));
 });
 test('itnAmountOk: unknown plan rejected', () => assert.ok(!itnAmountOk('free', '499.00')));
+
+// --- constant-time signature compare (audit fix) ---
+import { timingSafeEq } from '../dist-test/index.mjs';
+test('timingSafeEq: equal strings pass', () => assert.ok(timingSafeEq('a94a8fe5ccb19ba61c4c0873d391e987982fbbd3', 'a94a8fe5ccb19ba61c4c0873d391e987982fbbd3')));
+test('timingSafeEq: one-char diff rejected', () => assert.ok(!timingSafeEq('a94a8fe5ccb19ba61c4c0873d391e987982fbbd3', 'a94a8fe5ccb19ba61c4c0873d391e987982fbbd4')));
+test('timingSafeEq: length mismatch rejected', () => assert.ok(!timingSafeEq('abc', 'abcd')));

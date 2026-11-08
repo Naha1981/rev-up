@@ -15,6 +15,7 @@ exposes nothing.
 from __future__ import annotations
 
 import contextlib
+import hmac
 import logging
 import threading
 import time
@@ -74,7 +75,7 @@ def run_due(request):
     token = getattr(settings, "INTERNAL_CRON_TOKEN", "")
     if not token:
         return HttpResponseNotFound()
-    if request.headers.get("X-Run-Due-Token", "") != token:
+    if not hmac.compare_digest(request.headers.get("X-Run-Due-Token", ""), token):
         return HttpResponseForbidden("bad token")
     try:
         ran = drain_due_tasks(DRAIN_SECONDS)

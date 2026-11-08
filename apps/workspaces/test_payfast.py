@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import uuid
 from unittest import mock
 from urllib.parse import quote_plus
 
@@ -55,7 +56,7 @@ def _post(**over):
 
 def test_valid_itn_passes(merchant):
     data = _post()
-    with mock.patch("apps.workspaces.payfast.requests.post") as p:
+    with mock.patch("apps.workspaces.payfast.httpx.post") as p:
         p.return_value.text = "VALID"
         ok, reason = payfast.verify_itn(data)
     assert ok, reason
@@ -75,7 +76,7 @@ def test_itn_with_empty_fields_signed_payfast_style_passes(merchant):
     payload = "&".join(f"{k}={quote_plus(v.strip())}" for k, v in data.items() if k != "signature")
     payload += f"&passphrase={quote_plus('testpass')}"
     data["signature"] = hashlib.md5(payload.encode()).hexdigest()
-    with mock.patch("apps.workspaces.payfast.requests.post") as p:
+    with mock.patch("apps.workspaces.payfast.httpx.post") as p:
         p.return_value.text = "VALID"
         ok, reason = payfast.verify_itn(data)
     assert ok, reason
@@ -89,17 +90,19 @@ def test_tampered_signature_fails(merchant):
 
 
 def test_validate_back_rejection_fails(merchant):
-    with mock.patch("apps.workspaces.payfast.requests.post") as p:
+    with mock.patch("apps.workspaces.payfast.httpx.post") as p:
         p.return_value.text = "INVALID"
         ok, reason = payfast.verify_itn(_post())
     assert not ok and "validate-back" in reason
 
 
 def test_non_complete_status_fails(merchant):
-    with mock.patch("apps.workspaces.payfast.requests.post") as p:
+    with mock.patch("apps.workspaces.payfast.httpx.post") as p:
         p.return_value.text = "VALID"
         ok, reason = payfast.verify_itn(_post(payment_status="PENDING"))
-    assert not ok and "PENDING" in reason
+    # Authentic ITNs pass verification for any status; the notify view owns
+    # status semantics (COMPLETE activates, CANCELLED lapses).
+    assert ok and reason == ""
 
 
 # ---- view tests ----
@@ -117,7 +120,7 @@ def _owner_with_workspace():
 
     org = Organization.objects.create(name="Pay Org", plan="starter")
     user = User.objects.create_user(
-        email=f"pay-{timezone.now().timestamp()}@example.com", password="x" * 20, tos_accepted_at=timezone.now()
+        email=f"pay-{uuid.uuid4().hex[:12]}@example.com", password="x" * 20, tos_accepted_at=timezone.now()
     )
     ws = Workspace.objects.create(name="Pay Biz", organization=org)
     WorkspaceMembership.objects.create(user=user, workspace=ws, workspace_role="owner")
@@ -143,7 +146,7 @@ def test_checkout_non_member_rejected(merchant, db):
     from django.utils import timezone
 
     outsider = User.objects.create_user(
-        email=f"out-{timezone.now().timestamp()}@example.com", password="x" * 20, tos_accepted_at=timezone.now()
+        email=f"out-{uuid.uuid4().hex[:12]}@example.com", password="x" * 20, tos_accepted_at=timezone.now()
     )
     c = Client()
     c.force_login(outsider)
@@ -164,7 +167,7 @@ def test_itn_activates_plan_and_stores_token(merchant, db):
     org.payment_reference = "RU-ABC12345"
     org.save()
     data = _post(m_payment_id="RU-ABC12345-growth", token="tok-123")
-    with mock.patch("apps.workspaces.payfast.requests.post") as p:
+    with mock.patch("apps.workspaces.payfast.httpx.post") as p:
         p.return_value.text = "VALID"
         resp = Client().post("/billing/payfast/notify/", data)
     assert resp.status_code == 200
@@ -185,3 +188,89 @@ def test_itn_tampered_is_400_and_changes_nothing(merchant, db):
     org.refresh_from_db()
     assert org.plan == "starter"
     assert org.subscription_status == "trial"
+
+
+# ---- audit hardening tests (Claude report, 8 Nov 2026) ----
+
+
+def test_signed_itn_with_wrong_amount_is_rejected(merchant, db):
+    """Signature valid, amount below plan price: must not activate."""
+    org, user, ws = _owner_with_workspace()
+    org.payment_reference = "RU-ABC12345"
+    org.save()
+    data = _post(m_payment_id="RU-ABC12345-growth", amount_gross="499.00")  # signed with the wrong amount
+    with mock.patch("apps.workspaces.payfast.httpx.post") as p:
+        p.return_value.text = "VALID"
+        resp = Client().post("/billing/payfast/notify/", data)
+    assert resp.status_code == 400
+    org.refresh_from_db()
+    assert org.subscription_status != "active"
+
+
+def test_itn_replay_is_idempotent(merchant, db):
+    org, user, ws = _owner_with_workspace()
+    org.payment_reference = "RU-ABC12345"
+    org.save()
+    data = _post(m_payment_id="RU-ABC12345-growth", token="tok-123")
+    with mock.patch("apps.workspaces.payfast.httpx.post") as p:
+        p.return_value.text = "VALID"
+        assert Client().post("/billing/payfast/notify/", data).status_code == 200
+        org.subscription_status = "expired"  # simulate a later lapse
+        org.save(update_fields=["subscription_status"])
+        assert Client().post("/billing/payfast/notify/", data).status_code == 200
+    org.refresh_from_db()
+    assert org.subscription_status == "expired"  # replay did not re-activate
+
+
+def test_cancelled_itn_lapses_active_org(merchant, db):
+    org, user, ws = _owner_with_workspace()
+    org.payment_reference = "RU-ABC12345"
+    org.plan = "growth"
+    org.subscription_status = "active"
+    org.payfast_token = "tok-123"
+    org.save()
+    data = _post(m_payment_id="RU-ABC12345-growth", payment_status="CANCELLED", pf_payment_id="88888")
+    with mock.patch("apps.workspaces.payfast.httpx.post") as p:
+        p.return_value.text = "VALID"
+        resp = Client().post("/billing/payfast/notify/", data)
+    assert resp.status_code == 200
+    org.refresh_from_db()
+    assert org.subscription_status == "expired"
+    assert org.payfast_token == ""
+
+
+def test_production_without_passphrase_fails_closed(merchant, settings):
+    settings.PAYFAST_SANDBOX = False
+    settings.PAYFAST_PASSPHRASE = ""
+    assert not payfast.configured()
+    ok, reason = payfast.verify_itn(_post())
+    assert not ok and "passphrase" in reason
+
+
+def test_checkout_member_role_rejected(merchant, db):
+    org, user, ws = _owner_with_workspace()
+    from django.utils import timezone
+
+    member = User.objects.create_user(
+        email=f"mem-{uuid.uuid4().hex[:12]}@example.com", password="x" * 20, tos_accepted_at=timezone.now()
+    )
+    WorkspaceMembership.objects.create(user=member, workspace=ws, workspace_role="member")
+    c = Client()
+    c.force_login(member)
+    assert c.post(f"/workspaces/{ws.id}/billing/payfast/", {"plan": "growth"}).status_code == 404
+
+
+def test_itn_records_payment_row(merchant, db):
+    from apps.organizations.models import OrganizationPayment
+
+    org, user, ws = _owner_with_workspace()
+    org.payment_reference = "RU-ABC12345"
+    org.save()
+    data = _post(m_payment_id="RU-ABC12345-growth", token="tok-123")
+    with mock.patch("apps.workspaces.payfast.httpx.post") as p:
+        p.return_value.text = "VALID"
+        Client().post("/billing/payfast/notify/", data)
+    row = OrganizationPayment.objects.get(pf_payment_id="99999")
+    assert row.organization_id == org.id
+    assert str(row.amount_gross) == "999.00"
+    assert row.status == "COMPLETE"

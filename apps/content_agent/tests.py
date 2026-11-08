@@ -1,6 +1,8 @@
 """Content-agent tests: external calls are always mocked; the agent must
 never approve, schedule, or publish anything."""
 
+from unittest.mock import patch
+
 from django.test import TestCase, override_settings
 
 from apps.accounts.models import User
@@ -162,7 +164,10 @@ class RunTests(TestCase):
 
     def test_gemini_failure_records_failed_run_no_posts(self):
         config = make_config()
-        run = run_for_config(config, client=FakeHttp(post_exc=RuntimeError("quota")))
+        # The service retries with real backoff sleeps; tests patch the sleep,
+        # not the retry logic.
+        with patch("apps.content_agent.services.time.sleep"):
+            run = run_for_config(config, client=FakeHttp(post_exc=RuntimeError("quota")))
         self.assertEqual(run.status, GenerationRun.Status.FAILED)
         self.assertEqual(Post.objects.count(), 0)
 

@@ -43,9 +43,13 @@ class TrialLockMiddleware:
         if org is None:
             return None
         status, _day, _left = org.trial_state()
-        if status != org.SubscriptionStatus.EXPIRED:
+        locked = status in (org.SubscriptionStatus.EXPIRED, org.SubscriptionStatus.PENDING_ACTIVATION)
+        if not locked:
             return None
         workspace = org.workspaces.order_by("created_at").first()
-        if workspace is not None and not request.path.endswith("/billing/"):
+        # The card checkout POST must stay reachable too, or a locked org can
+        # never pay its way out of the lock.
+        on_billing = request.path.endswith("/billing/") or "/billing/payfast/" in request.path
+        if workspace is not None and not on_billing:
             return redirect(reverse("workspaces:billing", kwargs={"workspace_id": workspace.id}))
         return None

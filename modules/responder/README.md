@@ -99,7 +99,7 @@ Private Property enquiry emails are needed to lock this in**. Drop them in
 
 - `npm run build` compiles to `dist/`; `npm start` runs the compiled service.
 - `Dockerfile`: multi-stage node:22-slim build (ci -> build -> runtime, prod deps only).
-- `render.yaml`: Render blueprint - web service + `leadmachine-postgres`, health check on `/health`, `WHATSAPP_MODE=dry-run` default, secrets marked `sync: false`.
+- Render deployment is managed in the Render dashboard (no repo blueprint); health check on `/health`, `WHATSAPP_MODE=dry-run` default, secrets set in the dashboard.
 - `db/schema.sql`: `lead_conversations` (snapshot per lead phone, upserted) + `processed_intake` (dedupe ledger across restarts). Without `DATABASE_URL` the service runs on in-memory state and says so at boot.
 - `.github/workflows/ci.yml`: install, typecheck, 33 tests, build on every push/PR.
 - Graceful shutdown: SIGTERM/SIGINT stop the poll, close the webhook server and the Postgres pool.

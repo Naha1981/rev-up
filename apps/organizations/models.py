@@ -50,12 +50,16 @@ class Organization(models.Model):
         TRIAL = "trial", "Early access"
         ACTIVE = "active", "Active"
         EXPIRED = "expired", "Not active"
+        # Written by the CF worker signup: account created, payment not yet
+        # confirmed. Locked to the billing page like EXPIRED until the
+        # verified ITN flips it to ACTIVE.
+        PENDING_ACTIVATION = "pending_activation", "Activation pending"
 
     TRIAL_DAYS = 7
 
     plan = models.CharField(max_length=20, choices=Plan.choices, default=Plan.STARTER)
     subscription_status = models.CharField(
-        max_length=12, choices=SubscriptionStatus.choices, default=SubscriptionStatus.TRIAL
+        max_length=32, choices=SubscriptionStatus.choices, default=SubscriptionStatus.TRIAL
     )
     trial_started_at = models.DateTimeField(blank=True, null=True)
     payment_reference = models.CharField(max_length=20, blank=True, default="")
@@ -111,6 +115,8 @@ class Organization(models.Model):
             return (self.SubscriptionStatus.ACTIVE, self.TRIAL_DAYS, 0)
         if self.subscription_status == self.SubscriptionStatus.EXPIRED:
             return (self.SubscriptionStatus.EXPIRED, self.TRIAL_DAYS, 0)
+        if self.subscription_status == self.SubscriptionStatus.PENDING_ACTIVATION:
+            return (self.SubscriptionStatus.PENDING_ACTIVATION, self.TRIAL_DAYS, 0)
         now = now or timezone.now()
         start = self.trial_started_at or self.created_at or now
         elapsed = max(0, (now - start).days)
@@ -185,3 +191,17 @@ class Organization(models.Model):
             except User.DoesNotExist:
                 continue
             provision_organization_and_workspace(user)
+
+
+class OrganizationPayment(models.Model):
+    """PayFast ITN record: audit trail and replay idempotency (pf_payment_id unique)."""
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="payments")
+    pf_payment_id = models.CharField(max_length=64, unique=True)
+    plan = models.CharField(max_length=20)
+    amount_gross = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(max_length=20)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]

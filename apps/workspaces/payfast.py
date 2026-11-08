@@ -9,10 +9,12 @@ back against PayFast, and the payment reference belonging to the org.
 from __future__ import annotations
 
 import hashlib
+import hmac
+import ipaddress
 import logging
 from urllib.parse import quote_plus
 
-import requests
+import httpx
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -20,8 +22,43 @@ logger = logging.getLogger(__name__)
 FREQUENCY_MONTHLY = 3  # PayFast subscription frequency code for monthly
 
 
+# PayFast's published ITN source networks (developers.payfast.co.za/docs,
+# "Ports and IP addresses"). Enforcement is opt-in via
+# PAYFAST_ITN_ENFORCE_IP because the correct client-IP source depends on the
+# proxy in front of the app; signature + validate-back already authenticate.
+ITN_ALLOWED_NETWORKS = tuple(
+    ipaddress.ip_network(n)
+    for n in (
+        "197.97.145.144/28",
+        "41.74.179.192/27",
+        "102.216.36.0/28",
+        "102.216.36.128/28",
+        "144.126.193.139/32",
+    )
+)
+
+
 def configured() -> bool:
-    return bool(getattr(settings, "PAYFAST_MERCHANT_ID", "") and getattr(settings, "PAYFAST_MERCHANT_KEY", ""))
+    if not (getattr(settings, "PAYFAST_MERCHANT_ID", "") and getattr(settings, "PAYFAST_MERCHANT_KEY", "")):
+        return False
+    # In production a missing passphrase means ITNs cannot be authenticated:
+    # fail closed instead of silently signing without the salt.
+    return not (not sandbox() and not _passphrase())
+
+
+def source_ip_allowed(remote_ip: str) -> bool:
+    """True when the ITN source IP is in PayFast's published ranges.
+
+    Only enforced when PAYFAST_ITN_ENFORCE_IP is on (production hardening);
+    sandbox ITNs and unconfigured deployments skip it.
+    """
+    if sandbox() or not getattr(settings, "PAYFAST_ITN_ENFORCE_IP", False):
+        return True
+    try:
+        ip = ipaddress.ip_address(remote_ip)
+    except ValueError:
+        return False
+    return any(ip in net for net in ITN_ALLOWED_NETWORKS)
 
 
 def sandbox() -> bool:
@@ -88,19 +125,26 @@ def sign_itn(post_data: dict) -> str:
     return hashlib.md5(payload.encode()).hexdigest()
 
 
-def verify_itn(post_data: dict) -> tuple[bool, str]:
-    """Validate an ITN callback. Returns (ok, reason)."""
+def verify_itn(post_data: dict, remote_ip: str = "") -> tuple[bool, str]:
+    """Authenticate an ITN callback. Returns (ok, reason).
+
+    Signature (constant-time), optional source-IP allowlist, then PayFast
+    validate-back. Payment-status semantics belong to the caller: CANCELLED
+    and FAILED are authentic ITNs too and must lapse/log the plan, not 400.
+    """
+    if not sandbox() and not _passphrase():
+        return False, "passphrase not configured in production"
+    if not source_ip_allowed(remote_ip):
+        return False, "source ip not allowed"
     received = post_data.get("signature", "")
     ours = sign_itn(post_data)
-    if not received or received != ours:
+    if not received or not hmac.compare_digest(received, ours):
         return False, "bad signature"
     try:
-        resp = requests.post(validate_url(), data=post_data, timeout=10)
+        resp = httpx.post(validate_url(), data=post_data, timeout=10)
         if resp.text.strip() != "VALID":
             return False, "payfast validate-back rejected"
-    except requests.RequestException:
+    except httpx.HTTPError:
         logger.exception("payfast validate-back failed")
         return False, "validate-back unreachable"
-    if post_data.get("payment_status") != "COMPLETE":
-        return False, f"status {post_data.get('payment_status', '?')}"
     return True, ""
