@@ -44,11 +44,13 @@ jobs:
         working-directory: workers/revup-cf
         run: npm ci
 
-      - name: "Run worker unit suite (evidence: raw TAP)"
+      - name: "Run worker unit suite (evidence: JUnit XML + raw TAP)"
         working-directory: workers/revup-cf
         run: |
           mkdir -p "$RUNNER_TEMP/gate"
-          npm test --silent | tee "$RUNNER_TEMP/gate/worker-unit.tap"
+          npm run build:test --silent
+          node --test --test-reporter=junit test/worker.test.mjs test/freeai.test.mjs test/priceguard.test.mjs test/factrules.test.mjs test/assistant.test.mjs test/socialteam.test.mjs test/chatapp.test.mjs > "$RUNNER_TEMP/gate/unit.xml"
+          node --test test/worker.test.mjs test/freeai.test.mjs test/priceguard.test.mjs test/factrules.test.mjs test/assistant.test.mjs test/socialteam.test.mjs test/chatapp.test.mjs | tee "$RUNNER_TEMP/gate/worker-unit.tap"
           grep -q "^# fail 0" "$RUNNER_TEMP/gate/worker-unit.tap"
 
       - name: Build deploy artifact (dry-run, no upload)
@@ -60,17 +62,21 @@ jobs:
           set -euo pipefail
           G="$RUNNER_TEMP/gate"
           ART=$(python3 tools/safe-release/release_gate.py artifact-digest --artifact "$G/candidate" | jq -r .artifact_sha256)
-          PASS=$(grep -oP '^# pass \K[0-9]+' "$G/worker-unit.tap")
-          EVID=$(sha256sum "$G/worker-unit.tap" | cut -d' ' -f1)
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          jq -n --arg c "${{ github.sha }}" --arg a "$ART" --arg e "$EVID" --arg t "$NOW" --argjson p "$PASS" \
-            '[{check:"worker-unit",status:"passed",commit:$c,artifact_sha256:$a,assertions:$p,evidence_sha256:$e,evidence_reference:"worker-unit.tap (node --test raw TAP in this CI run)",finished_at:$t}]' > "$G/checks.json"
+          python3 tools/safe-release/junit_collect.py \
+            --junit "$G/unit.xml" \
+            --expected-cases tools/safe-release/reviewed-unit-cases.json \
+            --check worker-unit --commit "${{ github.sha }}" \
+            --artifact-sha256 "$ART" --evidence-reference unit.xml \
+            --output "$G/worker-unit-check.json"
+          jq -s '.' "$G/worker-unit-check.json" > "$G/checks.json"
           python3 tools/safe-release/release_gate.py manifest \
             --policy tools/safe-release/policy.json --checks "$G/checks.json" \
             --artifact "$G/candidate" --commit "${{ github.sha }}" \
-            --rollback tools/safe-release/rollback.json --output "$G/release.json"
+            --rollback tools/safe-release/rollback.json --output "$G/release.json" \
+            --evidence-root "$G"
           python3 tools/safe-release/release_gate.py verify \
-            --policy tools/safe-release/policy.json --manifest "$G/release.json" --artifact "$G/candidate"
+            --policy tools/safe-release/policy.json --manifest "$G/release.json" --artifact "$G/candidate" \
+            --evidence-root "$G"
           jq -r '"manifest_sha256: \(.manifest_sha256)"' "$G/release.json"
 
       - name: Upload release manifest + test evidence
@@ -79,5 +85,7 @@ jobs:
           name: release-manifest-${{ github.sha }}
           path: |
             ${{ runner.temp }}/gate/release.json
+            ${{ runner.temp }}/gate/unit.xml
+            ${{ runner.temp }}/gate/worker-unit-check.json
             ${{ runner.temp }}/gate/worker-unit.tap
           retention-days: 90

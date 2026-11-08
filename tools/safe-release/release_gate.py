@@ -93,12 +93,14 @@ def reports_check(policy, reports, commit, artifact_hash):
         age = (dt.datetime.now(dt.timezone.utc) - parse_time(report.get("finished_at"))).total_seconds()
         require(-60 <= age <= policy["max_proof_age_hours"] * 3600, "stale or future check")
 
-def make_manifest(policy, reports, commit, directory, rollback):
+def make_manifest(policy, reports, commit, directory, rollback, evidence_root=None):
     policy_check(policy)
     require(bool(COMMIT.fullmatch(commit)), "full commit SHA required")
     files = inventory(directory)
     artifact_hash = digest(files)
     reports_check(policy, reports, commit, artifact_hash)
+    require(evidence_root is not None, "evidence root is mandatory")
+    evidence_files_check(reports, evidence_root)
     require(isinstance(rollback, dict), "rollback inventory missing")
     for key in ("version", "artifact_sha256", "account", "service", "rehearsal_evidence_sha256"):
         require(bool(rollback.get(key)), "missing rollback " + key)
@@ -109,7 +111,7 @@ def make_manifest(policy, reports, commit, directory, rollback):
             "artifact_sha256": artifact_hash, "files": files, "checks": reports, "rollback": rollback}
     return {"manifest": body, "manifest_sha256": digest(body)}
 
-def verify(envelope, directory, policy):
+def verify(envelope, directory, policy, evidence_root=None):
     body = envelope["manifest"]
     require(digest(body) == envelope.get("manifest_sha256"), "manifest changed")
     require(body.get("schema") == VERSION, "unsupported manifest")
@@ -119,11 +121,13 @@ def verify(envelope, directory, policy):
     require(files == body.get("files") and digest(files) == body.get("artifact_sha256"), "artifact changed")
     require(bool(COMMIT.fullmatch(body.get("commit", ""))), "invalid commit")
     reports_check(policy, body.get("checks"), body["commit"], body["artifact_sha256"])
+    require(evidence_root is not None, "evidence root is mandatory")
+    evidence_files_check(body["checks"], evidence_root)
     require(body["rollback"]["account"] == policy["account"] and body["rollback"]["service"] == policy["service"], "rollback target changed")
     return body
 
-def promotion_plan(envelope, directory, policy, approval):
-    body = verify(envelope, directory, policy)
+def promotion_plan(envelope, directory, policy, approval, evidence_root=None):
+    body = verify(envelope, directory, policy, evidence_root)
     # This is a routing/evidence record, NOT independent authentication of a user.
     # The accountable release operator must inspect the original channel evidence.
     require(approval.get("decision") == "Go + Sure", "exact production approval missing")
@@ -138,7 +142,39 @@ def promotion_plan(envelope, directory, policy, approval):
             "pilot": "allowlist-default-off", "rollback_version": body["rollback"]["version"],
             "warning": "No deploy was performed. An app-specific trusted promotion adapter must consume this plan and recheck owner authority."}
 
+def evidence_files_check(reports, directory):
+    """Bind claimed report digests to local evidence bytes, not their authenticity."""
+    root = pathlib.Path(directory)
+    require(root.is_dir() and not root.is_symlink(), "evidence root missing or symlinked")
+    root = root.resolve()
+    require(isinstance(reports, list) and bool(reports), "evidence reports missing")
+    seen = set()
+    for report in reports:
+        require(isinstance(report, dict), "invalid evidence report")
+        name = report.get("check")
+        require(isinstance(name, str) and name and name not in seen, "invalid or duplicate evidence check")
+        seen.add(name)
+        ref = report.get("evidence_reference")
+        require(isinstance(ref, str) and ref and "\\" not in ref, "invalid evidence path")
+        relative = pathlib.PurePosixPath(ref)
+        require(not relative.is_absolute() and all(p not in (".", "..") for p in ref.split("/")) and ":" not in ref, "evidence path must be confined relative file")
+        path = root
+        for part in relative.parts:
+            path = path / part
+            require(not path.is_symlink(), "evidence symlinks forbidden")
+        require(path.is_file() and path.resolve().is_relative_to(root), "evidence file missing or outside root")
+        expected = report.get("evidence_sha256")
+        require(isinstance(expected, str) and bool(HEX.fullmatch(expected)), "invalid evidence digest")
+        require(sha_file(path) == expected, "evidence bytes changed for " + name)
+        require(path.stat().st_size > 0, "empty evidence file")
+    return {"evidence_bytes_verified": len(seen), "authentic_test_execution": "UNVERIFIED", "deployment_ready": False}
+
 def preview_config_check(production, preview):
+    # Intentionally narrow. New bindings, nested env overrides or triggers must
+    # receive an explicit isolation review, not silently bypass this checker.
+    allowed = {"$schema", "name", "main", "compatibility_date", "compatibility_flags", "workers_dev",
+               "preview_urls", "routes", "vars", "assets", "d1_databases", "kv_namespaces", "r2_buckets", "services"}
+    require(not (set(preview) - allowed), "unreviewed preview config keys: " + ",".join(sorted(set(preview) - allowed)))
     require(bool(preview.get("name")) and preview.get("name") != production.get("name"), "preview worker equals production")
     require(preview.get("routes") == [], "preview must have no production/custom routes")
     require(preview.get("workers_dev") is True, "preview requires its own workers.dev target")
@@ -162,25 +198,29 @@ def main():
     preview = sub.add_parser("preview-config")
     preview.add_argument("--production-config", required=True)
     preview.add_argument("--preview-config", required=True)
+    evidence = sub.add_parser("evidence-files")
+    evidence.add_argument("--checks", required=True)
+    evidence.add_argument("--evidence-root", required=True)
     snap = sub.add_parser("artifact-digest"); snap.add_argument("--artifact", required=True)
     create = sub.add_parser("manifest")
-    for flag in ("policy", "checks", "artifact", "commit", "rollback", "output"): create.add_argument("--" + flag, required=True)
+    for flag in ("policy", "checks", "artifact", "commit", "rollback", "output", "evidence-root"): create.add_argument("--" + flag, required=True)
     for command in ("verify", "promotion-plan"):
         p = sub.add_parser(command)
-        for flag in ("policy", "manifest", "artifact"): p.add_argument("--" + flag, required=True)
+        for flag in ("policy", "manifest", "artifact", "evidence-root"): p.add_argument("--" + flag, required=True)
         if command == "promotion-plan": p.add_argument("--approval", required=True)
     args = parser.parse_args()
     try:
         if args.command == "preview-config": result = preview_config_check(read(args.production_config), read(args.preview_config))
+        elif args.command == "evidence-files": result = evidence_files_check(read(args.checks), args.evidence_root)
         elif args.command == "artifact-digest": result = {"artifact_sha256": digest(inventory(args.artifact))}
         elif args.command == "manifest":
-            result = make_manifest(read(args.policy), read(args.checks), args.commit, args.artifact, read(args.rollback))
+            result = make_manifest(read(args.policy), read(args.checks), args.commit, args.artifact, read(args.rollback), args.evidence_root)
             output = pathlib.Path(args.output)
             require(not output.resolve().is_relative_to(pathlib.Path(args.artifact).resolve()), "manifest output cannot be inside artifact")
             output.write_text(json.dumps(result, indent=2) + "\n")
         elif args.command == "verify":
-            body = verify(read(args.manifest), args.artifact, read(args.policy)); result = {"verified": True, "artifact_sha256": body["artifact_sha256"]}
-        else: result = promotion_plan(read(args.manifest), args.artifact, read(args.policy), read(args.approval))
+            body = verify(read(args.manifest), args.artifact, read(args.policy), args.evidence_root); result = {"verified": True, "artifact_sha256": body["artifact_sha256"]}
+        else: result = promotion_plan(read(args.manifest), args.artifact, read(args.policy), read(args.approval), args.evidence_root)
         print(json.dumps(result, indent=2))
     except (Blocked, KeyError, TypeError, ValueError, OSError) as e:
         print("BLOCKED: " + str(e), file=sys.stderr)
