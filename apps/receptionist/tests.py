@@ -681,6 +681,7 @@ class RealPayloadShapeTests(TestCase):
         self.assertTrue(Message.objects.filter(contact=contact, direction="outbound", is_draft=True).exists())
 
 
+@override_settings(RECEPTIONIST_SANDBOX_ALLOWLIST=("27000000002", "27000000001"))
 class SandboxSendTests(TestCase):
     """The sandbox send guard: only the sandbox account + the owner's demo number."""
 

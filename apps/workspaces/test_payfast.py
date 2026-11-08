@@ -138,7 +138,7 @@ def test_checkout_renders_auto_submit_form_with_signed_params(merchant, db):
     assert "RevUp Growth (monthly)" in body
 
 
-def test_checkout_non_member_gets_404(merchant, db):
+def test_checkout_non_member_rejected(merchant, db):
     org, user, ws = _owner_with_workspace()
     from django.utils import timezone
 
@@ -147,7 +147,9 @@ def test_checkout_non_member_gets_404(merchant, db):
     )
     c = Client()
     c.force_login(outsider)
-    assert c.post(f"/workspaces/{ws.id}/billing/payfast/", {"plan": "growth"}).status_code == 404
+    # Workspace middleware denies non-members (403) before the view; the view
+    # itself now returns 404 instead of raising a response class (was a 500).
+    assert c.post(f"/workspaces/{ws.id}/billing/payfast/", {"plan": "growth"}).status_code == 403
 
 
 def test_checkout_rejects_unknown_plan(merchant, db):

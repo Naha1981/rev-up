@@ -28,7 +28,12 @@ logger = logging.getLogger(__name__)
 # code-level hard limit on top of that. The opted-in numbers live in
 # settings (env), never in the repo.
 SANDBOX_ACCOUNT_ID = "6a180a034c7f364ffded3c9c"
-SANDBOX_SEND_ALLOWLIST = frozenset(getattr(settings, "RECEPTIONIST_SANDBOX_ALLOWLIST", ()))
+
+
+def sandbox_send_allowlist() -> frozenset:
+    """Opted-in sandbox numbers from settings/env, read fresh each call."""
+    return frozenset(getattr(settings, "RECEPTIONIST_SANDBOX_ALLOWLIST", ()))
+
 
 _TIMEOUT = 20
 
@@ -69,7 +74,7 @@ def may_send(channel: ZernioChannel, contact: Contact) -> bool:
         return False
     # The owner's sandbox demo stays locked to his own number.
     if channel.is_sandbox or channel.zernio_account_id == SANDBOX_ACCOUNT_ID:
-        return contact.wa_id in SANDBOX_SEND_ALLOWLIST
+        return contact.wa_id in sandbox_send_allowlist()
     # A tenant's own number may answer its own customers.
     return True
 
