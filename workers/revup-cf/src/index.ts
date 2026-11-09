@@ -43,6 +43,7 @@ export async function sha256hex(s: string): Promise<string> {
 // md5 via spark-md5 — PayFast signatures only; WebCrypto has no md5.
 import SparkMD5 from "spark-md5";
 import { wifiCardPage } from "./wificard";
+import { menuManagePage, ordersPage, publicMenuHtml, createOrder, loadMenu } from "./menu";
 import { handleChatAppRoute } from "./chatapp";
 import { freeAiGenerate, rejectInventedPrices, FACT_RULES } from "./freeai";
 import { ensureSocialTeamSchema, teamPage, runResearcher, producePiece } from "./socialteam";
@@ -80,6 +81,8 @@ export function navLinks(user: any): string {
   if (show("receptionist")) more += `<a href="/competitors">Competitors</a>`;
   if (show("receptionist")) more += `<a href="/support">Support</a>`;
   if (show("receptionist")) more += `<a href="/wifi-card">WiFi Card</a>`;
+  if (show("receptionist")) more += `<a href="/menu">Menu</a>`;
+  if (show("receptionist")) more += `<a href="/orders">Orders</a>`;
   more += `<a href="/billing">Billing</a>`;
   h += `<details class="nav-more"><summary>More</summary><div class="nav-more-panel">${more}</div></details>`;
   return h;
@@ -1221,6 +1224,31 @@ async function handle(req: Request, env: Env): Promise<Response> {
       } finally { await pdb.end().catch(() => {}); }
     }
 
+    // Public menu + order capture (no login). Renders for any live workspace
+    // with at least one visible dish; orders are idempotent per day+basket.
+    const mm = /^\/m\/([0-9a-f-]{36})(\/order)?$/.exec(path);
+    if (mm) {
+      const mdb = pool(env);
+      try {
+        const w = await mdb.query(
+          `SELECT w.id, w.name, bp.business_name FROM workspaces_workspace w
+           LEFT JOIN receptionist_businessprofile bp ON bp.workspace_id=w.id AND bp.is_active
+           JOIN organizations_organization o ON o.id=w.organization_id
+           WHERE w.id=$1 AND w.is_archived=false AND o.deleted_at IS NULL`, [mm[1]]);
+        const biz = w.rows[0];
+        if (!biz) return new Response("not found", { status: 404 });
+        const items = (await loadMenu(mdb, mm[1])).filter((i: any) => i.is_available);
+        const bizName = biz.business_name || biz.name;
+        if (mm[2] && req.method === "POST") {
+          const f = await formData(req);
+          const ip = req.headers.get("cf-connecting-ip") || "";
+          const r = await createOrder(mdb, mm[1], f, ip);
+          return html(publicMenuHtml(bizName, items, mm[1], r.ok, r.err));
+        }
+        return html(publicMenuHtml(bizName, items, mm[1], false, ""));
+      } finally { await mdb.end().catch(() => {}); }
+    }
+
     // RevUp Pages - public landing pages (no login)
     const pm = /^\/p\/([a-z0-9-]{4,64})(\/go)?$/.exec(path);
     if (pm) {
@@ -1828,9 +1856,9 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
         const msg = url.searchParams.get("msg") || "";
         const rows = bk.rows.map((b: any) => `<tr>
 <td><b>${esc(b.contact_name || b.wa_id)}</b><br><span class="mut">${esc(b.service || "booking")}</span></td>
-<td class="mut">${b.status === "confirmed" && b.scheduled_start ? new Date(b.scheduled_start).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" }) : esc(b.preferred_time || "to confirm")}</td>
+<td class="mut">${b.status === "confirmed" && b.scheduled_start ? new Date(b.scheduled_start).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" }) : esc(b.preferred_time || "to confirm")}${b.table_label ? `<br><span class="pill pill-live">${esc(b.table_label)}</span>` : ""}</td>
 <td>${b.status === "confirmed" ? '<span class="ok">confirmed</span>' : b.status === "done" ? "done" : b.status === "cancelled" ? '<span class="mut">cancelled</span>' : "<b>requested</b>"}</td>
-<td>${b.status === "requested" ? `<form class="inline" method="post" action="/bookings/${b.id}/confirm"><input type="datetime-local" name="when" required style="width:auto"><button>Confirm</button></form>` : ""}
+<td>${b.status === "requested" ? `<form class="inline" method="post" action="/bookings/${b.id}/confirm"><input type="datetime-local" name="when" required style="width:auto"><input name="table_label" maxlength="40" placeholder="Table (optional)" style="width:110px"><button>Confirm</button></form>` : ""}
 ${b.status === "confirmed" ? `<form class="inline" method="post" action="/bookings/${b.id}/done"><button>Mark done</button></form>` : ""}
 ${["requested", "confirmed"].includes(b.status) ? `<form class="inline" method="post" action="/bookings/${b.id}/cancel"><button class="link">Cancel</button></form>` : ""}</td></tr>`).join("");
         return html(layout("Bookings", `
@@ -1848,7 +1876,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
           const f = await formData(req);
           const when = String(f.when || "").trim();
           if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(when)) return redirect("/bookings");
-          await db.query(`UPDATE receptionist_booking SET status='confirmed', scheduled_start=($1 || ':00+02')::timestamptz WHERE id=$2`, [when.slice(0, 16), b.id]);
+          await db.query(`UPDATE receptionist_booking SET status='confirmed', scheduled_start=($1 || ':00+02')::timestamptz, table_label=$3 WHERE id=$2`, [when.slice(0, 16), b.id, String(f.table_label || "").trim().slice(0, 40)]);
           return redirect("/bookings?msg=" + encodeURIComponent("Booking confirmed."));
         }
         if (bact[2] === "done" && b.status === "confirmed") {
@@ -1906,6 +1934,56 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
       if (vred && req.method === "POST") {
         const okd = await redeemVoucher(db, mem.workspace_id, vred[1]);
         return redirect("/loyalty?msg=" + encodeURIComponent(okd ? "Voucher redeemed." : "That voucher is not usable."));
+      }
+
+      // Restaurant core: menu management, dish-sales logging, specials, orders
+      if (path === "/menu") return html(layout("Menu", await menuManagePage(db, mem, base, url.searchParams.get("msg") || ""), user));
+      if (path === "/menu/categories" && req.method === "POST") {
+        const f = await formData(req);
+        const name = String(f.name || "").trim().slice(0, 80);
+        if (name) await db.query(`INSERT INTO menus_category(id,workspace_id,name,position) VALUES($1,$2,$3,COALESCE((SELECT max(position)+1 FROM menus_category WHERE workspace_id=$2),0)) ON CONFLICT ON CONSTRAINT menus_category_unique_name DO NOTHING`, [crypto.randomUUID(), mem.workspace_id, name]);
+        return redirect("/menu?msg=" + encodeURIComponent(name ? "Section added." : "Nothing added."));
+      }
+      if (path === "/menu/items" && req.method === "POST") {
+        const f = await formData(req);
+        const name = String(f.name || "").trim().slice(0, 120);
+        const price = Number(f.price);
+        if (!name || !(price >= 0)) return redirect("/menu?msg=" + encodeURIComponent("A dish needs a name and a price."));
+        const catId = /^[0-9a-f-]{36}$/.test(String(f.category_id || "")) ? String(f.category_id) : null;
+        if (catId) {
+          const own = await db.query(`SELECT 1 FROM menus_category WHERE id=$1 AND workspace_id=$2`, [catId, mem.workspace_id]);
+          if (!own.rows[0]) return redirect("/menu");
+        }
+        const cost = f.food_cost !== undefined && String(f.food_cost).trim() !== "" && Number(f.food_cost) >= 0 ? Number(f.food_cost) : null;
+        await db.query(
+          `INSERT INTO menus_item(id,workspace_id,category_id,name,description,price,food_cost,dietary,is_available,is_special,position,created_at,updated_at)
+           VALUES($1,$2,$3,$4,$5,$6,$7,'[]'::jsonb,true,$8,COALESCE((SELECT max(position)+1 FROM menus_item WHERE workspace_id=$2),0),now(),now())`,
+          [crypto.randomUUID(), mem.workspace_id, catId, name, String(f.description || "").trim().slice(0, 300), price, cost, f.is_special === "1"]);
+        return redirect("/menu?msg=" + encodeURIComponent("Dish added - it is on your public menu now."));
+      }
+      const mact = /^\/menu\/items\/([0-9a-f-]{36})\/(toggle|special)$/.exec(path);
+      if (mact && req.method === "POST") {
+        const col = mact[2] === "toggle" ? "is_available" : "is_special";
+        await db.query(`UPDATE menus_item SET ${col}=NOT ${col}, updated_at=now() WHERE id=$1 AND workspace_id=$2`, [mact[1], mem.workspace_id]);
+        return redirect("/menu");
+      }
+      if (path === "/menu/sales" && req.method === "POST") {
+        const f = await formData(req);
+        const qty = Math.max(0, Math.min(10000, parseInt(String(f.quantity || ""), 10) || 0));
+        const day = String(f.sold_on || "").trim();
+        const own = await db.query(`SELECT 1 FROM menus_item WHERE id=$1 AND workspace_id=$2`, [String(f.item_id || ""), mem.workspace_id]);
+        if (own.rows[0] && /^\d{4}-\d{2}-\d{2}$/.test(day))
+          await db.query(`INSERT INTO menus_dishsale(id,workspace_id,item_id,sold_on,quantity) VALUES($1,$2,$3,$4,$5)`, [crypto.randomUUID(), mem.workspace_id, String(f.item_id), day, qty]);
+        return redirect("/menu?msg=" + encodeURIComponent("Sales logged."));
+      }
+      if (path === "/orders") return html(layout("Orders", await ordersPage(db, mem, url.searchParams.get("msg") || ""), user));
+      const oact = /^\/orders\/([0-9a-f-]{36})\/(confirm|ready|done|cancel)$/.exec(path);
+      if (oact && req.method === "POST") {
+        const next: any = { confirm: "confirmed", ready: "ready", done: "done", cancel: "cancelled" };
+        const flows: any = { confirmed: ["new"], ready: ["confirmed"], done: ["ready"], cancelled: ["new", "confirmed"] };
+        const ns = next[oact[2]];
+        await db.query(`UPDATE menus_order SET status=$1, updated_at=now() WHERE id=$2 AND workspace_id=$3 AND status = ANY($4)`, [ns, oact[1], mem.workspace_id, flows[ns]]);
+        return redirect("/orders");
       }
 
       if (path === "/quotes") {

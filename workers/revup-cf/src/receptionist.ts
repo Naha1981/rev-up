@@ -1,4 +1,5 @@
 import { freeAiGenerate, rejectInventedPrices, FACT_RULES } from "./freeai";
+import { menuBlock } from "./menu";
 // WhatsApp receptionist: inbound messaging-partner webhook -> AI draft -> auto-reply.
 // Bounds (his standing rules): reply only to numbers that messaged first,
 // never cold outbound; sandbox line answers his own numbers only; per-workspace
@@ -177,8 +178,14 @@ export async function handleZernioWebhook(db: Pool, env: any, payload: any): Pro
   const transcript = hist.rows.reverse().map((m: any) => `${m.sender_type === "user" ? "Customer" : "Receptionist"}: ${m.body}`).join("\n");
   const now = new Date().toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg", weekday: "long", day: "2-digit", month: "long", year: "numeric" });
   const incoming = media.length ? `[Customer sent ${media.length} photo${media.length === 1 ? "" : "s"}] ${body}`.trim() : body;
+  // Menu-aware replies: real dishes and prices from the owner's menu, so the
+  // receptionist can quote them exactly (rejectInventedPrices kills the rest).
+  const menuRows = await db.query(
+    `SELECT i.name, i.price, i.is_special, c.name AS category FROM menus_item i
+     LEFT JOIN menus_category c ON c.id=i.category_id
+     WHERE i.workspace_id=$1 AND i.is_available ORDER BY c.position NULLS LAST, i.position, i.name LIMIT 60`, [channel.workspace_id]);
   const prompt =
-    `Today is ${now}, South Africa time.\n${industryBrief(profile.industry || "general")}\n${profileBlock(profile)}\n` +
+    `Today is ${now}, South Africa time.\n${industryBrief(profile.industry || "general")}\n${profileBlock(profile)}\n${menuBlock(menuRows.rows)}` +
     (customerBlock(contact) ? customerBlock(contact) + "\n" : "") + "\n" +
     `Conversation so far:\n${transcript}\n\n` +
     `Reply with JSON only: {"reply": "...", "intake": {"name": "", "detail": "", "preferred_time": "", "address": "", "policy_number": ""}} ` +
