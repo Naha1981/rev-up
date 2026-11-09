@@ -2,7 +2,7 @@
 // Django app; passwords verify in Postgres (pgcrypto) to stay inside Workers
 // Free CPU limits. No vendor names surface in any HTML.
 import { Client, Pool } from "pg";
-import { LOGO_B64, landingPage } from "./landing";
+import { LOGO_B64, OG_B64, landingPage } from "./landing";
 export { landingPage } from "./landing";
 import { INDUSTRIES, getPreset, industryLabel } from "./presets";
 import { handleZernioWebhook, verifyZernioSignature, validateTenantKey, tenantConnectUrl, tenantConfirmAndBind, tenantWebhookSecret } from "./receptionist";
@@ -1277,6 +1277,7 @@ async function handle(req: Request, env: Env): Promise<Response> {
     const db = pool(env);
     try {
       if (path === "/static/brand/revup-light.png") return new Response(Uint8Array.from(atob(LOGO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
+      if (path === "/static/brand/revup-og.png") return new Response(Uint8Array.from(atob(OG_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/qrcode.js") return new Response(QRCODE_LIB, { headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "public, max-age=86400" } });
       const user = await getUser(req, db);
       if (!user && path === "/") return html(landingPage());
@@ -1533,6 +1534,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
       }
 
       if (path === "/") return html(await dashboardPage(db, user, mem, url.searchParams.get("msg") || ""));
+      if (path === "/static/brand/revup-og.png") return new Response(Uint8Array.from(atob(OG_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/brand/revup-light.png") return new Response(Uint8Array.from(atob(LOGO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
 
       if (path === "/onboarding") {
