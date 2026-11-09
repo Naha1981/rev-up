@@ -93,18 +93,18 @@ export function layout(title: string, body: string, user?: any): string {
     ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links">${navLinks(user)}${user._cur_ws ? `<a href="/switch" title="Switch business" style="border:1px solid var(--line);border-radius:8px;padding:2px 8px">${esc(user._cur_ws)}${(user._ws_count||0) > 1 ? " &#9662;" : ""}</a>` : ""}<form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>`
     : `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a class="btn btn-ghost" href="/login">Log in</a><a class="btn btn-primary" href="/signup">Get started</a></div></nav>`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} · RevUp</title><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&display=swap" rel="stylesheet"><style>
-:root{--brand:#F97316;--brand-dark:#EA580C;--brand-soft:#FFF7ED;--ink:#1C1917;--ink2:#57534E;--ink3:#A8A29E;--line:#E7E5E4;--bg:#FAFAF9}
+:root{--brand:#F97316;--brand-dark:#EA580C;--brand-soft:#FFF7ED;--ink:#1C1917;--ink2:#57534E;--ink3:#78716C;--line:#E7E5E4;--bg:#FAFAF9}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Manrope,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6}
+body{font-family:Manrope,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6;font-size:17px}
 a{color:var(--brand-dark);text-decoration:none}a:hover{text-decoration:underline}
 .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
 nav{display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid var(--line);margin-bottom:32px;flex-wrap:wrap;gap:12px}
 .logo img{height:30px;width:auto}
 .nav-links{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
-.nav-links a{color:var(--ink2);font-size:14px;font-weight:500}
+.nav-links a{color:var(--ink2);font-size:15px;font-weight:500}
 .nav-links a:hover{color:var(--ink);text-decoration:none}
 .nav-more{position:relative}
-.nav-more summary{list-style:none;cursor:pointer;color:var(--ink2);font-size:14px;font-weight:500;display:flex;align-items:center;gap:4px;user-select:none}
+.nav-more summary{list-style:none;cursor:pointer;color:var(--ink2);font-size:15px;font-weight:500;display:flex;align-items:center;gap:4px;user-select:none}
 .nav-more summary::-webkit-details-marker{display:none}
 .nav-more summary::after{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg) translateY(-2px)}
 .nav-more summary:hover{color:var(--ink)}
@@ -113,28 +113,37 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:16px 0
 .nav-more-panel a{display:block;padding:6px 12px;border-radius:8px;white-space:nowrap;color:var(--ink2)}
 .nav-more-panel a:hover{background:var(--bg);color:var(--ink);text-decoration:none}
 @media (max-width:640px){.nav-more-panel{left:0;right:auto}}
-.btn{display:inline-block;padding:10px 20px;border-radius:10px;font-weight:500;font-size:15px;text-decoration:none;transition:background .15s;border:0;cursor:pointer}
+.btn{display:inline-block;padding:12px 22px;border-radius:10px;font-weight:500;font-size:16px;text-decoration:none;transition:background .15s;border:0;cursor:pointer}
 .btn-primary{background:var(--brand);color:#fff}
 .btn-primary:hover{background:var(--brand-dark);text-decoration:none}
 .btn-ghost{color:var(--ink);border:1px solid var(--line);background:#fff}
-h1{font-size:24px;font-weight:500;margin:0 0 8px}h2{font-size:16px;font-weight:500;margin:24px 0 8px}
-.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:24px;margin:12px 0}
-input,select,textarea{width:100%;box-sizing:border-box;padding:12px 16px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--ink);margin:4px 0 16px;font-size:14px;font-family:inherit}
+h1{font-size:28px;font-weight:500;margin:0 0 10px}h2{font-size:19px;font-weight:500;margin:24px 0 10px}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:24px;margin:12px 0;overflow-x:auto}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+@media (max-width:640px){.frow{grid-template-columns:1fr}.wrap{padding:0 16px}.card{padding:18px 16px}td,th{padding:10px 8px}h1{font-size:26px}
+.rtable thead{display:none}
+.rtable tr:first-child{display:none}
+.rtable tr{display:block;padding:14px 0;border-bottom:1px solid var(--line)}
+.rtable tr:last-child{border-bottom:0}
+.rtable td{display:block;border:0;padding:3px 0}}
+input,select,textarea{width:100%;box-sizing:border-box;padding:12px 16px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--ink);margin:4px 0 16px;font-size:16px;font-family:inherit}
+input[type=checkbox]{width:auto;margin:0}
 input:focus{outline:2px solid var(--brand-soft);border-color:var(--brand)}
-button,.btn-form{background:var(--brand);color:#fff;border:0;border-radius:10px;padding:10px 20px;font-weight:500;cursor:pointer;font-size:14px}
+button,.btn-form{background:var(--brand);color:#fff;border:0;border-radius:10px;padding:12px 22px;font-weight:500;cursor:pointer;font-size:16px}
 button:hover{background:var(--brand-dark)}
-button.link{background:none;color:var(--ink2);padding:0;font-weight:500;font-size:14px}
+button.link{background:none;color:var(--ink2);padding:0;font-weight:500;font-size:15px}
 button.link:hover{color:var(--ink)}
-.mut{color:var(--ink3);font-size:13px}.ok{color:#16A34A}.bad{color:#DC2626}.warn{color:#B45309}
-table{border-collapse:collapse;width:100%;font-size:14px}td,th{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
-th{font-size:12px;font-weight:500;color:var(--ink3)}
-.pill{font-size:12px;color:var(--brand-dark);font-weight:500}
+.mut{color:var(--ink3);font-size:15px}.ok{color:#16A34A}.bad{color:#DC2626}.warn{color:#B45309}
+table{border-collapse:collapse;width:100%;font-size:16px}td,th{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:13px;font-weight:600;color:var(--ink2);letter-spacing:.02em}
+.pill{font-size:13px;color:var(--brand-dark);font-weight:600}
 .pill.warn{color:#B45309}.pill.ok{color:#15803D}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(208px,1fr));gap:16px}
-form.inline{display:inline}
+form.inline{display:inline-block;margin:0 14px 6px 0}
 .stat{font-size:28px;font-weight:500;margin:2px 0;font-variant-numeric:tabular-nums}
 .stat-t{font-size:20px;font-weight:500;margin:2px 0}
-label{font-size:13px;font-weight:500;color:var(--ink2)}
+label{font-size:15px;font-weight:500;color:var(--ink2);display:block}
+label input:not([type=checkbox]),label select,label textarea{display:block;width:100%;margin-top:6px}
 </style></head><body><div class="wrap">${nav}<h1>${esc(title)}</h1>${body}</div></body></html>`;
 }
 export function html(body: string, status = 200): Response {
@@ -847,7 +856,7 @@ async function conversationPage(db: Pool, user: any, mem: any, contactId: string
     const out = m.direction === "outbound";
     return `<div style="display:flex;justify-content:${out ? "flex-end" : "flex-start"};margin:6px 0">
 <div style="max-width:70%;padding:8px 12px;border-radius:12px;${out ? "background:var(--brand);color:#fff" : "background:#fff;border:1px solid var(--line)"}">
-<div class="mut" style="font-size:11px;${out ? "color:#ffe7d6" : ""}">${esc(who[m.sender_type] || m.sender_type)} · ${new Date(m.created_at).toLocaleString("en-ZA")}</div>
+<div class="mut" style="font-size:13px;${out ? "color:#ffe7d6" : ""}">${esc(who[m.sender_type] || m.sender_type)} · ${new Date(m.created_at).toLocaleString("en-ZA")}</div>
 <div>${esc(m.body)}</div></div></div>`;
   }).join("");
   return html(layout(`Chat: ${esc(c.rows[0].name || c.rows[0].wa_id)}`, `
@@ -1576,7 +1585,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
         const byLead: Record<string, any[]> = {}; for (const d of drafts.rows) (byLead[d.lead_id] = byLead[d.lead_id] || []).push(d);
         const rows = leads.rows.map((l: any) => {
           const ds = (byLead[l.id] || []).map((d: any) => `<div style="border:1px solid var(--line);border-radius:8px;padding:8px;margin:6px 0">
-<div class="mut" style="font-size:11px">Follow-up draft · ${esc(d.status)} · ${new Date(d.created_at).toLocaleString("en-ZA")}</div>
+<div class="mut" style="font-size:13px">Follow-up draft · ${esc(d.status)} · ${new Date(d.created_at).toLocaleString("en-ZA")}</div>
 <div style="white-space:pre-wrap">${esc(d.body)}</div>
 ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/approve" style="margin-top:6px"><button>Mark approved</button></form>` : ""}</div>`).join("");
           return `<tr>

@@ -60,23 +60,23 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <label>Dish<input name="name" required maxlength="120" placeholder="Chicken kota"></label>
 <label>Section<select name="category_id">${catOpts}</select></label>
 <label>Description<input name="description" maxlength="300" placeholder="Chips, Russian, cheese, atchar"></label>
-<label>Price (R)<input name="price" type="number" min="0" step="0.01" required style="width:140px"></label>
-<label>Cost to make (R, optional)<input name="food_cost" type="number" min="0" step="0.01" style="width:140px"></label>
-<label><input type="checkbox" name="is_special" value="1" style="width:auto"> On special this week</label>
+<div class="frow"><label>Price (R)<input name="price" type="number" min="0" step="0.01" required></label>
+<label>Cost to make (R, optional)<input name="food_cost" type="number" min="0" step="0.01"></label></div>
+<label style="display:flex;align-items:center;gap:10px;margin-bottom:16px"><input type="checkbox" name="is_special" value="1"> On special this week</label>
 <button>Add dish</button></form></div>
 <div class="card"><h2 style="margin-top:0">Add a section</h2>
 <form method="post" action="/menu/categories" class="inline-form">
 <input name="name" required maxlength="80" placeholder="Mains, Braai, Drinks…" style="max-width:280px"> <button>Add section</button></form></div>
 <div class="card"><h2 style="margin-top:0">Your menu (${items.length})</h2>
-${items.length ? `<table><tr><th>Dish</th><th>Section</th><th>Price</th><th>Status</th><th></th></tr>${itemRows}</table>` : `<p class="mut">No dishes yet. Add your first one above - it shows on your public menu and your WhatsApp employee can quote it within minutes.</p>`}</div>
+${items.length ? `<table class="rtable"><tr><th>Dish</th><th>Section</th><th>Price</th><th>Status</th><th></th></tr>${itemRows}</table>` : `<p class="mut">No dishes yet. Add your first one above - it shows on your public menu and your WhatsApp employee can quote it within minutes.</p>`}</div>
 <div class="card"><h2 style="margin-top:0">Log today's sales</h2>
 ${items.length ? `<form method="post" action="/menu/sales">
 <label>Dish<select name="item_id">${itemOpts}</select></label>
-<label>Plates sold<input name="quantity" type="number" min="0" max="10000" required style="width:120px"></label>
+<label>Plates sold<input name="quantity" type="number" min="0" max="10000" required style="max-width:160px"></label>
 <label>Day<input name="sold_on" type="date" required></label>
 <button>Log sales</button>
 <p class="mut">Sales feed the competitor price-gap alerts on the <a href="/competitors">Competitors</a> screen.</p></form>` : `<p class="mut">Add dishes first, then log what sold.</p>`}
-${salesRows ? `<table><tr><th>Dish</th><th>Plates</th><th>Day</th></tr>${salesRows}</table>` : ""}</div>`;
+${salesRows ? `<table class="rtable"><tr><th>Dish</th><th>Plates</th><th>Day</th></tr>${salesRows}</table>` : ""}</div>`;
 }
 
 export async function ordersPage(db: Pool, mem: any, msg = ""): Promise<string> {
@@ -100,7 +100,7 @@ ${["new", "confirmed"].includes(o.status) ? `<form class="inline" method="post" 
   return `
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <p class="mut">Orders placed on your <a href="/m/${mem.workspace_id}" target="_blank" rel="noopener">public menu</a> land here. Confirm the order, mark it ready, then handed over.</p>
-<div class="card">${withItems.length ? `<table><tr><th>Customer</th><th>Order</th><th>Total</th><th>Status</th><th></th></tr>${rows}</table>` : `<p class="mut">No orders yet. Share your public menu link - orders placed there show up here.</p>`}</div>`;
+<div class="card">${withItems.length ? `<table class="rtable"><tr><th>Customer</th><th>Order</th><th>Total</th><th>Status</th><th></th></tr>${rows}</table>` : `<p class="mut">No orders yet. Share your public menu link - orders placed there show up here.</p>`}</div>`;
 }
 
 // ---------- public menu page (no login) ----------
