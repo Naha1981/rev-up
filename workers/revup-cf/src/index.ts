@@ -2,7 +2,7 @@
 // Django app; passwords verify in Postgres (pgcrypto) to stay inside Workers
 // Free CPU limits. No vendor names surface in any HTML.
 import { Client, Pool } from "pg";
-import { LOGO_B64, OG_B64, landingPage } from "./landing";
+import { APPLE_TOUCH_B64, FAVICON_16_B64, FAVICON_32_B64, FAVICON_ICO_B64, LOGO_B64, OG_B64, landingPage } from "./landing";
 export { landingPage } from "./landing";
 import { INDUSTRIES, getPreset, industryLabel } from "./presets";
 import { handleZernioWebhook, verifyZernioSignature, validateTenantKey, tenantConnectUrl, tenantConfirmAndBind, tenantWebhookSecret } from "./receptionist";
@@ -92,7 +92,7 @@ export function layout(title: string, body: string, user?: any): string {
   const nav = user
     ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links">${navLinks(user)}${user._cur_ws ? `<a href="/switch" title="Switch business" style="border:1px solid var(--line);border-radius:8px;padding:2px 8px">${esc(user._cur_ws)}${(user._ws_count||0) > 1 ? " &#9662;" : ""}</a>` : ""}<form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>`
     : `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a class="btn btn-ghost" href="/login">Log in</a><a class="btn btn-primary" href="/signup">Get started</a></div></nav>`;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} · RevUp</title><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&display=swap" rel="stylesheet"><style>
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="/static/brand/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/static/brand/favicon-16.png"><link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png"><title>${esc(title)} · RevUp</title><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&display=swap" rel="stylesheet"><style>
 :root{--brand:#F97316;--brand-dark:#EA580C;--brand-soft:#FFF7ED;--ink:#1C1917;--ink2:#57534E;--ink3:#78716C;--line:#E7E5E4;--bg:#FAFAF9}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:Manrope,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6;font-size:17px}
@@ -1276,6 +1276,10 @@ async function handle(req: Request, env: Env): Promise<Response> {
     // everything below needs auth
     const db = pool(env);
     try {
+      if (path === "/favicon.ico") return new Response(Uint8Array.from(atob(FAVICON_ICO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/x-icon", "cache-control": "public, max-age=86400" } });
+      if (path === "/static/brand/favicon-32.png") return new Response(Uint8Array.from(atob(FAVICON_32_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
+      if (path === "/static/brand/favicon-16.png") return new Response(Uint8Array.from(atob(FAVICON_16_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
+      if (path === "/static/brand/apple-touch-icon.png" || path === "/apple-touch-icon.png") return new Response(Uint8Array.from(atob(APPLE_TOUCH_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/brand/revup-light.png") return new Response(Uint8Array.from(atob(LOGO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/brand/revup-og.png") return new Response(Uint8Array.from(atob(OG_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/qrcode.js") return new Response(QRCODE_LIB, { headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "public, max-age=86400" } });
@@ -1534,6 +1538,10 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
       }
 
       if (path === "/") return html(await dashboardPage(db, user, mem, url.searchParams.get("msg") || ""));
+      if (path === "/favicon.ico") return new Response(Uint8Array.from(atob(FAVICON_ICO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/x-icon", "cache-control": "public, max-age=86400" } });
+      if (path === "/static/brand/favicon-32.png") return new Response(Uint8Array.from(atob(FAVICON_32_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
+      if (path === "/static/brand/favicon-16.png") return new Response(Uint8Array.from(atob(FAVICON_16_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
+      if (path === "/static/brand/apple-touch-icon.png" || path === "/apple-touch-icon.png") return new Response(Uint8Array.from(atob(APPLE_TOUCH_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/brand/revup-og.png") return new Response(Uint8Array.from(atob(OG_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/brand/revup-light.png") return new Response(Uint8Array.from(atob(LOGO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
 
