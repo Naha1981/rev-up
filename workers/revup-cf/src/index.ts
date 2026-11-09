@@ -780,7 +780,7 @@ function newPostPage(user: any, mem: any, pre: Record<string, string>, msg = "")
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <div class="card"><form method="post" action="/posts/draft">
 <label>Topic<input name="topic" maxlength="200" value="${esc(pre.topic || "")}" placeholder="e.g. teeth whitening special this month" required></label>
-<button class="btn-secondary">Draft with AI</button>
+<button class="btn-secondary">Write a draft</button>
 </form></div>
 ${pre.media ? `<div class="card"><h2 style="margin-top:0">Attached image</h2><img src="/media/${esc(pre.media)}/raw" style="max-width:280px;border-radius:8px"></div>` : ""}
 <div class="card"><form method="post" action="/posts/new">
@@ -1459,7 +1459,7 @@ ${!ch.rows.length ? `<div class="card" style="border-color:var(--brand)"><h2 sty
 <p>${p ? `${esc(p.business_name || mem.org_name)} · ${esc(p.industry || "general")} · ${p.is_active ? '<span class="ok">answering</span>' : '<span class="warn">paused</span>'}` : "Tell RevUp about your business in onboarding so the receptionist knows what to say."}</p>
 <p class="mut">Business details, hours and prices come from <a href="/onboarding">onboarding</a>. Conversations live in your <a href="/inbox">inbox</a> - step in any time.</p></div>
 <div class="grid">
-<div class="card"><h2>AI replies this month</h2><p class="stat">${usedM.rows[0].c} / ${lim}</p><p class="mut">on the ${esc(pl)} plan</p></div>
+<div class="card"><h2>WhatsApp replies this month</h2><p class="stat">${usedM.rows[0].c} / ${lim}</p><p class="mut">on the ${esc(pl)} plan</p></div>
 <div class="card"><h2>Connected numbers</h2>${ch.rows.length ? `<table><tr><th>Number</th><th>Label</th><th>Type</th></tr>${chan}</table>` : `<p class="mut">None yet.</p>`}</div>
 </div>`, user));
       }
