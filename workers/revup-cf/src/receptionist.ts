@@ -1,3 +1,4 @@
+import { decryptTenantKey, type TenantCryptoEnv } from "./tenant-crypto";
 import { freeAiGenerate, rejectInventedPrices, FACT_RULES } from "./freeai";
 import { menuBlock } from "./menu";
 // WhatsApp receptionist: inbound messaging-partner webhook -> AI draft -> auto-reply.
@@ -275,7 +276,7 @@ export async function sendChannelMessage(db: Pool, env: any, channel: any, conta
   const connQ = await db.query(`SELECT api_key, status FROM receptionist_tenantmessagingconnection WHERE workspace_id=$1 LIMIT 1`, [channel.workspace_id]);
   const conn = connQ.rows[0];
   if (conn && conn.status === "needs_attention") return { ok: false, messageId: "" }; // hold drafts until they reconnect
-  const sendKey = conn && conn.status === "connected" && conn.api_key ? conn.api_key : env.ZERNIO_API_KEY;
+  const sendKey = conn && conn.status === "connected" && conn.api_key ? await decryptTenantKey(conn.api_key, env) : env.ZERNIO_API_KEY;
 
   const base = env.ZERNIO_BASE_URL || "https://zernio.com/api/v1";
   const resp = await fetch(`${base}/inbox/conversations/${convId}/messages`, {
@@ -332,20 +333,21 @@ export async function tenantConnectUrl(apiKey: string, profileId: string, redire
   return url;
 }
 
-export async function tenantConfirmAndBind(db: any, conn: any, profileId: string, accountId: string, webhookUrl: string): Promise<{ ok: boolean; msg: string }> {
-  const accounts = await zget(conn.api_key, `/accounts?profileId=${encodeURIComponent(profileId)}&platform=whatsapp`);
+export async function tenantConfirmAndBind(db: any, conn: any, profileId: string, accountId: string, webhookUrl: string, env: TenantCryptoEnv): Promise<{ ok: boolean; msg: string }> {
+  const apiKey = await decryptTenantKey(conn.api_key, env);
+  const accounts = await zget(apiKey, `/accounts?profileId=${encodeURIComponent(profileId)}&platform=whatsapp`);
   const list = accounts.accounts || [];
   const match = list.find((a: any) => String(a._id || a.id) === accountId);
   if (!match) return { ok: false, msg: "That number was not found on your messaging account. Please try again." };
   const secret = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
   let webhookId = "", webhookOk = false;
   try {
-    const hook = await zpost(conn.api_key, "/webhooks/settings", {
+    const hook = await zpost(apiKey, "/webhooks/settings", {
       name: "revup-" + conn.workspace_id, url: webhookUrl, secret,
       events: ["message.received", "message.delivered", "message.read", "account.disconnected"], profileIds: [profileId],
     });
     webhookId = String(hook.webhook?._id || hook.webhook?.id || "");
-    if (webhookId) { const t = await zpost(conn.api_key, "/webhooks/test", { webhookId }); webhookOk = !!t.success; }
+    if (webhookId) { const t = await zpost(apiKey, "/webhooks/test", { webhookId }); webhookOk = !!t.success; }
   } catch { /* registration failed: still bind, note in last_error */ }
   const phone = String(match.username || match.phoneNumber || "").replace(/^\+/, "");
   await db.query(

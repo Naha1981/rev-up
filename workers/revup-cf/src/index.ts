@@ -1,3 +1,4 @@
+import { decryptTenantKey } from "./tenant-crypto";
 import { connectFailure, saveTenantKey } from "./connect-errors";
 // RevUp on Cloudflare Workers — revenue path. Shares the live Neon DB with the
 // Django app; passwords verify in Postgres (pgcrypto) to stay inside Workers
@@ -13,6 +14,8 @@ import { waitlistAdd, waitlistExpire, waitlistAction, loyaltySettings, loyaltyAc
 
 interface Env {
   DATABASE_URL: string;
+  DJANGO_SECRET_KEY?: string;
+  ENCRYPTION_KEY_SALT?: string;
   PF_MERCHANT_ID: string;
   PF_MERCHANT_KEY: string;
   PF_PASSPHRASE: string;
@@ -1437,14 +1440,14 @@ async function handle(req: Request, env: Env): Promise<Response> {
             if (!key) return redirect("/receptionist/connect?err=" + encodeURIComponent("Paste the key from your messaging account first."));
             const v = await validateTenantKey(key, mem.workspace_id, mem.workspace_name);
             if (v.error) return redirect("/receptionist/connect?err=" + encodeURIComponent(v.error));
-            await saveTenantKey(db, crypto.randomUUID(), mem.workspace_id, key, v.profileId);
+            await saveTenantKey(db, crypto.randomUUID(), mem.workspace_id, key, v.profileId, env);
             return redirect("/receptionist/connect?msg=" + encodeURIComponent("Key saved. Now connect your WhatsApp."));
           }
           if (f.action === "start") {
             if (!conn || !conn.profile_id || conn.status === "needs_attention") return redirect("/receptionist/connect?err=" + encodeURIComponent("Save your API key first."));
             const cb = `${base}/receptionist/connect/callback?ws=${mem.workspace_id}&u=${user.id}&p=${conn.profile_id}`;
             let authUrl = "";
-            try { authUrl = await tenantConnectUrl(conn.api_key, conn.profile_id, cb); }
+            try { authUrl = await tenantConnectUrl(await decryptTenantKey(conn.api_key, env), conn.profile_id, cb); }
             catch (e: any) { return redirect("/receptionist/connect?err=" + encodeURIComponent(await connectFailure(db, mem.workspace_id, e?.status))); }
             await db.query(`UPDATE receptionist_tenantmessagingconnection SET status='connecting', updated_at=now() WHERE workspace_id=$1`, [mem.workspace_id]);
             return new Response(null, { status: 303, headers: { location: authUrl } });
@@ -1482,7 +1485,7 @@ ${conn && conn.status === "connected" && conn.last_error ? `<p class="warn">${es
         if (connected !== "whatsapp" || !profileId || !accountId || profileId !== conn.profile_id)
           return redirect("/receptionist/connect?err=" + encodeURIComponent("The connection came back incomplete. Please try again."));
         try {
-          const r = await tenantConfirmAndBind(db, conn, profileId, accountId, `${base}/webhooks/zernio`);
+          const r = await tenantConfirmAndBind(db, conn, profileId, accountId, `${base}/webhooks/zernio`, env);
           return redirect("/receptionist/connect?" + (r.ok ? "msg" : "err") + "=" + encodeURIComponent(r.msg));
         } catch (e: any) {
           return redirect("/receptionist/connect?err=" + encodeURIComponent("Your number connected, but we could not confirm it yet. Refresh in a moment."));
