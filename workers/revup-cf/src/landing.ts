@@ -178,13 +178,13 @@ export function landingPage(): string {
 <meta property="og:url" content="https://revup.nahalabs.co.za/">
 <meta property="og:title" content="RevUp by NahaLabs - Your WhatsApp employee. Your reputation. Your growth.">
 <meta property="og:description" content="RevUp answers every customer on WhatsApp in seconds and turns happy customers into Google reviews. Built for South African businesses. R499 to R1,999 per month.">
-<meta property="og:image" content="https://revup.nahalabs.co.za/static/brand/revup-og.png">
+<meta property="og:image" content="https://revup.nahalabs.co.za/static/brand/revup-og-v2.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="RevUp by NahaLabs - Your WhatsApp employee. Your reputation. Your growth.">
 <meta name="twitter:description" content="RevUp answers every customer on WhatsApp in seconds and turns happy customers into Google reviews. Built for South African businesses.">
-<meta name="twitter:image" content="https://revup.nahalabs.co.za/static/brand/revup-og.png">
+<meta name="twitter:image" content="https://revup.nahalabs.co.za/static/brand/revup-og-v2.png">
 <style>${STYLE}</style></head><body>
 
 <div class="topbar"><div class="wrap">

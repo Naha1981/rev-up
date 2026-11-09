@@ -1289,7 +1289,7 @@ async function handle(req: Request, env: Env): Promise<Response> {
       if (path === "/static/brand/favicon-16.png") return new Response(Uint8Array.from(atob(FAVICON_16_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/brand/apple-touch-icon.png" || path === "/apple-touch-icon.png") return new Response(Uint8Array.from(atob(APPLE_TOUCH_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/brand/revup-light.png") return new Response(Uint8Array.from(atob(LOGO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
-      if (path === "/static/brand/revup-og.png") return new Response(Uint8Array.from(atob(OG_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
+      if (path === "/static/brand/revup-og.png" || path === "/static/brand/revup-og-v2.png") return new Response(Uint8Array.from(atob(OG_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/qrcode.js") return new Response(QRCODE_LIB, { headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "public, max-age=86400" } });
       const user = await getUser(req, db);
       if (!user && path === "/") return html(landingPage());
@@ -1550,7 +1550,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
       if (path === "/static/brand/favicon-32.png") return new Response(Uint8Array.from(atob(FAVICON_32_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/brand/favicon-16.png") return new Response(Uint8Array.from(atob(FAVICON_16_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/brand/apple-touch-icon.png" || path === "/apple-touch-icon.png") return new Response(Uint8Array.from(atob(APPLE_TOUCH_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
-      if (path === "/static/brand/revup-og.png") return new Response(Uint8Array.from(atob(OG_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
+      if (path === "/static/brand/revup-og.png" || path === "/static/brand/revup-og-v2.png") return new Response(Uint8Array.from(atob(OG_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/brand/revup-light.png") return new Response(Uint8Array.from(atob(LOGO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
 
       if (path === "/onboarding") {
