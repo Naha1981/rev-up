@@ -1,7 +1,13 @@
 // Compatible with apps/common/encryption.py. No plaintext fallback.
-export interface TenantCryptoEnv { DJANGO_SECRET_KEY?: string; ENCRYPTION_KEY_SALT?: string; }
+export interface TenantCryptoEnv { TENANT_FIELD_KEY?: string; DJANGO_SECRET_KEY?: string; ENCRYPTION_KEY_SALT?: string; }
 const encoder = new TextEncoder();
 async function fieldKey(env: TenantCryptoEnv) {
+  // Production can carry only the derived field key, not Django's root secret.
+  if (env.TENANT_FIELD_KEY) {
+    const raw=Uint8Array.from(atob(env.TENANT_FIELD_KEY),c=>c.charCodeAt(0));
+    if(raw.length!==32) throw new Error("Messaging encryption key has invalid length.");
+    return crypto.subtle.importKey("raw",raw,{name:"AES-GCM"},false,["encrypt","decrypt"]);
+  }
   if (!env.DJANGO_SECRET_KEY || !env.ENCRYPTION_KEY_SALT) throw new Error("Messaging encryption configuration is missing.");
   const material = await crypto.subtle.importKey("raw", encoder.encode(env.DJANGO_SECRET_KEY), "HKDF", false, ["deriveKey"]);
   return crypto.subtle.deriveKey({name:"HKDF", hash:"SHA-256", salt:encoder.encode(env.ENCRYPTION_KEY_SALT), info:encoder.encode("brightbean-field-encryption")}, material, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]);

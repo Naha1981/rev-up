@@ -31,3 +31,10 @@ for (const valid of [true,false]) test('send uses decrypted tenant key, no ciphe
   else{await assert.rejects(action,/could not be read securely/);assert.equal(calls.length,0);}
  } finally {globalThis.fetch=original;}
 });
+
+test('production derived-key path decrypts Django-compatible ciphertext',async()=>{
+ assert.equal(await decryptTenantKey(pythonFixture,{TENANT_FIELD_KEY:'dtB5VtOsskvoCtUY0H5PpKTKI6GPJktOPs/1gJ5nN1I='}),clear);
+});
+test('invalid derived-key length fails closed',async()=>{
+ await assert.rejects(()=>decryptTenantKey(pythonFixture,{TENANT_FIELD_KEY:btoa('bad')}),/could not be read securely/);
+});

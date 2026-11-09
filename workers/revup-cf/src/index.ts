@@ -14,6 +14,7 @@ import { waitlistAdd, waitlistExpire, waitlistAction, loyaltySettings, loyaltyAc
 
 interface Env {
   DATABASE_URL: string;
+  TENANT_FIELD_KEY?: string;
   DJANGO_SECRET_KEY?: string;
   ENCRYPTION_KEY_SALT?: string;
   PF_MERCHANT_ID: string;
