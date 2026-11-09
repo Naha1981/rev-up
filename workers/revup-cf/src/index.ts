@@ -1,3 +1,4 @@
+import { connectFailure, saveTenantKey } from "./connect-errors";
 // RevUp on Cloudflare Workers — revenue path. Shares the live Neon DB with the
 // Django app; passwords verify in Postgres (pgcrypto) to stay inside Workers
 // Free CPU limits. No vendor names surface in any HTML.
@@ -1436,19 +1437,15 @@ async function handle(req: Request, env: Env): Promise<Response> {
             if (!key) return redirect("/receptionist/connect?err=" + encodeURIComponent("Paste the key from your messaging account first."));
             const v = await validateTenantKey(key, mem.workspace_id, mem.workspace_name);
             if (v.error) return redirect("/receptionist/connect?err=" + encodeURIComponent(v.error));
-            await db.query(
-              `INSERT INTO receptionist_tenantmessagingconnection(id,workspace_id,api_key,profile_id,status,last_error,created_at,updated_at)
-               VALUES($1,$2,$3,$4,'key_valid','',now(),now())
-               ON CONFLICT (workspace_id) DO UPDATE SET api_key=EXCLUDED.api_key, profile_id=EXCLUDED.profile_id, status='key_valid', last_error='', updated_at=now()`,
-              [crypto.randomUUID(), mem.workspace_id, key, v.profileId]);
+            await saveTenantKey(db, crypto.randomUUID(), mem.workspace_id, key, v.profileId);
             return redirect("/receptionist/connect?msg=" + encodeURIComponent("Key saved. Now connect your WhatsApp."));
           }
           if (f.action === "start") {
-            if (!conn || !conn.profile_id) return redirect("/receptionist/connect?err=" + encodeURIComponent("Save your API key first."));
+            if (!conn || !conn.profile_id || conn.status === "needs_attention") return redirect("/receptionist/connect?err=" + encodeURIComponent("Save your API key first."));
             const cb = `${base}/receptionist/connect/callback?ws=${mem.workspace_id}&u=${user.id}&p=${conn.profile_id}`;
             let authUrl = "";
             try { authUrl = await tenantConnectUrl(conn.api_key, conn.profile_id, cb); }
-            catch (e: any) { return redirect("/receptionist/connect?err=" + encodeURIComponent(e.status === 402 ? "Your messaging plan covers 2 numbers. Add a card in your messaging account to connect more." : "Could not start the connection. Please try again.")); }
+            catch (e: any) { return redirect("/receptionist/connect?err=" + encodeURIComponent(await connectFailure(db, mem.workspace_id, e?.status))); }
             await db.query(`UPDATE receptionist_tenantmessagingconnection SET status='connecting', updated_at=now() WHERE workspace_id=$1`, [mem.workspace_id]);
             return new Response(null, { status: 303, headers: { location: authUrl } });
           }
@@ -1457,13 +1454,14 @@ async function handle(req: Request, env: Env): Promise<Response> {
         const step = conn ? (conn.status === "connected" ? 3 : 2) : 1;
         return html(layout("Connect WhatsApp", `
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}</p>` : ""}
+${!err && conn?.status === "needs_attention" ? `<p class="bad">${esc(conn.last_error || "Paste a fresh messaging key to reconnect.")}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">Connect your own WhatsApp number</h2>
 <p class="mut">Three one-time steps. Your customers then chat with YOUR number, and the receptionist answers them with your business details.</p>
 <h3>1. Create your messaging account ${step > 1 ? '<span class="ok">&#10003;</span>' : ""}</h3>
 <p class="mut">Open a free account with our messaging partner, then copy your API key from its settings.</p>
 <h3>2. Paste your API key ${step > 2 ? '<span class="ok">&#10003;</span>' : ""}</h3>
 ${conn && conn.status === "connected" ? `<p class="ok">Number connected: +${esc(conn.phone_number || "")}</p>` : `<form method="post"><input type="hidden" name="action" value="save_key"><label>API key<input name="api_key" required maxlength="200" autocomplete="off"></label><button>Save key</button></form>`}
-${conn && conn.status !== "connected" ? `<h3>3. Connect WhatsApp</h3><form method="post"><input type="hidden" name="action" value="start"><button class="btn btn-primary">Connect WhatsApp</button><p class="mut">You will scan a QR code with the WhatsApp app on your phone - the same way WhatsApp Web pairs.</p></form>` : ""}
+${conn && conn.status !== "connected" && conn.status !== "needs_attention" ? `<h3>3. Connect WhatsApp</h3><form method="post"><input type="hidden" name="action" value="start"><button class="btn btn-primary">Connect WhatsApp</button><p class="mut">You will scan a QR code with the WhatsApp app on your phone - the same way WhatsApp Web pairs.</p></form>` : ""}
 ${conn && conn.status === "connected" && conn.last_error ? `<p class="warn">${esc(conn.last_error)}</p>` : ""}
 </div>`, user));
       }
