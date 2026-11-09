@@ -970,6 +970,14 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 }
 
 export async function billingPage(db: Pool, user: any, mem: any, base: string, env: Env): Promise<string> {
+  // One payment link per plan. Each tap is a single card payment for one
+  // month - no stored card, no automatic charge. Activation happens when
+  // the payment lands (confirmed against the payment dashboard).
+  const YOCO_LINKS: Record<string, string> = {
+    starter: "https://pay.yoco.com/r/3aokXR",
+    growth: "https://pay.yoco.com/r/YPK6qk",
+    "business-pro": "https://pay.yoco.com/r/RM1dbq",
+  };
   const plans = [
     { slug: "starter", name: "Starter", price: 499, feat: "1 workspace · core publishing" },
     { slug: "growth", name: "Growth", price: 999, feat: "3 workspaces · approvals · reviews" },
@@ -979,15 +987,15 @@ export async function billingPage(db: Pool, user: any, mem: any, base: string, e
 <p style="font-size:26px;margin:0">R${p.price.toLocaleString("en-ZA")}<span class="mut">/month</span></p>
 <p class="mut">${p.feat}</p>
 ${p.slug === mem.plan
-  ? (mem.subscription_status === "active" ? `<p class="pill">current plan</p>` : `<a class="btn btn-primary" href="${pfUrl(env, base, p.slug, mem)}">Activate with PayFast</a>`)
-  : `<a class="btn btn-primary" href="${pfUrl(env, base, p.slug, mem)}">Subscribe with PayFast</a>`}
+  ? (mem.subscription_status === "active" ? `<p class="pill">current plan</p>` : `<a class="btn btn-primary" href="${YOCO_LINKS[p.slug]}" target="_blank" rel="noopener">Activate - pay R${p.price.toLocaleString("en-ZA")}</a>`)
+  : `<a class="btn btn-primary" href="${YOCO_LINKS[p.slug]}" target="_blank" rel="noopener">Pay R${p.price.toLocaleString("en-ZA")}</a>`}
 </div>`).join("");
   return layout("Billing", `
 <p>Plan <b>${esc(mem.plan)}</b> · status <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc(statusLabel(mem.subscription_status))}</span>
 ${mem.payment_reference ? ` · ref <span class="mut">${esc(mem.payment_reference)}</span>` : ""}</p>
 ${mem.activated_at ? `<p class="mut">Active since ${new Date(mem.activated_at).toLocaleDateString("en-ZA")}</p>` : ""}
 <div class="grid">${cards}</div>
-<p class="mut">Payments are processed by PayFast in rand. You can cancel any time.</p>`, user);
+<p class="mut">Tap your plan to pay securely by card, in rand. Each month is a fresh payment - we never charge your card automatically. Your plan activates when your payment lands, usually within a few hours on business days. You can cancel any time.</p>`, user);
 }
 
 // ---------- router ----------
