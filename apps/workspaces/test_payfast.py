@@ -274,3 +274,41 @@ def test_itn_records_payment_row(merchant, db):
     assert row.organization_id == org.id
     assert str(row.amount_gross) == "999.00"
     assert row.status == "COMPLETE"
+
+
+@pytest.mark.django_db
+def test_payment_return_does_not_claim_settlement_or_promote_plan(client):
+    from django.contrib.messages import get_messages
+
+    from apps.organizations.test_billing import _setup
+
+    org, ws, user = _setup(email="return-safety@example.com")
+    client.force_login(user)
+    session = client.session
+    session["billing_checkout_workspace"] = str(ws.id)
+    session.save()
+    response = client.get("/billing/payfast/return/")
+    assert response.status_code == 302
+    assert response.url == f"/workspaces/{ws.id}/billing/"
+    text = " ".join(str(x) for x in get_messages(response.wsgi_request))
+    assert "Payment received" not in text
+    assert "confirmed" in text
+    org.refresh_from_db()
+    assert org.subscription_status == "pending_activation"
+    assert org.plan == "starter"
+
+
+@pytest.mark.django_db
+def test_payment_cancel_returns_to_exact_checkout_workspace(client):
+    from apps.organizations.test_billing import _setup
+
+    org, ws, user = _setup(email="cancel-safety@example.com")
+    client.force_login(user)
+    session = client.session
+    session["billing_checkout_workspace"] = str(ws.id)
+    session.save()
+    response = client.get("/billing/payfast/cancel/")
+    assert response.status_code == 302
+    assert response.url == f"/workspaces/{ws.id}/billing/"
+    org.refresh_from_db()
+    assert org.subscription_status == "pending_activation"
