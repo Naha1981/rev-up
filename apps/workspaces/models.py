@@ -63,3 +63,54 @@ class Workspace(models.Model):
     @property
     def effective_timezone(self):
         return self.timezone or self.organization.default_timezone
+
+
+class AppConnectionAttempt(models.Model):
+    state_hash = models.CharField(max_length=64, primary_key=True)
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="+")
+    user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="+")
+    account_id = models.CharField(max_length=160)
+    auth_config_id = models.CharField(max_length=160)
+    toolkit = models.CharField(max_length=80)
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True)
+
+    class Meta:
+        db_table = "app_connection_attempt"
+
+
+class AppConnectionBinding(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="+")
+    account_id = models.CharField(max_length=160, unique=True)
+    auth_config_id = models.CharField(max_length=160)
+    toolkit = models.CharField(max_length=80)
+    connected_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "app_connection_binding"
+        constraints = [models.UniqueConstraint(fields=["workspace", "toolkit"], name="app_conn_workspace_toolkit")]
+
+
+class AppToolApproval(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="+")
+    user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="+")
+    account_id = models.CharField(max_length=160)
+    tool = models.CharField(max_length=160)
+    version = models.CharField(max_length=32)
+    arguments_json = models.TextField()
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True)
+
+    class Meta:
+        db_table = "app_tool_approval"
+
+
+class AppToolReservation(models.Model):
+    request_id = models.UUIDField(primary_key=True)
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "app_tool_reservation"

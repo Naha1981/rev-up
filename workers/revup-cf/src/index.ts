@@ -1,3 +1,5 @@
+import {AppConnections,type Policy} from './composio';
+import {ConnectionStore} from './connection-store';
 import {cancelRecurring} from './subscription';
 import { JOURNEY_CSS, THEME_SCRIPT, JOURNEY_SCRIPT, journeyNav, toolRow, disclosure, COMMAND_CSS, LEGIBILITY_CSS, SETUP_CSS, FINISH_CSS, commandPalette } from "./journey";
 export {calendarPanel,calendarState,checkCalendarState,calendarEventId,calendarEventBody,calendarConnect,calendarSync} from "./calendar";
@@ -28,6 +30,12 @@ interface Env {
   PF_MERCHANT_KEY: string;
   PF_PASSPHRASE: string;
   PF_SANDBOX?: string;
+  APP_CONNECTIONS_ENABLED?: string;
+  COMPOSIO_API_KEY?: string;
+  COMPOSIO_PROJECT_ID?: string;
+  COMPOSIO_AUTH_CONFIGS?: string;
+  APP_CONNECTIONS_ORIGIN?: string;
+  APP_CONNECTIONS_MONTHLY_CAP?: string;
   GROQ_API_KEY: string;
   OPENROUTER_API_KEY?: string;
   ZERNIO_API_KEY: string;
@@ -1648,7 +1656,11 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
         return html(layout('What kind of business?',`<p class="page-intro">Show the tools that fit your work first.</p><form method="post" action="/business-type"><label>Your business type<select name="industry" required><option value="">Choose your business type</option>${INDUSTRIES.map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label><button>Continue to setup</button></form>`,user));
       }
       if (path === "/setup") return html(await setupPage(db,user,mem));
-      if (["/customers","/work","/growth","/settings"].includes(path)) return html(await journeyHubPage(path.slice(1),user,db,mem));
+      if (["/customers","/work","/growth","/settings"].includes(path)) {
+        let page=await journeyHubPage(path.slice(1),user,db,mem);
+        if(path==='/settings' && env.APP_CONNECTIONS_ENABLED==='true')page=page.replace('</main>','<a class="tool-row" href="/settings/connections">App connections</a></main>');
+        return html(page);
+      }
       if (path === "/") return html(await dashboardPage(db, user, mem, url.searchParams.get("msg") || ""));
       if (path === "/favicon.ico") return new Response(Uint8Array.from(atob(FAVICON_ICO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/x-icon", "cache-control": "public, max-age=86400" } });
       if (path === "/static/brand/favicon-32.png") return new Response(Uint8Array.from(atob(FAVICON_32_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
@@ -2292,6 +2304,37 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
         } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }
       }
 
+      if (path==='/settings/connections' || path.startsWith('/settings/connections/')){
+        if(env.APP_CONNECTIONS_ENABLED!=='true')return html(layout('App connections','<p>Additional app connections are not enabled for this business. Your existing connections have not changed.</p><a class="btn" href="/settings">Back to settings</a>',user));
+        if(!['owner','manager'].includes(mem.workspace_role))return html('Only the business owner or manager can manage app connections.',403);
+        if(env.APP_CONNECTIONS_ORIGIN!==base)return html('Connection address does not match this site.',503);
+        let configs:Record<string,string>={};try{configs=JSON.parse(env.COMPOSIO_AUTH_CONFIGS||'{}')}catch{return html('App connections are not configured.',503)}
+        const names:Record<string,string>={gmail:'Email',googledocs:'Documents',hubspot:'Customer records'};
+        if(!configs || Array.isArray(configs) || typeof configs!=='object' || Object.keys(configs).some(k=>!names[k]))return html('App configuration is not supported.',503);
+        const store=new ConnectionStore(db);
+        const policy:Policy={enabled:true,projectId:env.COMPOSIO_PROJECT_ID||'',apiKey:env.COMPOSIO_API_KEY||'',callbackOrigin:base,authConfigs:configs};
+        const apps=new AppConnections(policy,store.budget(Number(env.APP_CONNECTIONS_MONTHLY_CAP||'0')));
+        if(path==='/settings/connections/start' && req.method==='POST'){
+          if(req.headers.get('origin')!==base)return html('Request did not come from this site.',403);
+          const f=await formData(req);const toolkit=f.toolkit||'';
+          if(!Object.hasOwn(configs,toolkit) || !names[toolkit])return html('App is not enabled.',400);
+          if((await store.list(mem.workspace_id)).some((x:any)=>x.toolkit===toolkit))return html('This app is already connected. Your existing connection was kept.',409);
+          const state=Array.from(crypto.getRandomValues(new Uint8Array(32)),x=>x.toString(16).padStart(2,'0')).join('');
+          try{const started=await apps.start(mem.workspace_id,toolkit,state);await store.rememberAttempt(await sha256hex(state),mem.workspace_id,user.id,started.accountId,configs[toolkit],toolkit);return redirect(started.url)}catch{return html(layout('Connection could not start','<p>No existing connection was changed. Try again later.</p><a class="btn" href="/settings/connections">Back to app connections</a>',user),502)}
+        }
+        if(path==='/settings/connections/callback'){
+          const state=url.searchParams.get('state')||'';
+          if(!/^[a-f0-9]{64}$/.test(state))return html('Connection link is invalid.',400);
+          const hash=await sha256hex(state);const binding=await store.attempt(hash,mem.workspace_id,user.id);
+          if(!binding)return html('Connection link expired or was already used. No connection was changed.',400);
+          try{if(await apps.status(mem.workspace_id,binding)!=='connected')return html('App authorization is not complete. No connection was changed.',409)}catch{return html('App authorization could not be confirmed. No connection was changed.',502)}
+          if(!await store.finish(hash,mem.workspace_id,user.id))return html('Connection link was already used or an earlier connection exists. Existing connection kept.',409);
+          return redirect('/settings/connections');
+        }
+        if(path!=='/settings/connections')return html('Not found',404);
+        const linked=await store.list(mem.workspace_id);
+        return html(layout('App connections',`<p>Connect an app to this business. You choose the permissions on its authorization page. Existing messaging,calendar and social connections are unchanged.</p><div class="tool-list">${Object.keys(configs).map(k=>`<div class="card"><h2>${names[k]}</h2>${linked.some((x:any)=>x.toolkit===k)?'<p>Connected</p>':`<form method="post" action="/settings/connections/start"><input type="hidden" name="toolkit" value="${k}"><button>Connect ${names[k]}</button></form>`}</div>`).join('')||'<p>No additional apps are enabled yet.</p>'}</div><p>Connecting an app does not approve sending messages or changing records. Actions require their own review.</p>`,user));
+      }
       if (path === "/billing/subscription/cancel") {
         if(!['owner','manager'].includes(mem.workspace_role))return html(layout('Not allowed','<p>Only the business owner or manager can cancel billing.</p>',user),403);
         if(!mem.payfast_token)return html(layout('No recurring subscription','<p>No recurring subscription is attached to this business. No plan change was made.</p><a class="btn" href="/billing">Back to billing</a>',user));
@@ -2304,7 +2347,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
           await db.query(`UPDATE organizations_organization SET subscription_status='expired',payfast_token='',updated_at=now() WHERE id=$1 AND payfast_token=$2`,[mem.org_id,mem.payfast_token]);
           return html(layout('Subscription cancelled','<p role="status">Your recurring subscription was cancelled. Automatic payments and plan access have stopped. Your business records have not been deleted.</p><a class="btn" href="/billing">Back to billing</a>',user));
         }
-        return html(layout('Cancel recurring subscription',`<div class="card"><h2>Cancel this business subscription?</h2><p>This stops automatic renewal and plan access when cancellation is confirmed. It does not delete your business records or refund earlier payments.</p><form method="post"><input type="hidden" name="confirmation" value="${confirmation}"><button name="confirm" value="cancel">Yes, cancel recurring subscription</button></form><a class="btn" href="/billing">Keep my subscription</a></div>`,user));
+        return html(layout('Cancel recurring subscription',`<div class="card"><h2>Cancel this business subscription?</h2><p>This stops automatic renewal and plan access when cancellation is confirmed. It does not delete your business records. This cancellation does not issue a refund.</p><form method="post"><input type="hidden" name="confirmation" value="${confirmation}"><button name="confirm" value="cancel">Yes, cancel recurring subscription</button></form><a class="btn" href="/billing">Keep my subscription</a></div>`,user));
       }
       if (path === "/billing") return html(await billingPage(db, user, mem, base, env));
 

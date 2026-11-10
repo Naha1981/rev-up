@@ -24,13 +24,14 @@ export class AppConnections {
   if(!id(workspaceId))throw new Error('Invalid workspace');
   return 'revup_ws_'+workspaceId;
  }
- async start(workspaceId: string, toolkit: string): Promise<{accountId:string;url:string}> {
+ async start(workspaceId: string, toolkit: string, state?: string): Promise<{accountId:string;url:string}> {
   this.ready();
   const auth = Object.hasOwn(this.policy.authConfigs,toolkit) ? this.policy.authConfigs[toolkit] : '';
   if(!id(auth))throw new Error('App is not enabled');
   const origin=new URL(this.policy.callbackOrigin);
   if(origin.protocol!=='https:' || origin.origin!==this.policy.callbackOrigin)throw new Error('Invalid callback origin');
-  const result=await this.call('/connected_accounts/link','POST',{user_id:this.user(workspaceId),auth_config_id:auth,callback_url:origin.origin+'/settings/connections/callback'});
+  if(state && !/^[a-f0-9]{64}$/.test(state))throw new Error('Invalid connection state');
+  const result=await this.call('/connected_accounts/link','POST',{user_id:this.user(workspaceId),auth_config_id:auth,callback_url:origin.origin+'/settings/connections/callback'+(state?'?state='+state:'')});
   const url=new URL(result.redirect_url);
   if(url.protocol!=='https:' || !id(result.connected_account_id))throw new Error('Invalid connection response');
   return {accountId:result.connected_account_id,url:url.href};
@@ -40,9 +41,10 @@ export class AppConnections {
  }
  async status(workspaceId:string,b:Binding):Promise<string>{
   this.ready();this.checkBinding(workspaceId,b);
-  const r=await this.call('/connected_accounts/'+encodeURIComponent(b.accountId));
-  // New API versions may omit user_id. Fail closed until owner-scoped lookup is wired.
-  if(r.user_id!==b.userId || r.id!==b.accountId || r.auth_config?.id!==b.authConfigId || r.toolkit?.slug!==b.toolkit)throw new Error('Connection ownership not confirmed');
+  const query=new URLSearchParams({user_ids:b.userId,connected_account_ids:b.accountId,toolkit_slugs:b.toolkit,auth_config_ids:b.authConfigId,limit:'1'});
+  const result=await this.call('/connected_accounts?'+query.toString());
+  const r=result.items?.find((x:any)=>x.id===b.accountId);
+  if(!r || (r.user_id && r.user_id!==b.userId) || r.auth_config?.id!==b.authConfigId || r.toolkit?.slug!==b.toolkit || r.is_disabled===true || r.auth_config?.is_disabled===true || (r.experimental?.account_type && r.experimental.account_type!=='PRIVATE'))throw new Error('Connection ownership not confirmed');
   return r.status==='ACTIVE'?'connected':'attention_needed';
  }
  async execute(workspaceId:string,b:Binding,grant:ToolGrant,args:Record<string,unknown>,requestId:string):Promise<unknown>{
