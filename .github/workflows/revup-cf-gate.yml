@@ -49,8 +49,8 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/gate"
           npm run build:test --silent
-          node --test --test-reporter=junit test/worker.test.mjs test/freeai.test.mjs test/priceguard.test.mjs test/factrules.test.mjs test/assistant.test.mjs test/socialteam.test.mjs test/chatapp.test.mjs test/menu.test.mjs test/connect-errors.test.mjs test/tenant-crypto.test.mjs > "$RUNNER_TEMP/gate/unit.xml"
-          node --test test/worker.test.mjs test/freeai.test.mjs test/priceguard.test.mjs test/factrules.test.mjs test/assistant.test.mjs test/socialteam.test.mjs test/chatapp.test.mjs test/menu.test.mjs test/connect-errors.test.mjs test/tenant-crypto.test.mjs | tee "$RUNNER_TEMP/gate/worker-unit.tap"
+          node --test --test-reporter=junit test/worker.test.mjs test/freeai.test.mjs test/priceguard.test.mjs test/factrules.test.mjs test/assistant.test.mjs test/socialteam.test.mjs test/chatapp.test.mjs test/menu.test.mjs test/connect-errors.test.mjs test/tenant-crypto.test.mjs test/composio.test.mjs test/subscription.test.mjs > "$RUNNER_TEMP/gate/unit.xml"
+          node --test test/worker.test.mjs test/freeai.test.mjs test/priceguard.test.mjs test/factrules.test.mjs test/assistant.test.mjs test/socialteam.test.mjs test/chatapp.test.mjs test/menu.test.mjs test/connect-errors.test.mjs test/tenant-crypto.test.mjs test/composio.test.mjs test/subscription.test.mjs | tee "$RUNNER_TEMP/gate/worker-unit.tap"
           grep -q "^# fail 0" "$RUNNER_TEMP/gate/worker-unit.tap"
 
       - name: Build deploy artifact (dry-run, no upload)
