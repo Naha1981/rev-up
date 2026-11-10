@@ -438,20 +438,25 @@ export async function opportunityAction(db: Pool, ws: string, id: string, action
 }
 
 export async function opportunityDraftCampaign(db: Pool, ws: string, id: string): Promise<void> {
-  const o = await db.query(`SELECT * FROM receptionist_marketopportunity WHERE id=$1 AND workspace_id=$2`, [id, ws]);
-  const opp = o.rows[0];
-  if (!opp) throw new Error("Opportunity not found.");
-  if (opp.campaign_id) throw new Error("A draft already exists for this one.");
-  const body = DRAFT_BODIES[opp.kind];
-  if (!body) throw new Error("No draft available for this opportunity.");
-  const segment = ["promo", "demand"].includes(opp.kind) ? "dormant" : "all";
-  const campId = crypto.randomUUID();
-  await db.query(
-    `INSERT INTO receptionist_campaign(id,workspace_id,name,segment,body_a,body_b,status,created_at)
-     VALUES($1,$2,$3,$4,$5,'','draft',now())`,
-    [campId, ws, `Revenue: ${opp.title}`.slice(0, 120), segment, body]);
-  await db.query(
-    `UPDATE receptionist_marketopportunity SET campaign_id=$1, status='acted', updated_at=now() WHERE id=$2`, [campId, id]);
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const o = await client.query(`SELECT * FROM receptionist_marketopportunity WHERE id=$1 AND workspace_id=$2 FOR UPDATE`, [id, ws]);
+    const opp = o.rows[0];
+    if (!opp) throw new Error("Opportunity not found.");
+    if (opp.campaign_id) throw new Error("A draft already exists for this one.");
+    const body = DRAFT_BODIES[opp.kind];
+    if (!body) throw new Error("No draft available for this opportunity.");
+    const segment = ["promo", "demand"].includes(opp.kind) ? "dormant" : "all";
+    const campId = crypto.randomUUID();
+    await client.query(
+      `INSERT INTO receptionist_campaign(id,workspace_id,name,segment,body_a,body_b,status,created_at)
+       VALUES($1,$2,$3,$4,$5,'','draft',now())`,
+      [campId, ws, `Revenue: ${opp.title}`.slice(0, 120), segment, body]);
+    await client.query(
+      `UPDATE receptionist_marketopportunity SET campaign_id=$1, status='acted', updated_at=now() WHERE id=$2 AND workspace_id=$3`, [campId, id, ws]);
+    await client.query("COMMIT");
+  } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }
 }
 
 // ---------- owner support assistant ----------
