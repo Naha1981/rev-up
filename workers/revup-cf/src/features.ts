@@ -4,14 +4,21 @@ import { deliver, OPT_OUT_FOOTER } from "./reviews";
 
 // ---------- waitlist ----------
 export async function waitlistAdd(db: Pool, ws: string, waId: string, name: string, partySize: number, wantedTime: string): Promise<void> {
-  const c = await db.query(
+  if (!Number.isSafeInteger(partySize) || partySize < 1 || partySize > 32767) throw new Error("Enter a whole party size from 1 to 32767.");
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+  const c = await client.query(
     `INSERT INTO receptionist_contact(id,workspace_id,wa_id,name,tags,needs_human,opted_out,zernio_conversation_id,issue_note,review_status,dietary_notes,is_vip,notes,total_spend,visit_count,created_at,updated_at)
      VALUES($1,$2,$3,$4,'[]'::jsonb,false,false,'','','new','',false,'',0,0,now(),now())
      ON CONFLICT (workspace_id, wa_id) DO UPDATE SET name=COALESCE(NULLIF(EXCLUDED.name,''), receptionist_contact.name), updated_at=now()
      RETURNING id`, [crypto.randomUUID(), ws, waId, name]);
-  await db.query(
+  await client.query(
     `INSERT INTO receptionist_waitlistentry(id,workspace_id,contact_id,party_size,wanted_time,status,offer_minutes,notes,created_at)
-     VALUES($1,$2,$3,$4,$5,'waiting',15,'',now())`, [crypto.randomUUID(), ws, c.rows[0].id, partySize || 2, wantedTime.slice(0, 200)]);
+     VALUES($1,$2,$3,$4,$5,'waiting',15,'',now())`, [crypto.randomUUID(), ws, c.rows[0].id, partySize, wantedTime.slice(0, 200)]);
+    await client.query("COMMIT");
+  } catch (e) { await client.query("ROLLBACK"); throw e; }
+  finally { client.release(); }
 }
 
 export async function waitlistExpire(db: Pool, ws: string): Promise<void> {
@@ -24,7 +31,7 @@ export async function waitlistAction(db: Pool, ws: string, id: string, action: s
   if (action === "offer")
     return !!(await db.query(`UPDATE receptionist_waitlistentry SET status='offered', offered_at=now() WHERE id=$1 AND workspace_id=$2 AND status='waiting'`, [id, ws])).rowCount;
   if (action === "accept")
-    return !!(await db.query(`UPDATE receptionist_waitlistentry SET status='accepted' WHERE id=$1 AND workspace_id=$2 AND status='offered'`, [id, ws])).rowCount;
+    return !!(await db.query(`UPDATE receptionist_waitlistentry SET status='accepted' WHERE id=$1 AND workspace_id=$2 AND status='offered' AND offered_at >= now() - (offer_minutes || ' minutes')::interval`, [id, ws])).rowCount;
   if (action === "cancel")
     return !!(await db.query(`UPDATE receptionist_waitlistentry SET status='cancelled' WHERE id=$1 AND workspace_id=$2 AND status IN ('waiting','offered')`, [id, ws])).rowCount;
   return false;

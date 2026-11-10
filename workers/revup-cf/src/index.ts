@@ -2003,7 +2003,10 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
           const f = await formData(req);
           const wa = String(f.wa_id || "").replace(/\D/g, "");
           if (!wa) return redirect("/waitlist");
-          await waitlistAdd(db, mem.workspace_id, wa, String(f.name || "").trim(), Number(f.party_size) || 2, String(f.wanted_time || "").trim());
+          const size = boundedWhole(f.party_size, 1, 2, 32767);
+          if (size === null) return redirect("/waitlist?msg=" + encodeURIComponent("Not added. Enter a whole party size from 1 to 32767."));
+          try { await waitlistAdd(db, mem.workspace_id, wa, String(f.name || "").trim(), size, String(f.wanted_time || "").trim()); }
+          catch { return redirect("/waitlist?msg=" + encodeURIComponent("Not added. The waitlist could not be saved. Try again.")); }
           return redirect("/waitlist?msg=" + encodeURIComponent("Added to the waitlist."));
         }
         return html(await waitlistPage(db, user, mem, url.searchParams.get("msg") || ""));
