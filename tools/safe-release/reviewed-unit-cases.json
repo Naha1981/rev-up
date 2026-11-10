@@ -71,6 +71,8 @@
  "test::parseReview: pass boolean + note required",
  "test::pkceS256: RFC 7636 appendix B vector",
  "test::popiaSnippet: caps length, collapses whitespace",
+ "test::post draft with no selected image adds no attachment",
+ "test::post drafting keeps the selected image in both forms",
  "test::posts DRAFT_RULES: never invent facts, WhatsApp employee voice, no AI, no vendors, ZAR",
  "test::primary 429 advances once to the free secondary, output schema-validated",
  "test::primary 500 advances once to the free secondary, output schema-validated",
