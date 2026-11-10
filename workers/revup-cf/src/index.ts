@@ -1930,6 +1930,8 @@ ${calendarPanel(calendar,calendarConfigured(env))}
       const bact = /^\/bookings\/([0-9a-f-]{36})\/(confirm|move|done|cancel)$/.exec(path);
       if (bact && req.method === "POST") {
         if(req.headers.get("origin")!==base)return html("Booking request did not come from this site.",403);
+        // Serialise booking effects for this workspace, including provider sync.
+        const runBooking=async(db:Pool):Promise<Response>=>{
         const own = await db.query(`SELECT b.*,c.name AS contact_name FROM receptionist_booking b JOIN receptionist_contact c ON c.id=b.contact_id WHERE b.id=$1 AND b.workspace_id=$2`, [bact[1], mem.workspace_id]);
         const b = own.rows[0];
         if (!b) return redirect("/bookings");
@@ -1965,6 +1967,16 @@ ${calendarPanel(calendar,calendarConfigured(env))}
           return redirect("/bookings?msg=" + encodeURIComponent("Booking cancelled."));
         }
         return redirect("/bookings");
+        };
+        const client=await db.connect();
+        try {
+          await client.query('BEGIN');
+          await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[mem.workspace_id]);
+          const response=await runBooking(client as unknown as Pool);
+          await client.query('COMMIT');
+          return response;
+        } catch(e) {await client.query('ROLLBACK');throw e;}
+        finally {client.release();}
       }
 
       if (path === "/waitlist") {
