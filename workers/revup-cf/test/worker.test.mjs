@@ -418,3 +418,14 @@ test('landing text passes AA contrast on its light background',()=>{
  assert.ok(!/font-size:(8|9|9\.5|10|10\.5|11)px/.test(h));
  assert.ok(h.includes('.faq h2 [style*="--orange-text"]'));
 });
+
+test('onboarding reads saved goals from the existing text-field JSON contract',async()=>{
+ const {onboardingPage}=await import('../dist-test/index.mjs');
+ const db={query:async q=>({rows:q.includes('businessprofile')?[{custom_rules:JSON.stringify({goals:['leads','social']})}]:[{}]})};
+ const h=await onboardingPage(db,{}, {workspace_id:'synthetic',plan:'business-pro'});
+ assert.match(h,/name="goal_leads" checked/);assert.match(h,/name="goal_social" checked/);
+});
+test('onboarding stores goals in custom rules, not operating hours',async()=>{
+ const {readFileSync}=await import('node:fs');const s=readFileSync(new URL('../src/index.ts',import.meta.url),'utf8');
+ assert.ok(s.includes("VALUES($1,$2,$3,$4,'{}'::jsonb,'{}'::jsonb,'{}'::jsonb,'','',$6,$5,true,true,2,'reviews',now(),now())"));
+});

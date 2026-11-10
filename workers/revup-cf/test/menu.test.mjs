@@ -82,3 +82,9 @@ test('createOrder: totals from server-side prices only, quantities clamped, item
   assert.equal(ins.order[2], 'Sipho');
   assert.equal(ins.order[4], 'no chilli');
 });
+
+test('order database failure is not reported as a successful duplicate',async()=>{
+ let n=0;
+ const db={query:async()=>{n++;if(n===1)return {rows:[{id:'dish',name:'Fictional',price:10,is_available:true}]};throw Error('database write failed');}};
+ await assert.rejects(createOrder(db,'workspace',{name:'Fictional',contact:'000','item_dish':'1'},'test'),/database write failed/);
+});

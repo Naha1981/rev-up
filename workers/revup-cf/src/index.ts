@@ -484,7 +484,9 @@ export async function onboardingPage(db: Pool, user: any, mem: any, msg = ""): P
   const b = bp.rows[0] || {};
   const w = await db.query(`SELECT industry, website_url, timezone FROM workspaces_workspace WHERE id=$1`, [mem.workspace_id]);
   const ws = w.rows[0] || {};
-  const savedGoals: string[] = Array.isArray(b.custom_rules?.goals) ? b.custom_rules.goals : [];
+  let rules: any = b.custom_rules || {};
+  if (typeof rules === "string") { try { rules = JSON.parse(rules); } catch { rules = {}; } }
+  const savedGoals: string[] = Array.isArray(rules.goals) ? rules.goals : [];
   const rec = recommendPlan(savedGoals);
   const cur = mem.plan || rec;
   return layout("Onboarding", `
@@ -1660,7 +1662,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
           await client.query(`UPDATE organizations_organization SET plan=$1, goals=$3::jsonb, updated_at=now() WHERE id=$2`, [plan, mem.org_id, JSON.stringify(goals)]);
             await client.query(
               `INSERT INTO receptionist_businessprofile(id,workspace_id,business_name,industry,operating_hours,pricing_data,banking_details,payment_link_url,emergency_contact_phone,custom_rules,google_review_url,is_active,review_requests_enabled,service_reminder_days,revenue_mode,created_at,updated_at)
-               VALUES($1,$2,$3,$4,$6::jsonb,'{}'::jsonb,'{}'::jsonb,'','','',$5,true,true,2,'reviews',now(),now())
+               VALUES($1,$2,$3,$4,'{}'::jsonb,'{}'::jsonb,'{}'::jsonb,'','',$6,$5,true,true,2,'reviews',now(),now())
                ON CONFLICT (workspace_id) DO UPDATE SET business_name=EXCLUDED.business_name, industry=EXCLUDED.industry,
                  google_review_url=EXCLUDED.google_review_url, custom_rules=EXCLUDED.custom_rules, updated_at=now()`,
               [crypto.randomUUID(), mem.workspace_id, f.business_name || mem.org_name, f.industry || "", f.google_review_url || "", JSON.stringify({ goals })]);
