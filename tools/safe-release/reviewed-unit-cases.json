@@ -40,6 +40,7 @@
  "test::landing: ZAR pricing, all three monthly plans",
  "test::landing: core sections present",
  "test::landing: no internal or vendor terms, no banned pricing wording",
+ "test::lead pipeline stacks rows and stage controls at phone width",
  "test::live: /health ok with db",
  "test::live: tracked link redirects and counts",
  "test::live: webhook dedupes a replayed event id",

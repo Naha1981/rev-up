@@ -284,3 +284,14 @@ test('WiFi card grid permits phone-width tracks without intrinsic overflow', asy
  assert.ok(src.includes('.wifi-card{box-sizing:border-box;width:148mm;max-width:100%'));
  assert.ok(src.includes('.wc-net{overflow-wrap:anywhere;'));
 });
+
+test('lead pipeline stacks rows and stage controls at phone width',async()=>{
+ const {leadPipelinePage}=await import('../dist-test/index.mjs');
+ const db={query:async q=>({rows:q.includes('SELECT * FROM frontdesk_lead')?[{id:'00000000-0000-4000-8000-000000000001',name:'Synthetic QA',contact:'qa@example.invalid',message:'Private test',stage:'new',value_cents:0,created_at:'2026-11-10T00:00:00Z'}]:[]})};
+ const page=await leadPipelinePage(db,{_cur_ws:'Synthetic QA'},{workspace_id:'00000000-0000-4000-8000-000000000002'});
+ assert.ok(page.includes('class="rtable lead-pipeline"'));
+ assert.ok(page.includes('class="lead-stage-form"'));
+ assert.ok(page.includes('data-label="Stage and value"'));
+ assert.ok(page.includes('flex-wrap:wrap'));
+ assert.ok(page.includes('qa@example.invalid'));
+});

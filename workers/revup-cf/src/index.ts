@@ -830,6 +830,39 @@ async function intakeBoards(db: Pool, mem: any): Promise<string> {
   return h;
 }
 
+export async function leadPipelinePage(db: Pool,user: any,mem: any): Promise<string> {
+        const leads = await db.query(`SELECT * FROM frontdesk_lead WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 200`, [mem.workspace_id]);
+        const drafts = await db.query(`SELECT * FROM frontdesk_followup_draft WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 100`, [mem.workspace_id]);
+        const totals = await db.query(`SELECT stage, count(*) c, coalesce(sum(value_cents),0) v FROM frontdesk_lead WHERE workspace_id=$1 GROUP BY stage`, [mem.workspace_id]);
+        const tmap: Record<string, any> = {}; for (const t of totals.rows) tmap[t.stage] = t;
+        const STAGES = ["new", "contacted", "quoted", "won", "lost"];
+        const summary = STAGES.map((s) => `<div class="card"><h2 style="text-transform:capitalize">${s}</h2><p class="stat">${tmap[s]?.c || 0}</p><p class="mut">R${((tmap[s]?.v || 0) / 100).toLocaleString("en-ZA")}</p></div>`).join("");
+        const byLead: Record<string, any[]> = {}; for (const d of drafts.rows) (byLead[d.lead_id] = byLead[d.lead_id] || []).push(d);
+        const rows = leads.rows.map((l: any) => {
+          const ds = (byLead[l.id] || []).map((d: any) => `<div style="border:1px solid var(--line);border-radius:8px;padding:8px;margin:6px 0">
+<div class="mut" style="font-size:13px">Follow-up draft · ${esc(d.status)} · ${new Date(d.created_at).toLocaleString("en-ZA")}</div>
+<div style="white-space:pre-wrap">${esc(d.body)}</div>
+${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/approve" style="margin-top:6px"><button>Mark approved</button></form>` : ""}</div>`).join("");
+          return `<tr>
+<td data-label="Lead"><b>${esc(l.name)}</b><br><span class="mut">${esc(l.contact)}</span></td>
+<td data-label="Enquiry + follow-ups">${esc(l.message.slice(0, 100))}${ds}</td>
+<td data-label="Stage and value"><form method="post" action="/frontdesk/${l.id}/save" class="lead-stage-form">
+<select name="stage">${STAGES.map((s) => `<option${l.stage === s ? " selected" : ""}>${s}</option>`).join("")}</select>
+<input name="value" type="number" min="0" step="0.01" value="${(l.value_cents / 100).toFixed(2)}" style="width:90px" title="Value (ZAR)">
+<button>Save</button></form>
+<form method="post" action="/frontdesk/${l.id}/draft" style="margin-top:6px"><button>Draft follow-up</button></form></td>
+<td class="mut" data-label="Received">${new Date(l.created_at).toLocaleString("en-ZA")}</td></tr>`;
+        }).join("");
+        return layout("Leads", `
+<style>
+.lead-stage-form{display:flex;gap:6px;align-items:center}
+@media(max-width:640px){.lead-pipeline{table-layout:fixed}.lead-pipeline td{overflow-wrap:anywhere}.lead-pipeline td::before{content:attr(data-label);display:block;font-size:12px;font-weight:600;color:var(--ink3);margin-top:8px}.lead-stage-form{flex-wrap:wrap}.lead-stage-form select{width:100%;min-width:0}.lead-stage-form input{max-width:calc(100% - 95px)}.lead-pipeline form button{max-width:100%}}
+</style>
+<p class="mut">Your public enquiry form: <a href="/f/${mem.workspace_id}" target="_blank" rel="noopener">/f/${mem.workspace_id.slice(0, 8)}…</a> - share it anywhere. Enquiries land here and in your inbox.</p>
+<div class="grid">${summary}</div>
+<div class="card">${leads.rows.length ? `<table class="rtable lead-pipeline"><tr><th>Lead</th><th>Enquiry + follow-ups</th><th>Stage · value (ZAR)</th><th>When</th></tr>${rows}</table>` : `<p class="mut">No enquiries yet. Share your enquiry form link to start capturing leads.</p>`}</div>`, user);
+}
+
 async function inboxPage(db: Pool, user: any, mem: any): Promise<string> {
   const r = await db.query(
     `SELECT c.id, c.name, c.wa_id, count(m.id) AS msgs, max(m.created_at) AS last_at,
@@ -1597,32 +1630,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
         if (mem.plan !== "business-pro" || mem.subscription_status !== "active") return html(layout("Leads", `
 <div class="card"><h2>Leads is a Business Pro feature</h2>
 <p>Capture website enquiries, work a shared lead pipeline, and send considered follow-ups. <a href="/billing">Upgrade to Business Pro - R1,999/month</a>.</p></div>`, user));
-        const leads = await db.query(`SELECT * FROM frontdesk_lead WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 200`, [mem.workspace_id]);
-        const drafts = await db.query(`SELECT * FROM frontdesk_followup_draft WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 100`, [mem.workspace_id]);
-        const totals = await db.query(`SELECT stage, count(*) c, coalesce(sum(value_cents),0) v FROM frontdesk_lead WHERE workspace_id=$1 GROUP BY stage`, [mem.workspace_id]);
-        const tmap: Record<string, any> = {}; for (const t of totals.rows) tmap[t.stage] = t;
-        const STAGES = ["new", "contacted", "quoted", "won", "lost"];
-        const summary = STAGES.map((s) => `<div class="card"><h2 style="text-transform:capitalize">${s}</h2><p class="stat">${tmap[s]?.c || 0}</p><p class="mut">R${((tmap[s]?.v || 0) / 100).toLocaleString("en-ZA")}</p></div>`).join("");
-        const byLead: Record<string, any[]> = {}; for (const d of drafts.rows) (byLead[d.lead_id] = byLead[d.lead_id] || []).push(d);
-        const rows = leads.rows.map((l: any) => {
-          const ds = (byLead[l.id] || []).map((d: any) => `<div style="border:1px solid var(--line);border-radius:8px;padding:8px;margin:6px 0">
-<div class="mut" style="font-size:13px">Follow-up draft · ${esc(d.status)} · ${new Date(d.created_at).toLocaleString("en-ZA")}</div>
-<div style="white-space:pre-wrap">${esc(d.body)}</div>
-${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/approve" style="margin-top:6px"><button>Mark approved</button></form>` : ""}</div>`).join("");
-          return `<tr>
-<td><b>${esc(l.name)}</b><br><span class="mut">${esc(l.contact)}</span></td>
-<td>${esc(l.message.slice(0, 100))}${ds}</td>
-<td><form method="post" action="/frontdesk/${l.id}/save" style="display:flex;gap:6px;align-items:center">
-<select name="stage">${STAGES.map((s) => `<option${l.stage === s ? " selected" : ""}>${s}</option>`).join("")}</select>
-<input name="value" type="number" min="0" step="0.01" value="${(l.value_cents / 100).toFixed(2)}" style="width:90px" title="Value (ZAR)">
-<button>Save</button></form>
-<form method="post" action="/frontdesk/${l.id}/draft" style="margin-top:6px"><button>Draft follow-up</button></form></td>
-<td class="mut">${new Date(l.created_at).toLocaleString("en-ZA")}</td></tr>`;
-        }).join("");
-        return html(layout("Leads", `
-<p class="mut">Your public enquiry form: <a href="/f/${mem.workspace_id}" target="_blank" rel="noopener">/f/${mem.workspace_id.slice(0, 8)}…</a> - share it anywhere. Enquiries land here and in your inbox.</p>
-<div class="grid">${summary}</div>
-<div class="card">${leads.rows.length ? `<table><tr><th>Lead</th><th>Enquiry + follow-ups</th><th>Stage · value (ZAR)</th><th>When</th></tr>${rows}</table>` : `<p class="mut">No enquiries yet. Share your enquiry form link to start capturing leads.</p>`}</div>`, user));
+        return html(await leadPipelinePage(db,user,mem));
       }
 
       const fsave = /^\/frontdesk\/([0-9a-f-]{36})\/save$/.exec(path);
