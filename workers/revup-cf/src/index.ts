@@ -1830,20 +1830,24 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
       const ideaWrite = /^\/team\/idea\/([0-9a-f-]{36})\/write$/.exec(path);
       if (ideaWrite && req.method === "POST") {
         await ensureSocialTeamSchema(db);
-        const ir = await db.query(`SELECT id, title, angle, rationale, status FROM socialteam_idea WHERE id=$1 AND workspace_id=$2`, [ideaWrite[1], mem.workspace_id]);
-        const idea = ir.rows[0];
-        if (!idea || idea.status !== "fresh") return redirect("/team");
+        const client = await db.connect();
         try {
-          const bp = await db.query(`SELECT business_name FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [mem.workspace_id]);
+          await client.query("BEGIN");
+          const ir = await client.query(`SELECT id, title, angle, rationale, status FROM socialteam_idea WHERE id=$1 AND workspace_id=$2 FOR UPDATE`, [ideaWrite[1], mem.workspace_id]);
+          const idea = ir.rows[0];
+          if (!idea || idea.status !== "fresh") { await client.query("ROLLBACK"); return redirect("/team"); }
+          const bp = await client.query(`SELECT business_name FROM receptionist_businessprofile WHERE workspace_id=$1 AND is_active LIMIT 1`, [mem.workspace_id]);
           const business = bp.rows[0]?.business_name || mem.org_name || "local business";
           const pieceId = crypto.randomUUID();
-          await db.query(`INSERT INTO socialteam_piece(id, workspace_id, idea_id) VALUES($1,$2,$3)`, [pieceId, mem.workspace_id, idea.id]);
-          await producePiece(env, db, mem.workspace_id, pieceId, business, idea);
-          await db.query(`UPDATE socialteam_idea SET status='used', updated_at=now() WHERE id=$1`, [idea.id]);
+          await client.query(`INSERT INTO socialteam_piece(id, workspace_id, idea_id) VALUES($1,$2,$3)`, [pieceId, mem.workspace_id, idea.id]);
+          await producePiece(env, client as any, mem.workspace_id, pieceId, business, idea);
+          await client.query(`UPDATE socialteam_idea SET status='used', updated_at=now() WHERE id=$1 AND workspace_id=$2`, [idea.id, mem.workspace_id]);
+          await client.query("COMMIT");
           return redirect("/team?msg=" + encodeURIComponent("Written and checked - ready for your eye below."));
         } catch (e: any) {
+          await client.query("ROLLBACK");
           return redirect("/team?msg=" + encodeURIComponent("Writing failed (" + String(e?.message || e) + ") - try again shortly."));
-        }
+        } finally { client.release(); }
       }
 
       const ideaPark = /^\/team\/idea\/([0-9a-f-]{36})\/park$/.exec(path);
