@@ -1,0 +1,6 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {boundedMoney,boundedWhole} from '../dist-test/numeric-inputs.mjs';
+test('menu money rejects nonfinite, negative, missing and overflow values',()=>{for(const v of [undefined,'','NaN','Infinity','1e309','-1','100000000','99999999.999'])assert.equal(boundedMoney(v),null,String(v))});
+test('menu money accepts representable boundaries and ordinary prices',()=>{for(const v of ['0','19.95','99999999.99','0.005'])assert.equal(boundedMoney(v),Number(v))});
+test('whole-number rules reject fractions, nonfinite, negative and integer overflow',()=>{for(const v of ['1.5','Infinity','NaN','1e309','-1','2147483648'])assert.equal(boundedWhole(v,0,0),null,v)});
+test('whole-number rules preserve defaults and valid values',()=>{assert.equal(boundedWhole('',0,25),25);assert.equal(boundedWhole(undefined,0,25),25);assert.equal(boundedWhole('0',0,25),0);assert.equal(boundedWhole('2147483647',0,0),2147483647)});
+test('voucher validity rejects zero and dates beyond a century',()=>{assert.equal(boundedWhole('0',1,90,36500),null);assert.equal(boundedWhole('36501',1,90,36500),null);assert.equal(boundedWhole('36500',1,90,36500),36500)});

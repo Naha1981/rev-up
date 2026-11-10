@@ -1,3 +1,4 @@
+import { boundedMoney, boundedWhole } from "./numeric-inputs";
 import {captureEnquiry} from "./enquiries";
 import {hasWorkspacePermission,requiredWorkspacePermission} from "./permissions";
 import { JOURNEY_CSS, THEME_SCRIPT, JOURNEY_SCRIPT, journeyNav, toolRow, disclosure, COMMAND_CSS, LEGIBILITY_CSS, SETUP_CSS, FINISH_CSS, commandPalette } from "./journey";
@@ -2016,10 +2017,12 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
       if (path === "/loyalty") return html(await loyaltyPage(db, user, mem, url.searchParams.get("msg") || ""));
       if (path === "/loyalty/settings" && req.method === "POST") {
         const f = await formData(req);
+        const values = [boundedWhole(f.points_per_visit, 0, 0), boundedWhole(f.welcome_bonus, 0, 0), boundedWhole(f.points_for_voucher, 1, 100), boundedWhole(f.voucher_value_rand, 1, 50), boundedWhole(f.voucher_valid_days, 1, 90, 36500)];
+        if (values.some(v => v === null)) return redirect("/loyalty?msg=" + encodeURIComponent("Rules not saved. Use whole numbers within range; voucher validity must be 1 to 36500 days."));
         await loyaltySettings(db, mem.workspace_id);
         await db.query(
           `UPDATE receptionist_loyaltysettings SET enabled=$1, points_per_visit=$2, welcome_bonus=$3, points_for_voucher=$4, voucher_value_rand=$5, voucher_valid_days=$6 WHERE workspace_id=$7`,
-          [f.enabled === "on", Math.max(0, Number(f.points_per_visit) || 0), Math.max(0, Number(f.welcome_bonus) || 0), Math.max(1, Number(f.points_for_voucher) || 100), Math.max(1, Number(f.voucher_value_rand) || 50), Math.max(1, Number(f.voucher_valid_days) || 90), mem.workspace_id]);
+          [f.enabled === "on", ...values, mem.workspace_id]);
         return redirect("/loyalty?msg=" + encodeURIComponent("Rules saved."));
       }
       if (path === "/loyalty/vouchers/new" && req.method === "POST") {
@@ -2046,14 +2049,16 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
       if (path === "/menu/items" && req.method === "POST") {
         const f = await formData(req);
         const name = String(f.name || "").trim().slice(0, 120);
-        const price = Number(f.price);
-        if (!name || !(price >= 0)) return redirect("/menu?msg=" + encodeURIComponent("A dish needs a name and a price."));
+        const price = boundedMoney(f.price);
+        if (!name || price === null) return redirect("/menu?msg=" + encodeURIComponent("Dish not saved. Enter a name and a price from R0 to R99999999.99."));
         const catId = /^[0-9a-f-]{36}$/.test(String(f.category_id || "")) ? String(f.category_id) : null;
         if (catId) {
           const own = await db.query(`SELECT 1 FROM menus_category WHERE id=$1 AND workspace_id=$2`, [catId, mem.workspace_id]);
           if (!own.rows[0]) return redirect("/menu");
         }
-        const cost = f.food_cost !== undefined && String(f.food_cost).trim() !== "" && Number(f.food_cost) >= 0 ? Number(f.food_cost) : null;
+        const hasCost = f.food_cost !== undefined && String(f.food_cost).trim() !== "";
+        const cost = hasCost ? boundedMoney(f.food_cost) : null;
+        if (hasCost && cost === null) return redirect("/menu?msg=" + encodeURIComponent("Dish not saved. Food cost must be from R0 to R99999999.99."));
         await db.query(
           `INSERT INTO menus_item(id,workspace_id,category_id,name,description,price,food_cost,dietary,is_available,is_special,position,created_at,updated_at)
            VALUES($1,$2,$3,$4,$5,$6,$7,'[]'::jsonb,true,$8,COALESCE((SELECT max(position)+1 FROM menus_item WHERE workspace_id=$2),0),now(),now())`,
