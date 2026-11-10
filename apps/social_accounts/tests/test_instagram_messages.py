@@ -218,7 +218,7 @@ def test_different_meta_apps_do_not_share_subscriptions(instagram_account, organ
     from apps.organizations.models import Organization
     from apps.workspaces.models import Workspace
 
-    other_org = Organization.objects.create(name="Other org")
+    other_org = Organization.objects.create(subscription_status="active", name="Other org")
     workspace = Workspace.objects.create(name="Other workspace", organization=other_org)
     SocialAccount.objects.create(
         workspace=workspace,

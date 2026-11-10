@@ -55,11 +55,11 @@ class Organization(models.Model):
         # verified ITN flips it to ACTIVE.
         PENDING_ACTIVATION = "pending_activation", "Activation pending"
 
-    TRIAL_DAYS = 7
+    TRIAL_DAYS = 0
 
     plan = models.CharField(max_length=20, choices=Plan.choices, default=Plan.STARTER)
     subscription_status = models.CharField(
-        max_length=32, choices=SubscriptionStatus.choices, default=SubscriptionStatus.TRIAL
+        max_length=32, choices=SubscriptionStatus.choices, default=SubscriptionStatus.PENDING_ACTIVATION
     )
     trial_started_at = models.DateTimeField(blank=True, null=True)
     payment_reference = models.CharField(max_length=20, blank=True, default="")
@@ -109,20 +109,14 @@ class Organization(models.Model):
 
     def trial_state(self, now=None):
         """(status, day 1-based, days_left). Active orgs short-circuit."""
-        from django.utils import timezone
-
         if self.subscription_status == self.SubscriptionStatus.ACTIVE:
             return (self.SubscriptionStatus.ACTIVE, self.TRIAL_DAYS, 0)
         if self.subscription_status == self.SubscriptionStatus.EXPIRED:
             return (self.SubscriptionStatus.EXPIRED, self.TRIAL_DAYS, 0)
         if self.subscription_status == self.SubscriptionStatus.PENDING_ACTIVATION:
             return (self.SubscriptionStatus.PENDING_ACTIVATION, self.TRIAL_DAYS, 0)
-        now = now or timezone.now()
-        start = self.trial_started_at or self.created_at or now
-        elapsed = max(0, (now - start).days)
-        if elapsed >= self.TRIAL_DAYS:
-            return (self.SubscriptionStatus.EXPIRED, self.TRIAL_DAYS, 0)
-        return (self.SubscriptionStatus.TRIAL, elapsed + 1, self.TRIAL_DAYS - elapsed)
+        # Legacy early-access rows require payment. No time-limited free access.
+        return (self.SubscriptionStatus.PENDING_ACTIVATION, 0, 0)
 
     def __str__(self):
         return self.name

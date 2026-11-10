@@ -6,9 +6,9 @@
     <a href="{% url 'workspaces:settings' workspace.id %}" class="text-sm font-medium text-blue-600">Settings</a>
   </div>
 
-  {% if status == "trial" %}
+  {% if status == "pending_activation" or status == "trial" %}
   <div class="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-    Early access: your last {{ days_left }} day{{ days_left|pluralize }} - pick a plan below to keep everything running.
+    Payment needed. Choose a monthly plan and make your first payment to activate your business.
   </div>
   {% elif status == "expired" %}
   <div class="mt-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">

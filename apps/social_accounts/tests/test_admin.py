@@ -25,7 +25,7 @@ def workspace(db):
     from apps.organizations.models import Organization
     from apps.workspaces.models import Workspace
 
-    org = Organization.objects.create(name="Admin Test Org")
+    org = Organization.objects.create(subscription_status="active", name="Admin Test Org")
     return Workspace.objects.create(organization=org, name="Admin Test WS")
 
 

@@ -27,7 +27,7 @@ PROPOSED_LOCAL = datetime(2027, 9, 1, 9, 0, tzinfo=BERLIN)
 
 
 def _make_workspace():
-    org = Organization.objects.create(name="Org")
+    org = Organization.objects.create(subscription_status="active", name="Org")
     ws = Workspace.objects.create(organization=org, name="WS", timezone="Europe/Berlin")
     sa = SocialAccount.objects.create(
         workspace=ws,

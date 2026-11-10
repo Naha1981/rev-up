@@ -41,7 +41,7 @@ class PlatformPublishCeilingTest(TransactionTestCase):
     LINGER_SECONDS = 0.25
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,

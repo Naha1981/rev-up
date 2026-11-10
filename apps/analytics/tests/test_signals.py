@@ -20,7 +20,7 @@ def workspace(db):
     from apps.organizations.models import Organization
     from apps.workspaces.models import Workspace
 
-    org = Organization.objects.create(name="Analytics Signals Org")
+    org = Organization.objects.create(subscription_status="active", name="Analytics Signals Org")
     return Workspace.objects.create(organization=org, name="Analytics Signals WS")
 
 

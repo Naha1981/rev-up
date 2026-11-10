@@ -42,7 +42,7 @@ class CalendarEventColorValidationTests(TestCase):
     """V2 + V7: event create/edit require role and reject non-hex colors."""
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Test Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Test Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.owner = _make_user("owner@example.com")
         OrgMembership.objects.create(user=self.owner, organization=self.org, org_role="owner")
@@ -120,7 +120,7 @@ class QueueCreateCategoryIdorTests(TestCase):
     """V6: queue_create must validate category_id against the request workspace."""
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Test Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Test Org")
         self.ws_a = Workspace.objects.create(organization=self.org, name="WS-A")
         self.ws_b = Workspace.objects.create(organization=self.org, name="WS-B")
         self.user = _make_user("user@example.com")

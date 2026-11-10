@@ -34,7 +34,7 @@ AUTOSAVE_TRIGGER = 'id="autosave-trigger"'
 
 
 def _make_workspace():
-    org = Organization.objects.create(name="Org")
+    org = Organization.objects.create(subscription_status="active", name="Org")
     ws = Workspace.objects.create(organization=org, name="WS", timezone="Europe/Berlin")
     primary = SocialAccount.objects.create(
         workspace=ws,

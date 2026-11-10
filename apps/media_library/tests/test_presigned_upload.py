@@ -28,7 +28,7 @@ NOT_MEDIA = b"<html><body>not a media file</body></html>"
 
 
 def _make_pending(*, filename="clip.mp4"):
-    org = Organization.objects.create(name="Org")
+    org = Organization.objects.create(subscription_status="active", name="Org")
     ws = Workspace.objects.create(organization=org, name="WS")
     return PendingUpload.objects.create(
         organization=org,

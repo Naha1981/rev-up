@@ -70,7 +70,7 @@ def test_polyglot_upload_is_stored_under_a_png_suffix():
         password="testpass123",
         tos_accepted_at=timezone.now(),
     )
-    org = Organization.objects.create(name="Test Org")
+    org = Organization.objects.create(subscription_status="active", name="Test Org")
     workspace = Workspace.objects.create(organization=org, name="Test Workspace")
 
     asset = create_asset(

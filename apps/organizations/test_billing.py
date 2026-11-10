@@ -47,19 +47,19 @@ class TrialStateTests(TestCase):
         status, _day, _left = org.trial_state()
         self.assertEqual(status, "expired")
 
-    def test_new_org_is_on_trial_day_one_with_reference(self):
+    def test_new_org_needs_payment_with_reference(self):
         org = Organization.objects.create(name="Fresh Org")
-        self.assertEqual(org.subscription_status, "trial")
-        self.assertIsNotNone(org.trial_started_at)
+        self.assertEqual(org.subscription_status, "pending_activation")
+        self.assertIsNone(org.trial_started_at)
         self.assertTrue(org.payment_reference.startswith("RU-"))
         status, day, days_left = org.trial_state()
-        self.assertEqual((status, day, days_left), ("trial", 1, 7))
+        self.assertEqual((status, day, days_left), ("pending_activation", 0, 0))
 
-    def test_trial_expires_after_seven_days(self):
-        org = Organization.objects.create(name="Old Trial Org")
+    def test_legacy_trial_never_grants_free_access(self):
+        org = Organization.objects.create(name="Old Trial Org", subscription_status="trial")
         org.trial_started_at = timezone.now() - timedelta(days=7)
         status, _day, days_left = org.trial_state()
-        self.assertEqual(status, "expired")
+        self.assertEqual(status, "pending_activation")
         self.assertEqual(days_left, 0)
 
     def test_active_org_never_expires(self):
@@ -95,7 +95,7 @@ class WeekOneEntitlementTests(TestCase):
 
 class BillingPageTests(TestCase):
     @override_settings(REVUP_BILLING_WHATSAPP="27000000001")
-    def test_page_shows_plans_reference_and_trial(self):
+    def test_page_shows_plans_reference_and_payment_needed(self):
         org, ws, user = _setup()
         self.client.force_login(user)
         resp = self.client.get(f"/workspaces/{ws.id}/billing/")
@@ -103,7 +103,7 @@ class BillingPageTests(TestCase):
         self.assertContains(resp, "R999")
         self.assertContains(resp, "R1,999")
         self.assertContains(resp, org.payment_reference)
-        self.assertContains(resp, "Early access: your last 7 days")
+        self.assertContains(resp, "Payment needed")
         self.assertContains(resp, "wa.me/27000000001")
         self.assertContains(resp, "auto-posting")
 
@@ -195,7 +195,7 @@ class TrialLockTests(TestCase):
         self.client.force_login(user)
         resp = self.client.get(f"/workspaces/{ws.id}/billing/")
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "subscription is not active")
+        self.assertContains(resp, "Payment needed")
 
     def test_active_org_not_locked(self):
         org, ws, user = _setup()

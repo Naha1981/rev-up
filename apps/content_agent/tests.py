@@ -16,7 +16,7 @@ from .services import draft_posts, queue_drafts_for_review, research_trends, run
 
 
 def make_workspace(name="Test Bistro"):
-    org = Organization.objects.create(name=f"{name} org")
+    org = Organization.objects.create(subscription_status="active", name=f"{name} org")
     return Workspace.objects.create(organization=org, name=name)
 
 

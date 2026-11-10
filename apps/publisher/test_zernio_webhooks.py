@@ -39,7 +39,7 @@ def _payload(event="post.platform.published", event_id="evt-1", *, status="publi
 @override_settings(ZERNIO_ENABLED=True, ZERNIO_API_KEY="k", ZERNIO_WEBHOOK_SECRET=SECRET)
 class ZernioWebhookTest(TestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,

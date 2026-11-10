@@ -50,7 +50,7 @@ class BulkActionBase(TestCase):
     """
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Bulk Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Bulk Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="Bulk WS")
 
         self.owner = _make_user("owner@example.com")

@@ -18,7 +18,7 @@ from apps.workspaces.models import Workspace
 class AddToQueueRollbackTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(email="rb@example.com", password="pw", tos_accepted_at=timezone.now())
-        self.org = Organization.objects.create(name="RB Org")
+        self.org = Organization.objects.create(subscription_status="active", name="RB Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="RB WS")
         OrgMembership.objects.create(user=self.user, organization=self.org, org_role=OrgMembership.OrgRole.OWNER)
         WorkspaceMembership.objects.create(

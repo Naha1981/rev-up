@@ -54,7 +54,7 @@ class PublishBlockerTest(TestCase):
 
 class ServiceSchedulingTest(TestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.tiktok = self._account("tiktok")
         self.when = timezone.now() + timedelta(hours=1)

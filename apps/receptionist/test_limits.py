@@ -1,5 +1,7 @@
 """Per-tier monthly allowances: reply counter, hard stop, channel limit, usage."""
 
+from datetime import timedelta
+
 import pytest
 from django.utils import timezone
 
@@ -17,7 +19,9 @@ from apps.receptionist.models import Contact, Message, ZernioChannel
 def org(db):
     from apps.organizations.models import Organization
 
-    return Organization.objects.create(name="Limits Org", plan="starter")
+    return Organization.objects.create(
+        subscription_status="active", activated_at=timezone.now() - timedelta(days=8), name="Limits Org", plan="starter"
+    )
 
 
 @pytest.fixture

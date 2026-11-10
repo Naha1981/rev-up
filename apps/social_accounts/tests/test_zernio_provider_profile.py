@@ -10,7 +10,7 @@ from apps.workspaces.models import Workspace
 
 class WorkspaceProviderProfileTest(TestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="Z Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Z Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="Z WS")
 
     def test_one_profile_per_workspace_and_provider(self):
@@ -37,7 +37,7 @@ class WorkspaceProviderProfileTest(TestCase):
 
 class SocialAccountProviderFieldsTest(TestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="P Org")
+        self.org = Organization.objects.create(subscription_status="active", name="P Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="P WS")
 
     def _account(self, **kwargs):

@@ -18,7 +18,7 @@ def ws_owner(db):
     user = User.objects.create_user(
         email="owner@example.com", password="testpass123", name="Owner", tos_accepted_at=timezone.now()
     )
-    org = Organization.objects.create(name="Bistro Org")
+    org = Organization.objects.create(subscription_status="active", name="Bistro Org")
     OrgMembership.objects.create(user=user, organization=org, org_role=OrgMembership.OrgRole.OWNER)
     ws = Workspace.objects.create(organization=org, name="Test Bistro", industry="restaurant")
     WorkspaceMembership.objects.create(user=user, workspace=ws)

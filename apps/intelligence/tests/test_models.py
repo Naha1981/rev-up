@@ -21,13 +21,13 @@ from apps.organizations.models import Organization
 
 class IntelligenceSubscriptionTests(TestCase):
     def test_one_per_organization(self):
-        org = Organization.objects.create(name="Acme")
+        org = Organization.objects.create(subscription_status="active", name="Acme")
         IntelligenceSubscription.objects.create(organization=org)
         with self.assertRaises(IntegrityError), transaction.atomic():
             IntelligenceSubscription.objects.create(organization=org)
 
     def test_encrypted_api_key_roundtrip(self):
-        org = Organization.objects.create(name="Acme")
+        org = Organization.objects.create(subscription_status="active", name="Acme")
         sub = IntelligenceSubscription.objects.create(
             organization=org,
             intelligence_api_key="bb_secret_plaintext",
@@ -39,7 +39,7 @@ class IntelligenceSubscriptionTests(TestCase):
         self.assertEqual(sub.intelligence_api_key_prefix, "bb_secre")
 
     def test_default_status_is_provisioning(self):
-        org = Organization.objects.create(name="Acme")
+        org = Organization.objects.create(subscription_status="active", name="Acme")
         sub = IntelligenceSubscription.objects.create(organization=org)
         self.assertEqual(sub.status, IntelligenceSubscription.Status.PROVISIONING)
 
@@ -48,7 +48,7 @@ class StudioCheckoutAttemptPartialUniqueTests(TestCase):
     def test_one_in_progress_per_org(self):
         """The financial-correctness backstop: two concurrent
         Subscribe clicks cannot both reach Intelligence."""
-        org = Organization.objects.create(name="Acme")
+        org = Organization.objects.create(subscription_status="active", name="Acme")
         StudioCheckoutAttempt.objects.create(
             organization=org,
             plan_slug="hobby",
@@ -62,7 +62,7 @@ class StudioCheckoutAttemptPartialUniqueTests(TestCase):
             )
 
     def test_partial_unique_covers_creating_open_pending(self):
-        org = Organization.objects.create(name="Acme")
+        org = Organization.objects.create(subscription_status="active", name="Acme")
         for s in (StudioCheckoutAttempt.Status.OPEN, StudioCheckoutAttempt.Status.PENDING):
             StudioCheckoutAttempt.objects.create(
                 organization=org,
@@ -84,7 +84,7 @@ class StudioCheckoutAttemptPartialUniqueTests(TestCase):
                 )
 
     def test_terminal_states_do_not_block_new_attempt(self):
-        org = Organization.objects.create(name="Acme")
+        org = Organization.objects.create(subscription_status="active", name="Acme")
         for s in (
             StudioCheckoutAttempt.Status.ACTIVATED,
             StudioCheckoutAttempt.Status.EXPIRED,
@@ -107,8 +107,8 @@ class StudioCheckoutAttemptPartialUniqueTests(TestCase):
         )
 
     def test_different_orgs_dont_collide(self):
-        org_a = Organization.objects.create(name="A")
-        org_b = Organization.objects.create(name="B")
+        org_a = Organization.objects.create(subscription_status="active", name="A")
+        org_b = Organization.objects.create(subscription_status="active", name="B")
         StudioCheckoutAttempt.objects.create(
             organization=org_a,
             plan_slug="hobby",
@@ -161,7 +161,7 @@ class IntelligenceUsageEventTests(TestCase):
             password="pw",
             tos_accepted_at=timezone.now(),
         )
-        org = Organization.objects.create(name="Acme")
+        org = Organization.objects.create(subscription_status="active", name="Acme")
         event = IntelligenceUsageEvent.objects.create(
             organization=org,
             user=user,

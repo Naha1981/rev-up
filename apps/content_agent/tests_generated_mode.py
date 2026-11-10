@@ -26,7 +26,7 @@ class GeneratedPostModeTests(TestCase):
         self.user = User.objects.create_user(
             email="owner@example.com", password="testpass123", tos_accepted_at=timezone.now()
         )
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.ws = Workspace.objects.create(organization=self.org, name="WS")
         OrgMembership.objects.create(user=self.user, organization=self.org, org_role=OrgMembership.OrgRole.OWNER)
         WorkspaceMembership.objects.create(

@@ -162,7 +162,7 @@ class DiscardCheckoutViewTests(TestCase):
 
     def setUp(self):
         self.rf = RequestFactory()
-        self.org = Organization.objects.create(name="Acme")
+        self.org = Organization.objects.create(subscription_status="active", name="Acme")
         self.owner = _make_owner(self.org)
 
     def _make_post(self, user):
@@ -383,7 +383,7 @@ class SubscribeTemplateBranchingTests(TestCase):
         cls._tpl = DjangoTemplate(loads + body)
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Acme")
+        self.org = Organization.objects.create(subscription_status="active", name="Acme")
 
     def _render(self, **context_overrides):
         context = {

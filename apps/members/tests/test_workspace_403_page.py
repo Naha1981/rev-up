@@ -17,7 +17,7 @@ from apps.workspaces.models import Workspace
 
 def _make_user_with_workspace(email, org_name, ws_name):
     user = User.objects.create_user(email=email, password="testpass123", tos_accepted_at=timezone.now())
-    org = Organization.objects.create(name=org_name)
+    org = Organization.objects.create(subscription_status="active", name=org_name)
     ws = Workspace.objects.create(organization=org, name=ws_name)
     OrgMembership.objects.create(user=user, organization=org, org_role=OrgMembership.OrgRole.OWNER)
     WorkspaceMembership.objects.create(user=user, workspace=ws, workspace_role=WorkspaceMembership.WorkspaceRole.OWNER)

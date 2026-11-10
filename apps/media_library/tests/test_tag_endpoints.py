@@ -27,7 +27,7 @@ class AssetTagEndpointTests(TestCase):
             password="testpass123",
             tos_accepted_at=timezone.now(),
         )
-        self.org = Organization.objects.create(name="Test Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Test Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="Test Workspace")
         OrgMembership.objects.create(
             user=self.user,
@@ -113,7 +113,7 @@ class AssetTagEndpointTests(TestCase):
             password="testpass123",
             tos_accepted_at=timezone.now(),
         )
-        other_org = Organization.objects.create(name="Other Org")
+        other_org = Organization.objects.create(subscription_status="active", name="Other Org")
         OrgMembership.objects.create(
             user=other_user,
             organization=other_org,

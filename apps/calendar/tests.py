@@ -75,7 +75,7 @@ class PostingSlotCrossWorkspaceTests(TestCase):
             password="testpass123",
             tos_accepted_at=timezone.now(),
         )
-        self.org_a = Organization.objects.create(name="Org A")
+        self.org_a = Organization.objects.create(subscription_status="active", name="Org A")
         self.workspace_a = Workspace.objects.create(organization=self.org_a, name="Workspace A")
         OrgMembership.objects.create(
             user=self.user_a,
@@ -106,7 +106,7 @@ class PostingSlotCrossWorkspaceTests(TestCase):
             password="testpass123",
             tos_accepted_at=timezone.now(),
         )
-        self.org_b = Organization.objects.create(name="Org B")
+        self.org_b = Organization.objects.create(subscription_status="active", name="Org B")
         self.workspace_b = Workspace.objects.create(organization=self.org_b, name="Workspace B")
         OrgMembership.objects.create(
             user=self.user_b,
@@ -264,7 +264,9 @@ class QueueSlotTimezoneTests(TestCase):
     """
 
     def setUp(self):
-        self.org = Organization.objects.create(name="TZ Org", default_timezone="America/New_York")
+        self.org = Organization.objects.create(
+            subscription_status="active", name="TZ Org", default_timezone="America/New_York"
+        )
         self.workspace = Workspace.objects.create(organization=self.org, name="TZ WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,
@@ -329,7 +331,7 @@ class QueueSlotPublishedGuardTests(TestCase):
     """
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Guard Org", default_timezone="UTC")
+        self.org = Organization.objects.create(subscription_status="active", name="Guard Org", default_timezone="UTC")
         self.workspace = Workspace.objects.create(organization=self.org, name="Guard WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,
@@ -407,7 +409,7 @@ class RepairPublishedScheduledAtTests(TestCase):
     """The repair resets only the future-dated published rows, nothing else."""
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Repair Org", default_timezone="UTC")
+        self.org = Organization.objects.create(subscription_status="active", name="Repair Org", default_timezone="UTC")
         self.workspace = Workspace.objects.create(organization=self.org, name="Repair WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,
@@ -599,7 +601,9 @@ class CalendarChannelSlotViewTests(TestCase):
 
     def setUp(self):
         self.factory = RequestFactory()
-        self.org = Organization.objects.create(name="Calendar Slots Org", default_timezone="America/New_York")
+        self.org = Organization.objects.create(
+            subscription_status="active", name="Calendar Slots Org", default_timezone="America/New_York"
+        )
         self.workspace = Workspace.objects.create(organization=self.org, name="Calendar Slots WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,
@@ -699,7 +703,9 @@ class RecurringPostTimezoneTests(TestCase):
     """
 
     def test_recurrence_preserves_local_time_across_dst(self):
-        org = Organization.objects.create(name="DST Org", default_timezone="America/New_York")
+        org = Organization.objects.create(
+            subscription_status="active", name="DST Org", default_timezone="America/New_York"
+        )
         ws = Workspace.objects.create(organization=org, name="DST WS")
         ny = zoneinfo.ZoneInfo("America/New_York")
 
@@ -739,7 +745,9 @@ class RecurringPostTimezoneTests(TestCase):
         # The LOOKAHEAD_DAYS horizon must be measured in the workspace's local
         # calendar, not UTC. Otherwise a workspace whose local date differs from
         # the UTC date at run time gets a horizon off by one local day.
-        org = Organization.objects.create(name="Horizon Org", default_timezone="Asia/Tokyo")
+        org = Organization.objects.create(
+            subscription_status="active", name="Horizon Org", default_timezone="Asia/Tokyo"
+        )
         ws = Workspace.objects.create(organization=org, name="Horizon WS")
         tokyo = zoneinfo.ZoneInfo("Asia/Tokyo")
 
@@ -780,7 +788,7 @@ class RecurringPostPlatformExtraTests(TestCase):
     """
 
     def test_recurrence_preserves_platform_extra(self):
-        org = Organization.objects.create(name="Extra Org")
+        org = Organization.objects.create(subscription_status="active", name="Extra Org")
         ws = Workspace.objects.create(organization=org, name="Extra WS")
         utc = zoneinfo.ZoneInfo("UTC")
         account = SocialAccount.objects.create(
@@ -835,7 +843,7 @@ class RecurringPostPublishabilityTests(TestCase):
     date — visible on the calendar to fix, never handed to the publisher."""
 
     def _generate(self, *, with_video, source_status="scheduled"):
-        org = Organization.objects.create(name="Recur Org")
+        org = Organization.objects.create(subscription_status="active", name="Recur Org")
         ws = Workspace.objects.create(organization=org, name="Recur WS")
         utc = zoneinfo.ZoneInfo("UTC")
         account = SocialAccount.objects.create(
@@ -907,7 +915,7 @@ class PublishTabTimezoneTests(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(email="tz@example.com", password="pw", tos_accepted_at=timezone.now())
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.ws = Workspace.objects.create(organization=self.org, name="WS", timezone="Europe/Berlin")
         OrgMembership.objects.create(user=self.user, organization=self.org, org_role=OrgMembership.OrgRole.OWNER)
         WorkspaceMembership.objects.create(
@@ -964,7 +972,7 @@ class SlotOccupancyQueueTests(TestCase):
         )
         self._now_patcher.start()
         self.addCleanup(self._now_patcher.stop)
-        self.org = Organization.objects.create(name="Slot Org", default_timezone="UTC")
+        self.org = Organization.objects.create(subscription_status="active", name="Slot Org", default_timezone="UTC")
         self.workspace = Workspace.objects.create(organization=self.org, name="Slot WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,
@@ -1246,7 +1254,7 @@ class QueueEntryEndpointTests(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(email="qe@example.com", password="pw", tos_accepted_at=timezone.now())
-        self.org = Organization.objects.create(name="EP Org")
+        self.org = Organization.objects.create(subscription_status="active", name="EP Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="EP WS")
         OrgMembership.objects.create(user=self.user, organization=self.org, org_role=OrgMembership.OrgRole.OWNER)
         WorkspaceMembership.objects.create(
@@ -1296,7 +1304,7 @@ class QueueEntryEndpointTests(TestCase):
         self.assertEqual(resp.status_code, 204)
 
     def test_remove_foreign_workspace_entry_is_noop(self):
-        other_org = Organization.objects.create(name="Other")
+        other_org = Organization.objects.create(subscription_status="active", name="Other")
         other_ws = Workspace.objects.create(organization=other_org, name="Other WS")
         other_acct = SocialAccount.objects.create(
             workspace=other_ws,

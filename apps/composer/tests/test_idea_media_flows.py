@@ -18,7 +18,7 @@ class IdeaMediaFlowsTests(TestCase):
         self.user = User.objects.create_user(
             email="owner@example.com", password="testpass123", tos_accepted_at=timezone.now()
         )
-        self.org = Organization.objects.create(name="Test Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Test Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="Test Workspace")
         OrgMembership.objects.create(
             user=self.user,

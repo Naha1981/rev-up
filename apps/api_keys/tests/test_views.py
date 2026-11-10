@@ -236,7 +236,7 @@ class TestWorkspaceOptionsPartial:
         from apps.organizations.models import Organization
         from apps.workspaces.models import Workspace
 
-        other_org = Organization.objects.create(name="Other")
+        other_org = Organization.objects.create(subscription_status="active", name="Other")
         foreign_ws = Workspace.objects.create(name="Foreign", organization=other_org)
         r = admin_client.get(
             reverse("api_keys:workspace_options"),
@@ -349,7 +349,7 @@ class TestIssue:
         from apps.organizations.models import Organization
         from apps.workspaces.models import Workspace
 
-        other_org = Organization.objects.create(name="Other")
+        other_org = Organization.objects.create(subscription_status="active", name="Other")
         foreign_ws = Workspace.objects.create(name="Foreign", organization=other_org)
         r = admin_client.post(
             reverse("api_keys:issue"),
@@ -442,7 +442,7 @@ class TestRevoke:
         from apps.social_accounts.models import SocialAccount
         from apps.workspaces.models import Workspace
 
-        other_org = Organization.objects.create(name="Other")
+        other_org = Organization.objects.create(subscription_status="active", name="Other")
         foreign_ws = Workspace.objects.create(name="Foreign", organization=other_org)
         foreign_user = User.objects.create_user(
             email="foreign@example.com",
@@ -590,7 +590,7 @@ class TestEditKey:
         from apps.social_accounts.models import SocialAccount
         from apps.workspaces.models import Workspace
 
-        other_org = Organization.objects.create(name="Other")
+        other_org = Organization.objects.create(subscription_status="active", name="Other")
         foreign_ws = Workspace.objects.create(name="Foreign", organization=other_org)
         foreign_user = User.objects.create_user(
             email="foreign-edit@example.com",

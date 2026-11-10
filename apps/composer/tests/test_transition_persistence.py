@@ -42,7 +42,7 @@ class TransitionFieldsCoversEveryWriteTest(TestCase):
     """
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,
@@ -101,7 +101,7 @@ class SchedulingPathsPersistTheResetTest(TestCase):
     """Each path that puts a row back to ``scheduled`` must write it to the DB."""
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,

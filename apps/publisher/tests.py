@@ -312,7 +312,7 @@ class NonRetryableFailureTest(TestCase):
         from apps.social_accounts.models import SocialAccount
         from apps.workspaces.models import Workspace
 
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,
@@ -519,7 +519,7 @@ class PublishedPostLeavesQueueTest(TestCase):
         from apps.social_accounts.models import SocialAccount
         from apps.workspaces.models import Workspace
 
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,
@@ -610,7 +610,7 @@ class PublishErrorIsNeverRawTest(TestCase):
         from apps.social_accounts.models import SocialAccount
         from apps.workspaces.models import Workspace
 
-        org = Organization.objects.create(name="Org")
+        org = Organization.objects.create(subscription_status="active", name="Org")
         workspace = Workspace.objects.create(organization=org, name="WS")
         account = SocialAccount.objects.create(
             workspace=workspace,

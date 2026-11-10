@@ -33,7 +33,7 @@ class PublishFailureFanOutTest(TestCase):
         self.author = User.objects.create_user(
             email="author@example.com", password="x", name="Author", tos_accepted_at=timezone.now()
         )
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.post = Post.objects.create(workspace=self.workspace, caption="hi", author=self.author)
         self.targets = [

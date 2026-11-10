@@ -30,7 +30,7 @@ class MediaStreamTests(TestCase):
             password="testpass123",
             tos_accepted_at=timezone.now(),
         )
-        self.org = Organization.objects.create(name="Test Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Test Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="Test Workspace")
         OrgMembership.objects.create(user=self.user, organization=self.org, org_role=OrgMembership.OrgRole.OWNER)
         WorkspaceMembership.objects.create(
@@ -89,7 +89,9 @@ class MediaStreamTests(TestCase):
         self.assertEqual(response["Content-Range"], "bytes */11")
 
     def test_other_workspace_asset_is_404(self):
-        other_ws = Workspace.objects.create(organization=Organization.objects.create(name="Other"), name="Other WS")
+        other_ws = Workspace.objects.create(
+            organization=Organization.objects.create(subscription_status="active", name="Other"), name="Other WS"
+        )
         other_asset = MediaAsset.objects.create(
             workspace=other_ws,
             uploaded_by=self.user,
@@ -117,7 +119,7 @@ class MediaFilmstripTests(TestCase):
             password="testpass123",
             tos_accepted_at=timezone.now(),
         )
-        self.org = Organization.objects.create(name="Test Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Test Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="Test Workspace")
         OrgMembership.objects.create(user=self.user, organization=self.org, org_role=OrgMembership.OrgRole.OWNER)
         WorkspaceMembership.objects.create(

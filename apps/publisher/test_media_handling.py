@@ -225,7 +225,7 @@ class RetryBackoffIsHonouredTest(TestCase):
     """
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,
@@ -278,7 +278,7 @@ class RescheduleResetsTheRetryBudgetTest(TestCase):
     """
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,
@@ -332,7 +332,7 @@ class AsyncPublishHoldsThePublishingStatusTest(TransactionTestCase):
     """
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,

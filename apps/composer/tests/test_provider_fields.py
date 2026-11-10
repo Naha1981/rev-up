@@ -17,7 +17,7 @@ def _platform_post(workspace, author, account, post, **kwargs):
 
 class ProviderFieldTestCase(TestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="PP Org")
+        self.org = Organization.objects.create(subscription_status="active", name="PP Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="PP WS")
         self.author = User.objects.create_user(email="pp@example.com", password="pw", tos_accepted_at=timezone.now())
         self.account = SocialAccount.objects.create(
@@ -47,7 +47,7 @@ class IdempotencyConstraintTest(TransactionTestCase):
     """Unique (provider, idempotency_key); NULLs must never collide."""
 
     def setUp(self):
-        self.org = Organization.objects.create(name="IK Org")
+        self.org = Organization.objects.create(subscription_status="active", name="IK Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="IK WS")
         self.author = User.objects.create_user(email="ik@example.com", password="pw", tos_accepted_at=timezone.now())
         self.account = SocialAccount.objects.create(

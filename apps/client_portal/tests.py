@@ -16,7 +16,7 @@ from apps.workspaces.models import Workspace
 
 class MagicLinkTestBase(TestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="Test Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Test Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="Test Workspace")
         self.client_user = User.objects.create_user(
             email="client@example.com",

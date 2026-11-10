@@ -25,7 +25,7 @@ from apps.social_accounts.models import SocialAccount  # noqa: E402
 def organization(db):
     from apps.organizations.models import Organization
 
-    return Organization.objects.create(name="Pinterest Scope Org")
+    return Organization.objects.create(subscription_status="active", name="Pinterest Scope Org")
 
 
 @pytest.fixture

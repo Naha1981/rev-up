@@ -14,3 +14,4 @@ CREATE TABLE IF NOT EXISTS frontdesk_lead(id uuid PRIMARY KEY,workspace_id uuid 
 CREATE TABLE IF NOT EXISTS frontdesk_followup_draft(id uuid PRIMARY KEY,lead_id uuid NOT NULL,workspace_id uuid NOT NULL,body text NOT NULL,status text NOT NULL,created_at timestamptz NOT NULL,updated_at timestamptz NOT NULL);
 CREATE TABLE IF NOT EXISTS cf_media(id uuid PRIMARY KEY,workspace_id uuid NOT NULL,filename text NOT NULL,mime text NOT NULL,size integer NOT NULL,data bytea NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
 ALTER TABLE composer_post ADD COLUMN IF NOT EXISTS media_id uuid REFERENCES cf_media(id);
+CREATE TABLE IF NOT EXISTS cf_prospect_link(id uuid PRIMARY KEY,workspace_id uuid NOT NULL,slug text UNIQUE NOT NULL,prospect_name text NOT NULL,target_url text NOT NULL,click_count integer NOT NULL DEFAULT 0,first_clicked_at timestamptz,last_clicked_at timestamptz,created_at timestamptz NOT NULL DEFAULT now());

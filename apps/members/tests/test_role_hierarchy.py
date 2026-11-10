@@ -45,7 +45,7 @@ class InviteRoleHierarchyTests(TestCase):
     """POST /members/invite/ must enforce role-hierarchy."""
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Test Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Test Org")
         self.workspace_a = Workspace.objects.create(organization=self.org, name="WS-A")
         self.workspace_b = Workspace.objects.create(organization=self.org, name="WS-B")
 
@@ -140,7 +140,7 @@ class OrgRoleChoiceGatingTests(TestCase):
     """
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Test Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Test Org")
         self.owner = _make_user("owner@example.com")
         self.admin = _make_user("admin@example.com")
         OrgMembership.objects.create(user=self.owner, organization=self.org, org_role="owner")
@@ -169,7 +169,7 @@ class ManageWorkspaceModalTargetTests(TestCase):
     """GET /members/ renders one HTMX modal target per manageable member."""
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Test Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Test Org")
         self.owner = _make_user("owner@example.com")
         self.member_a = _make_user("member-a@example.com")
         self.member_b = _make_user("member-b@example.com")
@@ -217,7 +217,7 @@ class UpdateMemberRoleHierarchyTests(TestCase):
     """POST /members/<id>/role/ — admin cannot demote owner."""
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Test Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Test Org")
         self.owner = _make_user("owner@example.com")
         self.other_owner = _make_user("owner2@example.com")
         self.admin = _make_user("admin@example.com")
@@ -253,7 +253,7 @@ class ManageWorkspacesExistingRoleTests(TestCase):
     an owner by submitting role="viewer" (Codex regression test)."""
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Test Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Test Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.admin = _make_user("admin@example.com")
         self.victim = _make_user("victim@example.com")
@@ -323,7 +323,7 @@ class ClientPortalManagerInviteTests(TestCase):
     Regression for the Codex P1 finding."""
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Test Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Test Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.manager = _make_user("manager@example.com")
         OrgMembership.objects.create(user=self.manager, organization=self.org, org_role="member")

@@ -35,7 +35,7 @@ from .webhooks import handle_inbox_message
 
 
 def _workspace(name):
-    org = Organization.objects.create(name=f"{name} org")
+    org = Organization.objects.create(subscription_status="active", name=f"{name} org")
     return Workspace.objects.create(organization=org, name=name)
 
 

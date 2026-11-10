@@ -64,7 +64,7 @@ class ViewTests(TestCase):
         self.user = User.objects.create_user(
             email="owner@example.com", password="x", name="Owner", tos_accepted_at=timezone.now()
         )
-        self.org = Organization.objects.create(name="Bistro org")
+        self.org = Organization.objects.create(subscription_status="active", name="Bistro org")
         self.workspace = Workspace.objects.create(organization=self.org, name="Bistro")
         OrgMembership.objects.create(user=self.user, organization=self.org, org_role=OrgMembership.OrgRole.OWNER)
         WorkspaceMembership.objects.create(

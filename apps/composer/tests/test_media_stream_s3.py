@@ -49,7 +49,7 @@ def media_root():
 
 @pytest.fixture
 def asset(db, media_root):
-    org = Organization.objects.create(name="O")
+    org = Organization.objects.create(subscription_status="active", name="O")
     ws = Workspace.objects.create(organization=org, name="W")
     user = User.objects.create_user(
         email="s3-stream@example.com", password="pw", name="S", tos_accepted_at=timezone.now()

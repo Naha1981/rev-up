@@ -36,7 +36,7 @@ class ReviewBannerTests(TestCase):
             password="testpass123",
             tos_accepted_at=timezone.now(),
         )
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         OrgMembership.objects.create(user=self.user, organization=self.org, org_role=OrgMembership.OrgRole.OWNER)
         self.ws = self._make_workspace("WS")
         self.client.force_login(self.user)

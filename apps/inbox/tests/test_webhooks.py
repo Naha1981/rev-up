@@ -242,7 +242,7 @@ class TestMetaWebhookCrossTenantIsolation:
         from apps.organizations.models import Organization
         from apps.workspaces.models import Workspace
 
-        org = Organization.objects.create(name=name)
+        org = Organization.objects.create(subscription_status="active", name=name)
         ws = Workspace.objects.create(name=f"{name} WS", organization=org)
         PlatformCredential.objects.create(
             organization=org,

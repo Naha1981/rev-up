@@ -44,7 +44,7 @@ def _published_payload(status="published", **target_overrides):
 @override_settings(ZERNIO_ENABLED=True, ZERNIO_API_KEY="test-key", APP_URL="https://app.example")
 class ZernioDispatchTest(TestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,
@@ -193,7 +193,7 @@ class ZernioDispatchTest(TestCase):
 @override_settings(ZERNIO_ENABLED=True, ZERNIO_API_KEY="test-key")
 class ZernioConfirmTest(TestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,

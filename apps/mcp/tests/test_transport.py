@@ -84,7 +84,7 @@ def user(db):
 def organization(db):
     from apps.organizations.models import Organization
 
-    return Organization.objects.create(name="MCP Org")
+    return Organization.objects.create(subscription_status="active", name="MCP Org")
 
 
 @pytest.fixture

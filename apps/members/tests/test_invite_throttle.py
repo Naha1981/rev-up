@@ -23,7 +23,7 @@ from apps.organizations.models import Organization
 
 @pytest.fixture
 def org(db):
-    return Organization.objects.create(name="Test Org")
+    return Organization.objects.create(subscription_status="active", name="Test Org")
 
 
 @pytest.fixture

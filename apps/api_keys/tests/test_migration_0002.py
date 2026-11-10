@@ -27,7 +27,7 @@ from apps.organizations.models import Organization  # noqa: E402
 
 @pytest.fixture
 def organization(db):
-    return Organization.objects.create(name="Backfill Org")
+    return Organization.objects.create(subscription_status="active", name="Backfill Org")
 
 
 @pytest.fixture

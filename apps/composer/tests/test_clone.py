@@ -15,7 +15,7 @@ from apps.workspaces.models import Workspace
 
 class ClonePostServiceTest(TestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="Clone Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Clone Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="Clone WS")
         self.author = User.objects.create_user(
             email="author@example.com", password="pw", tos_accepted_at=timezone.now()
@@ -70,7 +70,7 @@ class ClonePostServiceTest(TestCase):
 
 class ClonePostEndpointTest(TestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="Clone EP Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Clone EP Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="Clone EP WS")
         self.owner = User.objects.create_user(email="owner@example.com", password="pw", tos_accepted_at=timezone.now())
         OrgMembership.objects.create(user=self.owner, organization=self.org, org_role=OrgMembership.OrgRole.OWNER)

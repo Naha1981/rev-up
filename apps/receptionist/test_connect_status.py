@@ -15,7 +15,7 @@ User = get_user_model()
 
 
 def _ws():
-    org = Organization.objects.create(name="Test Org", plan="growth")
+    org = Organization.objects.create(subscription_status="active", name="Test Org", plan="growth")
     ws = Workspace.objects.create(name="Thandi's Place", organization=org)
     BusinessProfile.objects.create(workspace=ws, business_name="Thandi's Place")
     return ws

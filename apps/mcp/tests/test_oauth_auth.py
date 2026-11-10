@@ -66,7 +66,7 @@ def _make_user_with_workspace(email: str, role: str):
         name=email,
         tos_accepted_at=timezone.now(),
     )
-    org = Organization.objects.create(name=f"Org {email}")
+    org = Organization.objects.create(subscription_status="active", name=f"Org {email}")
     ws = Workspace.objects.create(name=f"WS {email}", organization=org)
     OrgMembership.objects.create(user=user, organization=org, org_role=OrgMembership.OrgRole.OWNER)
     WorkspaceMembership.objects.create(user=user, workspace=ws, workspace_role=role)

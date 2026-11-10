@@ -25,7 +25,7 @@ User = get_user_model()
 
 
 def _workspace(plan="growth", reviews_on=True):
-    org = Organization.objects.create(name="Test Org", plan=plan)
+    org = Organization.objects.create(subscription_status="active", name="Test Org", plan=plan)
     ws = Workspace.objects.create(name="Thandi's Workspace", organization=org)
     BusinessProfile.objects.create(
         workspace=ws,
@@ -162,7 +162,7 @@ class TestReviewDashboardView:
         assert "Review requests are off" in resp.content.decode()
 
     def test_no_profile_shows_the_off_state(self):
-        org = Organization.objects.create(name="Org2", plan="growth")
+        org = Organization.objects.create(subscription_status="active", name="Org2", plan="growth")
         ws = Workspace.objects.create(name="Bare", organization=org)
         resp = self._login(ws).get(f"/workspace/{ws.id}/receptionist/reviews/")
         assert resp.status_code == 200

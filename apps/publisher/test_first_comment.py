@@ -38,7 +38,7 @@ Status = PlatformPost.FirstCommentStatus
 
 class FirstCommentTaskTest(TestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,
@@ -321,7 +321,7 @@ class FirstCommentTaskTest(TestCase):
 
 class ScheduleFirstCommentTest(TestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,
@@ -402,7 +402,7 @@ class FirstCommentDurabilityTest(TestCase):
     """A comment that reached the platform must never be posted twice."""
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,
@@ -460,7 +460,7 @@ class FirstCommentDelayTest(TestCase):
     """The delay resolves through the settings cascade, not an import-time constant."""
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
 
     def test_the_app_default_is_used_when_nothing_overrides_it(self):
@@ -485,7 +485,7 @@ class AmbiguousFailureTest(TestCase):
     """A failure that may have created the comment must never be blind-retried."""
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.account = SocialAccount.objects.create(
             workspace=self.workspace,
@@ -645,7 +645,7 @@ class FirstCommentDelayCascadeTest(TestCase):
     """PUBLISHER_FIRST_COMMENT_DELAY must actually participate in the cascade."""
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
 
     @override_settings(PUBLISHER_FIRST_COMMENT_DELAY=45)

@@ -22,7 +22,7 @@ def custom_signup_url(settings):
 def _open_invite(client, *, expires_in=timedelta(days=7)):
     """Visit an invite's accept page as an anonymous user, which stores its token in the session."""
     invitation = Invitation.objects.create(
-        organization=Organization.objects.create(name="Inviting Org"),
+        organization=Organization.objects.create(subscription_status="active", name="Inviting Org"),
         email="invitee@example.com",
         expires_at=timezone.now() + expires_in,
     )

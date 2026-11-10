@@ -67,7 +67,7 @@ class CreateAssetMimeSourceTest(TestCase):
     """V8: stored mime_type comes from the sniffer, NOT the client header."""
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
         self.user = User.objects.create_user(
             email="up@example.com",

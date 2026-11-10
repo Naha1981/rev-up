@@ -28,7 +28,7 @@ GOOGLE_URL = "https://g.page/r/example-review"
 
 
 def _workspace(plan="growth"):
-    org = Organization.objects.create(name="Test Org", plan=plan)
+    org = Organization.objects.create(subscription_status="active", name="Test Org", plan=plan)
     ws = Workspace.objects.create(name="Test Biz", organization=org)
     BusinessProfile.objects.create(
         workspace=ws, business_name="Test Biz", google_review_url=GOOGLE_URL, review_requests_enabled=True

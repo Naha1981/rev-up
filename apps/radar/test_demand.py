@@ -9,7 +9,7 @@ from .demand import build_demand_items
 
 
 def make_workspace(industry="restaurant"):
-    org = Organization.objects.create(name=f"Org {industry} {date.today()}")
+    org = Organization.objects.create(subscription_status="active", name=f"Org {industry} {date.today()}")
     return Workspace.objects.create(organization=org, name="Test Bistro", industry=industry)
 
 

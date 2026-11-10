@@ -37,7 +37,7 @@ class EditCommentWorkspaceScopeTests(TestCase):
     """V9: edit_comment must reject cross-workspace post_id."""
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Test Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Test Org")
         self.ws_a = Workspace.objects.create(organization=self.org, name="WS-A")
         self.ws_b = Workspace.objects.create(organization=self.org, name="WS-B")
         self.user = _make_user("user@example.com")

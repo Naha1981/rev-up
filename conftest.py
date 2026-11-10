@@ -24,7 +24,7 @@ def user(db):
 
 @pytest.fixture
 def organization(db):
-    return Organization.objects.create(name="Test Organization")
+    return Organization.objects.create(name="Test Organization", subscription_status="active")
 
 
 @pytest.fixture

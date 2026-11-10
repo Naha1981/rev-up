@@ -32,7 +32,7 @@ def _make_user(email):
 
 class ApprovalWorkflowBase(TestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.ws = Workspace.objects.create(organization=self.org, name="WS")
         self.reviewer = _make_user("reviewer@example.com")
         self.author = _make_user("author@example.com")
@@ -434,7 +434,7 @@ class PortalMixedPostActionTests(TestCase):
     sibling makes the derived Post.status something else (finding 3)."""
 
     def setUp(self):
-        self.org = Organization.objects.create(name="Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Org")
         self.ws = Workspace.objects.create(organization=self.org, name="WS")
         self.client_user = _make_user("client@example.com")
         WorkspaceMembership.objects.create(user=self.client_user, workspace=self.ws, workspace_role="client")

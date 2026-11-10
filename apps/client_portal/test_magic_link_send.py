@@ -21,7 +21,7 @@ from apps.workspaces.models import Workspace
 
 @pytest.fixture
 def client_setup(db):
-    org = Organization.objects.create(name="Org")
+    org = Organization.objects.create(subscription_status="active", name="Org")
     workspace = Workspace.objects.create(organization=org, name="WS")
     manager = User.objects.create_user(
         email="manager@example.com", password="x", name="Manager", tos_accepted_at=timezone.now()

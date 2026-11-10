@@ -22,7 +22,7 @@ from apps.workspaces.models import Workspace
 
 @pytest.fixture
 def workspace(db):
-    org = Organization.objects.create(name="Analytics Views Org")
+    org = Organization.objects.create(subscription_status="active", name="Analytics Views Org")
     return Workspace.objects.create(organization=org, name="Analytics Views WS")
 
 

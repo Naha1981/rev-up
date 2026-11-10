@@ -44,7 +44,7 @@ def _make_user(email):
 @override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
 class CommentAttachmentAccessTests(TestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="Test Org")
+        self.org = Organization.objects.create(subscription_status="active", name="Test Org")
         self.workspace = Workspace.objects.create(organization=self.org, name="WS")
 
         self.member = _make_user("member@example.com")

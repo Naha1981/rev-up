@@ -72,7 +72,7 @@ def test_dashboard_forbidden_for_customer(client):
 
 @pytest.mark.django_db
 def test_business_detail_forbidden_for_customer(client):
-    org = Organization.objects.create(name="Client Org")
+    org = Organization.objects.create(subscription_status="active", name="Client Org")
     customer = make_user("customer2@example.com")
     client.force_login(customer)
     resp = client.get(reverse("platform_admin:business_detail", args=[org.id]))
@@ -85,8 +85,8 @@ def test_business_detail_forbidden_for_customer(client):
 @pytest.mark.django_db
 def test_dashboard_counts_businesses_and_connected_accounts(client):
     staff = make_user("owner@example.com", is_staff=True)
-    org_a = Organization.objects.create(name="Alpha Biz")
-    org_b = Organization.objects.create(name="Beta Biz")
+    org_a = Organization.objects.create(subscription_status="active", name="Alpha Biz")
+    org_b = Organization.objects.create(subscription_status="active", name="Beta Biz")
     ws_a = Workspace.objects.create(organization=org_a, name="WS A")
     ws_b = Workspace.objects.create(organization=org_b, name="WS B")
     for i in range(3):
@@ -124,7 +124,7 @@ def test_dashboard_counts_businesses_and_connected_accounts(client):
 @pytest.mark.django_db
 def test_business_detail_shows_accounts_and_members(client):
     staff = make_user("owner2@example.com", is_staff=True)
-    org = Organization.objects.create(name="Detail Org")
+    org = Organization.objects.create(subscription_status="active", name="Detail Org")
     ws = Workspace.objects.create(organization=org, name="WS D")
     SocialAccount.objects.create(
         workspace=ws,
@@ -224,7 +224,7 @@ def _make_customer_in_org(email, org):
 @pytest.mark.django_db
 def test_toggle_access_suspends_and_restores(client):
     staff = make_user("owner6@example.com", is_staff=True)
-    org = Organization.objects.create(name="Suspend Me")
+    org = Organization.objects.create(subscription_status="active", name="Suspend Me")
     client.force_login(staff)
     url = reverse("platform_admin:business_toggle_access", args=[org.id])
     client.post(url, {"reason": "unpaid invoice"})
@@ -241,7 +241,7 @@ def test_toggle_access_suspends_and_restores(client):
 def test_suspended_org_member_sees_notice_not_app(client):
     from django.utils import timezone as tz
 
-    org = Organization.objects.create(name="Paused Org", access_suspended_at=tz.now())
+    org = Organization.objects.create(subscription_status="active", name="Paused Org", access_suspended_at=tz.now())
     member = _make_customer_in_org("paused@example.com", org)
     client.force_login(member)
     resp = client.get(reverse("organizations:settings"))
@@ -251,7 +251,7 @@ def test_suspended_org_member_sees_notice_not_app(client):
 
 @pytest.mark.django_db
 def test_unsuspended_org_member_uses_app_normally(client):
-    org = Organization.objects.create(name="Live Org")
+    org = Organization.objects.create(subscription_status="active", name="Live Org")
     member = _make_customer_in_org("live@example.com", org)
     client.force_login(member)
     resp = client.get(reverse("organizations:settings"))
@@ -265,7 +265,7 @@ def test_staff_unaffected_by_suspension(client):
     from apps.members.models import OrgMembership
 
     staff = make_user("owner7@example.com", is_staff=True)
-    org = Organization.objects.create(name="Staff Org", access_suspended_at=tz.now())
+    org = Organization.objects.create(subscription_status="active", name="Staff Org", access_suspended_at=tz.now())
     OrgMembership.objects.create(user=staff, organization=org, org_role=OrgMembership.OrgRole.OWNER)
     client.force_login(staff)
     resp = client.get(reverse("platform_admin:dashboard"))
@@ -274,7 +274,7 @@ def test_staff_unaffected_by_suspension(client):
 
 @pytest.mark.django_db
 def test_toggle_access_forbidden_for_customer(client):
-    org = Organization.objects.create(name="Guard Org")
+    org = Organization.objects.create(subscription_status="active", name="Guard Org")
     customer = _make_customer_in_org("guard@example.com", org)
     client.force_login(customer)
     resp = client.post(reverse("platform_admin:business_toggle_access", args=[org.id]))
@@ -306,7 +306,7 @@ def test_rate_note_names_source():
 @pytest.mark.django_db
 def test_dashboard_shows_zar_with_usd_note(client):
     staff = make_user("owner8@example.com", is_staff=True)
-    org = Organization.objects.create(name="ZAR Org")
+    org = Organization.objects.create(subscription_status="active", name="ZAR Org")
     ws = Workspace.objects.create(organization=org, name="WS Z")
     SocialAccount.objects.create(
         workspace=ws,

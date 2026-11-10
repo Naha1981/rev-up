@@ -187,7 +187,7 @@ def test_itn_tampered_is_400_and_changes_nothing(merchant, db):
     assert resp.status_code == 400
     org.refresh_from_db()
     assert org.plan == "starter"
-    assert org.subscription_status == "trial"
+    assert org.subscription_status == "pending_activation"
 
 
 # ---- audit hardening tests (Claude report, 8 Nov 2026) ----

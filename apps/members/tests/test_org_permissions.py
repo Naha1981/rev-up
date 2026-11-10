@@ -62,7 +62,7 @@ class OrgPermissionTableTests(TestCase):
 
     def test_has_org_permission_owner(self):
         user = _make_user("owner@example.com")
-        org = Organization.objects.create(name="Acme")
+        org = Organization.objects.create(subscription_status="active", name="Acme")
         m = OrgMembership.objects.create(
             user=user,
             organization=org,
@@ -73,7 +73,7 @@ class OrgPermissionTableTests(TestCase):
 
     def test_has_org_permission_member_blocked_from_billing(self):
         user = _make_user("member@example.com")
-        org = Organization.objects.create(name="Acme")
+        org = Organization.objects.create(subscription_status="active", name="Acme")
         m = OrgMembership.objects.create(
             user=user,
             organization=org,
@@ -86,7 +86,7 @@ class OrgPermissionTableTests(TestCase):
 class RequireOrgPermissionDecoratorTests(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
-        self.org = Organization.objects.create(name="Acme")
+        self.org = Organization.objects.create(subscription_status="active", name="Acme")
 
         @require_org_permission("manage_intelligence_billing")
         def billing_view(request, *args, **kwargs):
@@ -165,7 +165,7 @@ class RequireOrgPermissionDecoratorTests(TestCase):
         from django.core.exceptions import PermissionDenied
 
         user = _make_user("alice@example.com")
-        org_b = Organization.objects.create(name="Other Co")
+        org_b = Organization.objects.create(subscription_status="active", name="Other Co")
         OrgMembership.objects.create(
             user=user,
             organization=org_b,

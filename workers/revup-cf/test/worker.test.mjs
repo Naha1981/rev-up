@@ -11,28 +11,21 @@ test('recommendPlan: social -> growth', () => assert.equal(recommendPlan(['socia
 test('recommendPlan: reviews only -> starter', () => assert.equal(recommendPlan(['reviews']), 'starter'));
 test('recommendPlan: empty -> starter', () => assert.equal(recommendPlan([]), 'starter'));
 
-// --- goal-driven nav tailoring ---
+// --- guided navigation: five stable destinations, all tools remain reachable ---
 const nav = (goals) => navLinks({ _goals: goals });
-test('nav: no goals shows everything', () => {
-  const h = nav([]);
-  for (const item of ['Analytics', 'Radar', 'Posts', 'Reviews', 'Inbox', 'Leads', 'Approvals', 'Billing', 'Receptionist'])
-    assert.ok(h.includes(item), item);
+test('nav: exactly five plain destinations', () => {
+  const h=nav([]);
+  assert.equal((h.match(/<a /g)||[]).length,5);
+  for(const label of ['Home','Customers','Bookings','Posts','Settings'])assert.ok(h.includes('>'+label+'</span>'),label);
 });
-test('nav: social+reviews hides Inbox/Leads/Receptionist', () => {
-  const h = nav(['social', 'reviews']);
-  for (const item of ['Analytics', 'Radar', 'Posts', 'Reviews']) assert.ok(h.includes(item), item);
-  for (const item of ['Inbox', 'Leads', 'Receptionist']) assert.ok(!h.includes(item), item);
+test('nav: goals never hide the five stable destinations',()=>{
+  assert.equal(nav(['social','reviews']),nav(['leads','receptionist']));
 });
-test('nav: leads+receptionist hides social/review features', () => {
-  const h = nav(['leads', 'receptionist']);
-  for (const item of ['Inbox', 'Leads', 'Receptionist']) assert.ok(h.includes(item), item);
-  for (const item of ['Analytics', 'Radar', 'Posts', 'Reviews']) assert.ok(!h.includes(item), item);
+test('nav: accessible names and visible icons',()=>{
+  const h=nav([]);assert.ok(h.includes('aria-label="Main navigation"'));assert.equal((h.match(/aria-hidden="true"/g)||[]).length,5);
 });
-test('nav: Dashboard/Onboarding/Billing always present', () => {
-  for (const g of [[], ['social'], ['leads']]) {
-    const h = nav(g);
-    for (const item of ['Dashboard', 'Onboarding', 'Billing']) assert.ok(h.includes(item), item);
-  }
+test('nav: no crowded More overflow',()=>{
+  const h=nav([]);assert.ok(!h.includes('<details'));assert.ok(!h.includes('Dashboard'));assert.ok(!h.includes('More'));
 });
 
 // --- webhook signature ---

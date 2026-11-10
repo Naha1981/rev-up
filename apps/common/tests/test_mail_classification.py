@@ -83,7 +83,7 @@ def test_allauth_mail_is_marked_transactional_before_the_header_is_stripped(acco
 def test_an_invitation_reaches_a_recipient_whose_allowance_is_spent(account):
     from apps.members.services import create_invitation
 
-    org = Organization.objects.create(name="Org")
+    org = Organization.objects.create(subscription_status="active", name="Org")
     owner = get_user_model().objects.create_user(
         email="owner@example.com", password="pw-that-is-long", name="Owner", tos_accepted_at=timezone.now()
     )

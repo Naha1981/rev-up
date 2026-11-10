@@ -31,8 +31,8 @@ class RevUpSignupForm(SignupForm):
     """Signup with an industry pick - drives radar/responder presets.
 
     New accounts must also show where customers find them online: a website,
-    or - when they have none - their Facebook page. That keeps the trial for
-    real businesses only.
+    or - when they have none - their Facebook page. This identifies the
+    business customers will contact.
     """
 
     industry = forms.ChoiceField(
