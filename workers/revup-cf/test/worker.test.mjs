@@ -385,3 +385,15 @@ for (const [path,title] of [['terms','Terms of Service'],['privacy','Privacy Pol
   assert.equal(r.status,200);const h=await r.text();assert.ok(h.includes(title));assert.ok(h.includes('17 October 2026'));assert.match(h,/href="\/signup"/);
  });
 }
+
+test('bookings phone view labels rows, wraps controls and shows last scheduled time',async()=>{
+ const {bookingsPage}=await import('../dist-test/index.mjs');
+ const booking={id:'00000000-0000-4000-8000-000000000001',contact_name:'Synthetic QA',status:'cancelled',preferred_time:'original text',scheduled_start:'2026-11-10T12:30:00Z'};
+ const db={query:async q=>({rows:q.includes('FROM receptionist_booking')?[booking]:[]})};
+ const h=await(await bookingsPage(db,{}, {workspace_id:'synthetic'},{},new URL('https://example.invalid/bookings?msg=That%20time%20overlaps'))).text();
+ assert.ok(h.includes('class="booking-table"'));
+ for(const label of ['Customer','Time','Status','Actions'])assert.ok(h.includes('data-label="'+label+'"'));
+ assert.ok(h.includes('content:attr(data-label)'));assert.ok(h.includes('max-width:100%!important'));
+ assert.ok(h.includes('14:30:00'));assert.ok(!h.includes('original text'));
+ assert.ok(h.includes('class="booking-notice bad"'));assert.ok(h.includes('role="status"'));
+});

@@ -1056,6 +1056,33 @@ function withSecurity(res: Response, path: string): Response {
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
 }
 
+export async function bookingsPage(db:Pool,user:any,mem:any,env:any,url:URL):Promise<Response>{
+        const bk = await db.query(
+          `SELECT b.*, c.name AS contact_name, c.wa_id FROM receptionist_booking b
+           JOIN receptionist_contact c ON c.id=b.contact_id
+           WHERE b.workspace_id=$1 ORDER BY b.created_at DESC LIMIT 50`, [mem.workspace_id]);
+        const msg = url.searchParams.get("msg") || "";
+        const calendar=(await db.query("SELECT google_email,calendar_id FROM receptionist_calendarconnection WHERE workspace_id=$1",[mem.workspace_id])).rows[0];
+
+        const rows = bk.rows.map((b: any) => `<tr>
+<td data-label="Customer"><b>${esc(b.contact_name || b.wa_id)}</b><br><span class="mut">${esc(b.service || "booking")}</span></td>
+<td data-label="Time" class="mut">${b.scheduled_start ? new Date(b.scheduled_start).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" }) : esc(b.preferred_time || "to confirm")}${b.table_label ? `<br><span class="pill pill-live">${esc(b.table_label)}</span>` : ""}</td>
+<td data-label="Status">${b.status === "confirmed" ? '<span class="ok">confirmed</span>' : b.status === "done" ? "done" : b.status === "cancelled" ? '<span class="mut">cancelled</span>' : "<b>requested</b>"}</td>
+<td data-label="Actions">${b.status === "requested" ? `<form class="inline" method="post" action="/bookings/${b.id}/confirm"><input type="datetime-local" aria-label="Confirm booking time" name="when" required style="width:auto"><input name="table_label" maxlength="40" placeholder="Table (optional)" style="width:110px"><button>Confirm</button></form>` : ""}
+${b.status === "confirmed" ? `<form class="inline" method="post" action="/bookings/${b.id}/move"><label>Move to<input type="datetime-local" name="when" required value="${b.scheduled_start?new Date(new Date(b.scheduled_start).getTime()+7200000).toISOString().slice(0,16):''}"></label><input name="table_label" maxlength="40" value="${esc(b.table_label||'')}" placeholder="Table (optional)"><button>Move booking</button></form><form class="inline" method="post" action="/bookings/${b.id}/done"><button>Mark done</button></form>` : ""}
+${["requested", "confirmed"].includes(b.status) ? `<form class="inline" method="post" action="/bookings/${b.id}/cancel"><button class="link">Cancel</button></form>` : ""}</td></tr>`).join("");
+        return html(layout("Bookings", `
+${msg ? `<p class="booking-notice ${/^(Booking confirmed|Booking cancelled|Google Calendar connected|Google Calendar disconnected)/.test(msg)?"ok":"bad"}" role="status">${esc(msg)}</p>` : ""}
+<style>
+.booking-notice.bad{color:#a32222}.booking-table td{overflow-wrap:anywhere}.booking-table form{max-width:100%}
+@media(max-width:600px){.booking-table,.booking-table tbody,.booking-table tr,.booking-table td{display:block;width:100%;box-sizing:border-box}.booking-table tr:first-child{display:none}.booking-table tr{padding:10px 0 18px;border-bottom:1px solid #ddd}.booking-table td{padding:8px 0;border:0}.booking-table td:before{content:attr(data-label);display:block;font-size:12px;font-weight:700;color:#5f5b56;margin-bottom:4px}.booking-table form.inline{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0;width:100%}.booking-table label{display:block;max-width:100%;width:100%}.booking-table input{box-sizing:border-box;min-width:0!important;max-width:100%!important;width:100%!important}.booking-table button{max-width:100%}}
+</style>
+${calendarPanel(calendar,calendarConfigured(env))}
+<p class="mut">Booking requests land here from your WhatsApp receptionist. Confirm a time, and when the job is finished mark it done - that starts the review request flow automatically.</p>
+<div class="card">${bk.rows.length ? `<table class="booking-table"><tr><th>Customer</th><th>Time</th><th>Status</th><th></th></tr>${rows}</table>` : `<p class="mut">No bookings yet. When a customer books on WhatsApp, it shows up here.</p>`}</div>`, user));
+      
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const res = await handle(req, env);
@@ -1917,27 +1944,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
       }
 
 
-      if (path === "/bookings") {
-        const bk = await db.query(
-          `SELECT b.*, c.name AS contact_name, c.wa_id FROM receptionist_booking b
-           JOIN receptionist_contact c ON c.id=b.contact_id
-           WHERE b.workspace_id=$1 ORDER BY b.created_at DESC LIMIT 50`, [mem.workspace_id]);
-        const msg = url.searchParams.get("msg") || "";
-        const calendar=(await db.query("SELECT google_email,calendar_id FROM receptionist_calendarconnection WHERE workspace_id=$1",[mem.workspace_id])).rows[0];
-
-        const rows = bk.rows.map((b: any) => `<tr>
-<td><b>${esc(b.contact_name || b.wa_id)}</b><br><span class="mut">${esc(b.service || "booking")}</span></td>
-<td class="mut">${b.status === "confirmed" && b.scheduled_start ? new Date(b.scheduled_start).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" }) : esc(b.preferred_time || "to confirm")}${b.table_label ? `<br><span class="pill pill-live">${esc(b.table_label)}</span>` : ""}</td>
-<td>${b.status === "confirmed" ? '<span class="ok">confirmed</span>' : b.status === "done" ? "done" : b.status === "cancelled" ? '<span class="mut">cancelled</span>' : "<b>requested</b>"}</td>
-<td>${b.status === "requested" ? `<form class="inline" method="post" action="/bookings/${b.id}/confirm"><input type="datetime-local" name="when" required style="width:auto"><input name="table_label" maxlength="40" placeholder="Table (optional)" style="width:110px"><button>Confirm</button></form>` : ""}
-${b.status === "confirmed" ? `<form class="inline" method="post" action="/bookings/${b.id}/move"><label>Move to<input type="datetime-local" name="when" required value="${b.scheduled_start?new Date(new Date(b.scheduled_start).getTime()+7200000).toISOString().slice(0,16):''}"></label><input name="table_label" maxlength="40" value="${esc(b.table_label||'')}" placeholder="Table (optional)"><button>Move booking</button></form><form class="inline" method="post" action="/bookings/${b.id}/done"><button>Mark done</button></form>` : ""}
-${["requested", "confirmed"].includes(b.status) ? `<form class="inline" method="post" action="/bookings/${b.id}/cancel"><button class="link">Cancel</button></form>` : ""}</td></tr>`).join("");
-        return html(layout("Bookings", `
-${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
-${calendarPanel(calendar,calendarConfigured(env))}
-<p class="mut">Booking requests land here from your WhatsApp receptionist. Confirm a time, and when the job is finished mark it done - that starts the review request flow automatically.</p>
-<div class="card">${bk.rows.length ? `<table><tr><th>Customer</th><th>Time</th><th>Status</th><th></th></tr>${rows}</table>` : `<p class="mut">No bookings yet. When a customer books on WhatsApp, it shows up here.</p>`}</div>`, user));
-      }
+      if (path === "/bookings") return bookingsPage(db,user,mem,env,url);
 
       const bact = /^\/bookings\/([0-9a-f-]{36})\/(confirm|move|done|cancel)$/.exec(path);
       if (bact && req.method === "POST") {
