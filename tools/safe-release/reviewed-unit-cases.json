@@ -183,6 +183,8 @@
  "test::send uses decrypted tenant key, no ciphertext or shared fallback true",
  "test::settings upsert normalises the phone",
  "test::signup includes linked existing terms/privacy and visible password rule",
+ "test::social team handoff checks ready state under transaction row lock",
+ "test::social team handoff commits post and claimed piece together",
  "test::status 402 does not invalidate key",
  "test::status 429 does not invalidate key",
  "test::status 500 does not invalidate key",

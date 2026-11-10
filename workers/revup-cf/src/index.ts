@@ -1856,14 +1856,17 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
       if (pieceSend && req.method === "POST") {
         // Hands the checked post to the composer and straight into the owner's
         // approvals queue - the owner makes the final decision there.
-        const pr = await db.query(`SELECT id, caption, hashtags, status FROM socialteam_piece WHERE id=$1 AND workspace_id=$2`, [pieceSend[1], mem.workspace_id]);
-        const piece = pr.rows[0];
-        if (!piece || (piece.status !== "ready" && piece.status !== "returned")) return redirect("/team");
-        const tags = Array.isArray(piece.hashtags) ? piece.hashtags.join(" ") : "";
-        const caption = piece.caption + (tags ? "\n\n" + tags : "");
         const client = await db.connect();
         try {
           await client.query("BEGIN");
+          const pr = await client.query(`SELECT id, caption, hashtags, status FROM socialteam_piece WHERE id=$1 AND workspace_id=$2 FOR UPDATE`, [pieceSend[1], mem.workspace_id]);
+          const piece = pr.rows[0];
+          if (!piece || (piece.status !== "ready" && piece.status !== "returned")) {
+            await client.query("ROLLBACK");
+            return redirect("/team");
+          }
+          const tags = Array.isArray(piece.hashtags) ? piece.hashtags.join(" ") : "";
+          const caption = piece.caption + (tags ? "\n\n" + tags : "");
           const postId = crypto.randomUUID();
           await client.query(
             `INSERT INTO composer_post(id,title,caption,first_comment,internal_notes,tags,workspace_id,author_id,media_id,created_at,updated_at)
