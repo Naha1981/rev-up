@@ -792,10 +792,11 @@ ${issues.length ? `<h2>Needs a personal call</h2>
 }
 
 
-function newPostPage(user: any, mem: any, pre: Record<string, string>, msg = ""): string {
+export function newPostPage(user: any, mem: any, pre: Record<string, string>, msg = ""): string {
   return layout("New post", `
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <div class="card"><form method="post" action="/posts/draft">
+${pre.media ? `<input type="hidden" name="media" value="${esc(pre.media)}">` : ""}
 <label>Topic<input name="topic" maxlength="200" value="${esc(pre.topic || "")}" placeholder="e.g. teeth whitening special this month" required></label>
 <button class="btn-secondary">Write a draft</button>
 </form></div>

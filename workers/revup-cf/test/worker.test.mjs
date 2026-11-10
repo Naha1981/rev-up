@@ -257,3 +257,21 @@ test('itnSourceAllowed: garbage rejected', () => {
   assert.ok(!itnSourceAllowed('999.1.1.1'));
   assert.ok(!itnSourceAllowed('not-an-ip'));
 });
+
+// Preserve the selected private image through AI caption generation.
+test('post drafting keeps the selected image in both forms', async()=>{
+ const {newPostPage}=await import('../dist-test/index.mjs');
+ const id='ba263aa5-9153-4e10-9cfd-46ec61e0409a';
+ const html=newPostPage(null,{}, {media:id,topic:'Synthetic tea',caption:'Synthetic draft'});
+ const draft=html.match(/action="\/posts\/draft">([\s\S]*?)<\/form>/)[1];
+ const save=html.match(/action="\/posts\/new">([\s\S]*?)<\/form>/)[1];
+ assert.ok(draft.includes('name="media" value="'+id+'"'));
+ assert.ok(save.includes('name="media_id" value="'+id+'"'));
+ assert.ok(html.includes('/media/'+id+'/raw'));
+});
+test('post draft with no selected image adds no attachment',async()=>{
+ const {newPostPage}=await import('../dist-test/index.mjs');
+ const html=newPostPage(null,{},{});
+ assert.ok(!html.includes('name="media"'));
+ assert.ok(!html.includes('name="media_id"'));
+});
