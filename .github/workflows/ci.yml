@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, review/design-home-only, review/role-hotfix, review/customer-safety, review/workflow-safety, review/campaign-safety]
+    branches: [main, review/design-home-only, review/role-hotfix, review/customer-safety, review/workflow-safety, review/campaign-safety, review/entitlement-safety]
   pull_request:
     branches: [main]
 

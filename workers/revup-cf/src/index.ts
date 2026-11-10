@@ -512,9 +512,7 @@ export async function onboardingPage(db: Pool, user: any, mem: any, msg = ""): P
   let rules: any = b.custom_rules || {};
   if (typeof rules === "string") { try { rules = JSON.parse(rules); } catch { rules = {}; } }
   const savedGoals: string[] = Array.isArray(rules.goals) ? rules.goals : [];
-  const rec = recommendPlan(savedGoals);
-  const cur = mem.plan || rec;
-  return layout("Onboarding", `
+  return layout("Business details", `
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <div class="card"><form method="post" action="/onboarding">
 <h2 style="margin-top:0">Your business</h2>
@@ -525,30 +523,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <label>Timezone<input name="timezone" value="${esc(ws.timezone || "Africa/Johannesburg")}"></label>
 <h2>What do you want RevUp to do for you?</h2>
 ${GOALS.map(([v, l]) => `<label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" name="goal_${v}"${savedGoals.includes(v) ? " checked" : ""} style="width:auto"> ${l}</label>`).join("")}
-<h2>Choose your plan</h2>
-${PLAN_CARDS.map((p) => `<label style="display:block;border:1px solid ${cur === p.slug ? "var(--brand)" : "var(--line)"};border-radius:12px;padding:12px 14px;margin:8px 0;cursor:pointer;font-weight:400">
-<input type="radio" name="plan" value="${p.slug}"${cur === p.slug ? " checked" : ""} style="width:auto"> <b>${p.name} - R${p.price.toLocaleString("en-ZA")}/month</b>${rec === p.slug ? ` <span class="pill ok recpill" style="margin-left:8px">Recommended</span>` : ""}<br>
-<span class="mut">${p.feat}</span></label>`).join("")}
-<script>
-(function(){
-  var boxes=document.querySelectorAll('input[name^="goal_"]');
-  function recalc(){
-    var g=[];boxes.forEach(function(b){if(b.checked)g.push(b.name.slice(5));});
-    var r=g.indexOf('leads')>=0?'business-pro':(g.indexOf('social')>=0?'growth':'starter');
-    document.querySelectorAll('input[name="plan"]').forEach(function(p){
-      var card=p.closest('label');
-      var old=card.querySelector('.recpill');if(old)old.remove();
-      if(p.value===r){var sp=document.createElement('span');sp.className='pill ok recpill';sp.style.marginLeft='8px';sp.textContent='Recommended';card.querySelector('b').after(sp);}
-      if(!p.dataset.touched)p.checked=(p.value===r);
-      card.style.borderColor=p.checked?'var(--brand)':'var(--line)';
-    });
-  }
-  document.querySelectorAll('input[name="plan"]').forEach(function(p){p.addEventListener('change',function(){p.dataset.touched='1';document.querySelectorAll('input[name="plan"]').forEach(function(q){q.closest('label').style.borderColor=q.checked?'var(--brand)':'var(--line)';});});});
-  boxes.forEach(function(b){b.addEventListener('change',recalc);});
-  recalc();
-})();
-</script>
-<p class="mut">Plans are billed monthly from day one - no setup fee. You can change plans any time on the billing page.</p>
+<h2>Your monthly plan</h2><p class="mut">Choose and pay for your plan on <a href="/billing">Plan and payments</a>. Saving business details never changes your paid plan.</p>
 <button>Save and continue</button>
 </form></div>`, user);
 }
@@ -1668,13 +1643,12 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
         if (req.method === "POST") {
           const f = await formData(req);
           const goals = GOALS.map(([v]) => v).filter((v) => f["goal_" + v]);
-          const plan = ["starter", "growth", "business-pro"].includes(f.plan || "") ? f.plan! : recommendPlan(goals);
           const client = await db.connect();
           try {
             await client.query("BEGIN");
             await client.query(`UPDATE workspaces_workspace SET industry=$1, website_url=$2, timezone=$3, updated_at=now() WHERE id=$4`,
               [f.industry || "", f.website_url || "", f.timezone || "Africa/Johannesburg", mem.workspace_id]);
-          await client.query(`UPDATE organizations_organization SET plan=$1, goals=$3::jsonb, updated_at=now() WHERE id=$2`, [plan, mem.org_id, JSON.stringify(goals)]);
+          await client.query(`UPDATE organizations_organization SET goals=$1::jsonb, updated_at=now() WHERE id=$2`, [JSON.stringify(goals), mem.org_id]);
             await client.query(
               `INSERT INTO receptionist_businessprofile(id,workspace_id,business_name,industry,operating_hours,pricing_data,banking_details,payment_link_url,emergency_contact_phone,custom_rules,google_review_url,is_active,review_requests_enabled,service_reminder_days,revenue_mode,created_at,updated_at)
                VALUES($1,$2,$3,$4,'{}'::jsonb,'{}'::jsonb,'{}'::jsonb,'','',$6,$5,true,true,2,'reviews',now(),now())
@@ -1683,8 +1657,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
               [crypto.randomUUID(), mem.workspace_id, f.business_name || mem.org_name, f.industry || "", f.google_review_url || "", JSON.stringify({ goals })]);
             await client.query("COMMIT");
           } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }
-          const planName = PLAN_CARDS.find((p) => p.slug === plan)?.name || plan;
-          return redirect("/?msg=" + encodeURIComponent(`${planName} chosen - activate it with your first monthly payment on the billing page. Add your Google review link under Reviews whenever you are ready.`));
+          return redirect("/?msg=" + encodeURIComponent("Business details saved. Your monthly plan has not changed. Add your Google review link under Reviews whenever you are ready."));
         }
         return html(await onboardingPage(db, user, mem));
       }
