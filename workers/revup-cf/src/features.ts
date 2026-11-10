@@ -175,23 +175,28 @@ export async function campaignCreate(db: Pool, ws: string, name: string, segment
 }
 
 export async function campaignApprove(db: Pool, ws: string, id: string, when: string): Promise<void> {
-  const c = await db.query(`SELECT * FROM receptionist_campaign WHERE id=$1 AND workspace_id=$2`, [id, ws]);
-  const camp = c.rows[0];
-  if (!camp || camp.status !== "draft") throw new Error("Only a draft can be approved.");
-  const contacts = await segmentContacts(db, ws, camp.segment);
-  if (!contacts.length) throw new Error("No customers in this segment yet.");
-  const useB = !!camp.body_b;
-  for (let i = 0; i < contacts.length; i++) {
-    await db.query(
-      `INSERT INTO receptionist_campaignrecipient(id,campaign_id,contact_id,variant,status,error,attributed_amount)
-       VALUES($1,$2,$3,$4,'pending','',0) ON CONFLICT (campaign_id, contact_id) DO NOTHING`,
-      [crypto.randomUUID(), id, contacts[i].id, useB && i % 2 ? "b" : "a"]);
-  }
-  const whenTs = when ? new Date(when) : new Date();
-  const sched = isNaN(whenTs.getTime()) ? new Date() : whenTs;
-  await db.query(
-    `UPDATE receptionist_campaign SET approved_at=now(), scheduled_at=$1, status=$2 WHERE id=$3`,
-    [sched, sched > new Date() ? "scheduled" : "sending", id]);
+  const client=await db.connect();
+  try{
+    await client.query('BEGIN');
+    const c = await client.query(`SELECT * FROM receptionist_campaign WHERE id=$1 AND workspace_id=$2 FOR UPDATE`, [id, ws]);
+    const camp = c.rows[0];
+    if (!camp || camp.status !== "draft") throw new Error("Only a draft can be approved.");
+    const contacts = await segmentContacts(client as any, ws, camp.segment);
+    if (!contacts.length) throw new Error("No customers in this segment yet.");
+    const useB = !!camp.body_b;
+    for (let i = 0; i < contacts.length; i++) {
+      await client.query(
+        `INSERT INTO receptionist_campaignrecipient(id,campaign_id,contact_id,variant,status,error,attributed_amount)
+         VALUES($1,$2,$3,$4,'pending','',0) ON CONFLICT (campaign_id, contact_id) DO NOTHING`,
+        [crypto.randomUUID(), id, contacts[i].id, useB && i % 2 ? "b" : "a"]);
+    }
+    const whenTs = when ? new Date(when) : new Date();
+    const sched = isNaN(whenTs.getTime()) ? new Date() : whenTs;
+    await client.query(
+      `UPDATE receptionist_campaign SET approved_at=now(), scheduled_at=$1, status=$2 WHERE id=$3`,
+      [sched, sched > new Date() ? "scheduled" : "sending", id]);
+    await client.query('COMMIT');
+  }catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
 }
 
 export async function campaignCancel(db: Pool, ws: string, id: string): Promise<boolean> {
@@ -206,6 +211,21 @@ export async function runDueCampaigns(db: Pool, env: any): Promise<void> {
 }
 
 async function sendCampaign(db: Pool, env: any, camp: any): Promise<void> {
+  // Pin one connection so a workspace has one sender, across overlapping cron
+  // runs and distinct campaigns. Independent writes persist if a later send fails.
+  const client=await db.connect();let locked=false;let discard=false;
+  const key='campaign-send:'+camp.workspace_id;
+  try{
+    locked=!!(await client.query('SELECT pg_try_advisory_lock(hashtext($1)) AS locked',[key])).rows[0]?.locked;
+    if(!locked)return;
+    await sendClaimedCampaign(client as unknown as Pool,env,camp);
+  }finally{
+    if(locked){try{await client.query('SELECT pg_advisory_unlock(hashtext($1))',[key])}catch{discard=true}}
+    client.release(discard);
+  }
+}
+
+async function sendClaimedCampaign(db: Pool, env: any, camp: any): Promise<void> {
   const claim = await db.query(
     `UPDATE receptionist_campaign SET status='sending' WHERE id=$1 AND status IN ('scheduled','sending')`, [camp.id]);
   if (!claim.rowCount) return;
@@ -223,6 +243,9 @@ async function sendCampaign(db: Pool, env: any, camp: any): Promise<void> {
      FROM receptionist_campaignrecipient r JOIN receptionist_contact c ON c.id=r.contact_id
      WHERE r.campaign_id=$1 AND r.status='pending' ORDER BY c.created_at LIMIT 50`, [camp.id]);
   for (const r of pend.rows) {
+    const won=await db.query(`UPDATE receptionist_campaignrecipient SET status='sending'
+      WHERE id=$1 AND campaign_id=$2 AND status='pending' RETURNING id`,[r.id,camp.id]);
+    if(!won.rows[0])continue;
     if (r.opted_out) {
       await db.query(`UPDATE receptionist_campaignrecipient SET status='skipped', error='opted out' WHERE id=$1`, [r.id]);
       continue;
