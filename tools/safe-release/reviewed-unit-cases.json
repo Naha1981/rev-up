@@ -233,6 +233,7 @@
  "test::waitlist acceptance checks expiry in the atomic workspace claim",
  "test::waitlist contact and entry commit in one pinned transaction",
  "test::waitlist entry failure rolls the contact back",
+ "test::waitlist phone view stacks labelled rows and action controls",
  "test::waitlist rejects invalid party sizes before any storage",
  "test::whole-number rules preserve defaults and valid values",
  "test::whole-number rules reject fractions, nonfinite, negative and integer overflow",

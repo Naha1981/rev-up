@@ -4,7 +4,7 @@ import { deliver, OPT_OUT_FOOTER } from "./reviews";
 
 // ---------- waitlist ----------
 export async function waitlistAdd(db: Pool, ws: string, waId: string, name: string, partySize: number, wantedTime: string): Promise<void> {
-  if (!Number.isSafeInteger(partySize) || partySize < 1 || partySize > 32767) throw new Error("Enter a whole party size from 1 to 32767.");
+  if (!Number.isSafeInteger(partySize) || partySize < 1 || partySize > 30) throw new Error("Enter a whole party size from 1 to 30.");
   const client = await db.connect();
   try {
     await client.query("BEGIN");

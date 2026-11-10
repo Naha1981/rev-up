@@ -538,12 +538,15 @@ async function waitlistPage(db: Pool, user: any, mem: any, msg = ""): Promise<st
      WHERE w.workspace_id=$1 ORDER BY CASE WHEN w.status IN ('waiting','offered') THEN 0 ELSE 1 END, w.created_at LIMIT 40`, [mem.workspace_id]);
   const badge: any = { waiting: "<b>waiting</b>", offered: '<span class="pill warn">offered</span>', accepted: '<span class="ok">accepted</span>', cancelled: '<span class="mut">cancelled</span>', expired: '<span class="mut">expired</span>' };
   const rows = r.rows.map((w: any) => `<tr>
-<td><b>${esc(w.contact_name || w.wa_id)}</b><br><span class="mut">party of ${w.party_size}${w.wanted_time ? " · " + esc(w.wanted_time) : ""}</span></td>
-<td>${badge[w.status] || esc(w.status)}${w.status === "offered" ? `<br><span class="mut">${w.offer_minutes} min to answer</span>` : ""}</td>
-<td>${w.status === "waiting" ? `<form class="inline" method="post" action="/waitlist/${w.id}/offer"><button>Offer a table</button></form>` : ""}
+<td data-label="Party"><b>${esc(w.contact_name || w.wa_id)}</b><br><span class="mut">party of ${w.party_size}${w.wanted_time ? " · " + esc(w.wanted_time) : ""}</span></td>
+<td data-label="Status">${badge[w.status] || esc(w.status)}${w.status === "offered" ? `<br><span class="mut">${w.offer_minutes} min to answer</span>` : ""}</td>
+<td data-label="Actions">${w.status === "waiting" ? `<form class="inline" method="post" action="/waitlist/${w.id}/offer"><button>Offer a table</button></form>` : ""}
 ${w.status === "offered" ? `<form class="inline" method="post" action="/waitlist/${w.id}/accept"><button>They accepted</button></form>` : ""}
 ${["waiting", "offered"].includes(w.status) ? `<form class="inline" method="post" action="/waitlist/${w.id}/cancel"><button class="link">Remove</button></form>` : ""}</td></tr>`).join("");
-  return layout("Waitlist", `
+  return layout("Waitlist", `<style>
+.waitlist-table td{overflow-wrap:anywhere}
+@media(max-width:600px){.waitlist-table,.waitlist-table tbody,.waitlist-table tr,.waitlist-table td{display:block;width:100%;box-sizing:border-box}.waitlist-table tr:first-child{display:none}.waitlist-table tr{padding:10px 0 18px;border-bottom:1px solid #ddd}.waitlist-table td{padding:8px 0;border:0}.waitlist-table td:before{content:attr(data-label);display:block;font-size:12px;font-weight:700;color:var(--ink3);margin-bottom:4px}.waitlist-table form.inline{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0;width:100%}.waitlist-table button{max-width:100%}}
+</style>
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">Add a waiting party</h2>
 <form method="post" action="/waitlist">
@@ -552,7 +555,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <label>Party size<input name="party_size" type="number" min="1" max="30" value="2" style="width:90px"></label>
 <label>They hoped for<input name="wanted_time" maxlength="200" placeholder="tonight around 7"></label>
 <button>Add to the waitlist</button></form></div>
-<div class="card">${r.rows.length ? `<table><tr><th>Party</th><th>Status</th><th></th></tr>${rows}</table>` : `<p class="mut">Nobody waiting. When the restaurant is full, add parties here and offer tables as they open up.</p>`}</div>`, user);
+<div class="card">${r.rows.length ? `<table class="waitlist-table"><tr><th>Party</th><th>Status</th><th></th></tr>${rows}</table>` : `<p class="mut">Nobody waiting. When the restaurant is full, add parties here and offer tables as they open up.</p>`}</div>`, user);
 }
 
 async function loyaltyPage(db: Pool, user: any, mem: any, msg = ""): Promise<string> {
@@ -2003,8 +2006,8 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
           const f = await formData(req);
           const wa = String(f.wa_id || "").replace(/\D/g, "");
           if (!wa) return redirect("/waitlist");
-          const size = boundedWhole(f.party_size, 1, 2, 32767);
-          if (size === null) return redirect("/waitlist?msg=" + encodeURIComponent("Not added. Enter a whole party size from 1 to 32767."));
+          const size = boundedWhole(f.party_size, 1, 2, 30);
+          if (size === null) return redirect("/waitlist?msg=" + encodeURIComponent("Not added. Enter a whole party size from 1 to 30."));
           try { await waitlistAdd(db, mem.workspace_id, wa, String(f.name || "").trim(), size, String(f.wanted_time || "").trim()); }
           catch { return redirect("/waitlist?msg=" + encodeURIComponent("Not added. The waitlist could not be saved. Try again.")); }
           return redirect("/waitlist?msg=" + encodeURIComponent("Added to the waitlist."));
