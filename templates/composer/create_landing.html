@@ -42,12 +42,20 @@
         padding: 0 8px 8px;
         min-height: 60px;
     }
+    .kanban-cards .idea-empty-state { flex: 0 0 auto; width: 100%; box-sizing: border-box; min-height: max-content; white-space: normal; overflow: visible; text-overflow: clip; }
     .kanban-cards.drag-over {
         background: #FFF7ED;
         outline: 2px dashed #FDBA74;
         border-radius: 8px;
         margin: 0 4px 4px;
         padding: 0 4px 4px;
+    }
+
+    @media (max-width: 600px) {
+        .kanban-board { flex-direction: column; overflow-x: visible; }
+        .kanban-board .kanban-column { width: 100%; min-width: 0; min-height: 220px; max-height: none; }
+        .kanban-board [data-new-group-tile] { width: 100%; }
+        .kanban-board .kanban-cards { overflow: visible; }
     }
 
     /* Idea card */

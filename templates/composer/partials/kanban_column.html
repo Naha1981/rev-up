@@ -49,7 +49,7 @@
         {% for idea in col.ideas %}
             {% include "composer/partials/idea_card.html" with idea=idea group_id=col.id %}
         {% empty %}
-            <p class="px-3 py-4 text-xs text-stone-400 text-center">No ideas yet. Capture one with New Idea below.</p>
+            <p class="idea-empty-state px-3 py-4 text-base text-stone-600 text-center" style="flex:0 0 auto;min-width:0;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.5">No ideas yet. Capture one with New Idea below.</p>
         {% endfor %}
     </div>
 

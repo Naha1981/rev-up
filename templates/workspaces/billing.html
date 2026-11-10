@@ -3,7 +3,7 @@
 <div class="mx-auto w-full max-w-2xl px-4 py-6">
   <div class="flex items-center justify-between">
     <h1 class="text-xl font-semibold text-gray-900">Subscription</h1>
-    <a href="{% url 'workspaces:settings' workspace.id %}" class="text-sm font-medium text-blue-600">Settings</a>
+    <a href="{% url 'workspaces:settings' workspace.id %}" class="text-sm font-medium text-orange-700">Settings</a>
   </div>
 
   {% if status == "pending_activation" or status == "trial" %}
@@ -31,7 +31,7 @@
     {% for c in cards %}
     <form method="post">{% csrf_token %}
       <input type="hidden" name="plan" value="{{ c.id }}">
-      <button type="submit" class="w-full rounded-2xl border {% if card.id == c.id %}border-blue-600 bg-blue-50{% else %}border-gray-200 bg-white{% endif %} px-4 py-3 text-left">
+      <button type="submit" class="w-full rounded-2xl border {% if card.id == c.id %}border-orange-700 bg-orange-50{% else %}border-gray-200 bg-white{% endif %} px-4 py-3 text-left">
         <span class="flex items-center justify-between">
           <span class="font-medium text-gray-900">{{ c.name }}</span>
           <span class="font-semibold text-gray-900">R{{ c.price_fmt }}<span class="text-xs font-normal text-gray-500">/month</span></span>
