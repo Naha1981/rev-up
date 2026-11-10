@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, review/design-home-only]
+    branches: [main, review/design-home-only, review/role-hotfix]
   pull_request:
     branches: [main]
 

@@ -1,3 +1,4 @@
+import {hasWorkspacePermission,requiredWorkspacePermission} from "./permissions";
 import { JOURNEY_CSS, THEME_SCRIPT, JOURNEY_SCRIPT, journeyNav, toolRow, disclosure, COMMAND_CSS, LEGIBILITY_CSS, SETUP_CSS, FINISH_CSS, commandPalette } from "./journey";
 export {calendarPanel,calendarState,checkCalendarState,calendarEventId,calendarEventBody,calendarConnect,calendarSync} from "./calendar";
 import {calendarPanel,calendarConfigured,calendarAuthUrl,checkCalendarState,calendarConnect,calendarSync} from "./calendar";
@@ -185,9 +186,10 @@ export async function membership(db: Pool, userId: string, req?: Request): Promi
   const r = await db.query(
     `SELECT w.id AS workspace_id, w.name AS workspace_name, w.approval_workflow_mode,w.industry,
             o.id AS org_id, o.name AS org_name, o.plan, o.subscription_status, o.payment_reference,
-            o.trial_started_at, o.activated_at, o.goals, m.workspace_role
+            o.trial_started_at, o.activated_at, o.goals, m.workspace_role,m.custom_role_id,cr.permissions AS custom_permissions
      FROM members_workspace_membership m
      JOIN workspaces_workspace w ON w.id=m.workspace_id
+     LEFT JOIN members_custom_role cr ON cr.id=m.custom_role_id AND cr.organization_id=w.organization_id
      JOIN organizations_organization o ON o.id=w.organization_id
      WHERE m.user_id=$1 AND w.is_archived=false AND o.deleted_at IS NULL
      ORDER BY m.added_at`, [userId]);
@@ -1402,6 +1404,8 @@ async function handle(req: Request, env: Env): Promise<Response> {
       if (!user) return redirect("/login");
       const mem = await membership(db, user.id, req);
       if (!mem) return html(layout("No workspace", `<p>Your account has no workspace yet. <a href="/signup">Create one</a>.</p>`, user), 403);
+      const permission=requiredWorkspacePermission(path,req.method);
+      if(permission && !hasWorkspacePermission(mem,permission))return html(layout("Not allowed",'<p>Your role does not allow this action. Ask your business owner for access.</p><a href="/">Back to Home</a>',user),403);
       user._cur_ws = mem.workspace_name; user._ws_count = (mem.workspaces || []).length; user._goals = Array.isArray(mem.goals) ? mem.goals : [];
 
       if (path === "/pages") {

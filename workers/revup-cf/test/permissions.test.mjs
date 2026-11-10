@@ -1,0 +1,14 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {hasWorkspacePermission,requiredWorkspacePermission} from '../dist-test/permissions.mjs';
+const can=(role,path,method='POST')=>{const key=requiredWorkspacePermission(path,method);return !key||hasWorkspacePermission({workspace_role:role},key)};
+for(const path of ['/onboarding','/business-type','/assistant','/menu/items','/reviews/toggle','/campaigns','/posts/new','/media','/approvals/00000000-0000-4000-8000-000000000001/approve','/receptionist/connect','/settings/connections/gmail/start','/unmapped-mutation'])test('viewer cannot mutate '+path,()=>assert.equal(can('viewer',path),false));
+test('viewer analytics read allowed',()=>assert.equal(can('viewer','/analytics','GET'),true));
+test('viewer cannot read customer inbox',()=>assert.equal(can('viewer','/inbox','GET'),false));
+test('manager cannot change workspace settings',()=>assert.equal(can('manager','/onboarding'),false));
+test('manager can approve posts',()=>assert.equal(can('manager','/approvals/x/approve'),true));
+test('editor can draft but not approve posts',()=>{assert.equal(can('editor','/posts/new'),true);assert.equal(can('editor','/approvals/x/approve'),false)});
+test('client can approve but not draft posts',()=>{assert.equal(can('client','/approvals/x/approve'),true);assert.equal(can('client','/posts/new'),false)});
+test('contributor can upload but not delete media',()=>{assert.equal(can('contributor','/media'),true);assert.equal(can('contributor','/media/x/delete'),false)});
+test('custom role overrides built-in role without inheriting power',()=>{assert.equal(hasWorkspacePermission({workspace_role:'owner',custom_role_id:'x',custom_permissions:{view_analytics:true}},'manage_workspace_settings'),false);assert.equal(hasWorkspacePermission({workspace_role:'viewer',custom_role_id:'x',custom_permissions:{create_posts:true}},'create_posts'),true)});
+test('unknown role fails closed',()=>assert.equal(can('unknown','/onboarding'),false));
+test('owner positive business and customer actions',()=>{for(const p of ['/onboarding','/menu/items','/posts/new','/approvals/x/approve','/media/x/delete','/assistant','/reviews/links'])assert.equal(can('owner',p),true,p)});
+test('switch workspace permission is handled by membership check',()=>assert.equal(requiredWorkspacePermission('/switch','POST'),null));
