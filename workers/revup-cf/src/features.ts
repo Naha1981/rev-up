@@ -74,36 +74,35 @@ export async function awardForBooking(db: Pool, ws: string, bookingId: string, c
 }
 
 export async function issueVoucher(db: Pool, ws: string, contactId: string, kind = "loyalty", note = ""): Promise<any> {
-  const s = await loyaltySettings(db, ws);
-  if (kind === "loyalty") {
-    const account = await loyaltyAccount(db, ws, contactId);
-    if (account.balance < s.points_for_voucher) throw new Error(`${account.balance} points - ${s.points_for_voucher} needed for a voucher.`);
-    await loyaltyApply(db, account.id, "redeem", -s.points_for_voucher, "Reward voucher issued");
-  }
-  let code = "";
-  for (let i = 0; i < 8; i++) {
-    code = [...crypto.getRandomValues(new Uint8Array(4))].map((b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
-    const dup = await db.query(`SELECT 1 FROM receptionist_voucher WHERE code=$1`, [code]);
-    if (!dup.rows[0]) break;
-  }
-  const id = crypto.randomUUID();
-  await db.query(
-    `INSERT INTO receptionist_voucher(id,workspace_id,contact_id,kind,code,amount_rand,status,note,expires_at,created_at)
-     VALUES($1,$2,$3,$4,$5,$6,'active',$7,now() + ($8 || ' days')::interval,now())`,
-    [id, ws, contactId, kind, code, s.voucher_value_rand, note.slice(0, 200), String(s.voucher_valid_days)]);
-  return (await db.query(`SELECT * FROM receptionist_voucher WHERE id=$1`, [id])).rows[0];
+  const own=await db.query(`SELECT 1 FROM receptionist_contact WHERE id=$1 AND workspace_id=$2`,[contactId,ws]);
+  if(!own.rows[0])throw new Error("Customer not found in this business.");
+  const s=await loyaltySettings(db,ws);
+  const account=kind==='loyalty'?await loyaltyAccount(db,ws,contactId):null;
+  const client=await db.connect();
+  try{
+    await client.query('BEGIN');
+    if(account){
+      const locked=(await client.query(`SELECT balance FROM receptionist_loyaltyaccount WHERE id=$1 AND workspace_id=$2 FOR UPDATE`,[account.id,ws])).rows[0];
+      if(!locked||locked.balance<s.points_for_voucher)throw new Error(`${locked?.balance||0} points - ${s.points_for_voucher} needed for a voucher.`);
+      await loyaltyApply(client as any,account.id,'redeem',-s.points_for_voucher,'Reward voucher issued');
+    }
+    const code=crypto.randomUUID().replace(/-/g,'').slice(0,12).toUpperCase();
+    const id=crypto.randomUUID();
+    const result=await client.query(`INSERT INTO receptionist_voucher(id,workspace_id,contact_id,kind,code,amount_rand,status,note,expires_at,created_at)
+      VALUES($1,$2,$3,$4,$5,$6,'active',$7,now()+($8||' days')::interval,now()) RETURNING *`,[id,ws,contactId,kind,code,s.voucher_value_rand,note.slice(0,200),String(s.voucher_valid_days)]);
+    await client.query('COMMIT');return result.rows[0];
+  }catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
+
 }
 
 export async function redeemVoucher(db: Pool, ws: string, id: string): Promise<boolean> {
-  const v = await db.query(`SELECT * FROM receptionist_voucher WHERE id=$1 AND workspace_id=$2`, [id, ws]);
-  if (!v.rows[0]) return false;
-  if (v.rows[0].status === "active" && new Date(v.rows[0].expires_at) < new Date()) {
-    await db.query(`UPDATE receptionist_voucher SET status='expired' WHERE id=$1`, [id]);
-    return false;
-  }
-  if (v.rows[0].status !== "active") return false;
-  await db.query(`UPDATE receptionist_voucher SET status='redeemed', redeemed_at=now() WHERE id=$1`, [id]);
-  return true;
+  // One conditional write is the redemption claim. A stale reader must not
+  // report success after another request has already spent this voucher.
+  const won=await db.query(`UPDATE receptionist_voucher SET status='redeemed',redeemed_at=now()
+    WHERE id=$1 AND workspace_id=$2 AND status='active' AND expires_at>=now() RETURNING id`,[id,ws]);
+  if(won.rows[0])return true;
+  await db.query(`UPDATE receptionist_voucher SET status='expired' WHERE id=$1 AND workspace_id=$2 AND status='active' AND expires_at<now()`,[id,ws]);
+  return false;
 }
 
 export async function expireVouchers(db: Pool): Promise<number> {

@@ -1791,6 +1791,8 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
         if (req.method === "POST") {
           const f = await formData(req);
           if (!(f.title || "").trim() && !(f.caption || "").trim()) return redirect("/posts/new");
+          const mediaId=/^[0-9a-f-]{36}$/.test(f.media_id||"")?f.media_id:null;
+          if(mediaId){const own=await db.query(`SELECT 1 FROM cf_media WHERE id=$1 AND workspace_id=$2`,[mediaId,mem.workspace_id]);if(!own.rows[0])return html(layout("Image not available",'<p>Choose an image from this business library.</p><a href="/media">Back to photos</a>',user),400);}
           const postId = crypto.randomUUID();
           const client = await db.connect();
           try {
@@ -1798,7 +1800,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
             await client.query(
               `INSERT INTO composer_post(id,title,caption,first_comment,internal_notes,tags,workspace_id,author_id,media_id,created_at,updated_at)
                VALUES($1,$2,$3,'','','{}'::jsonb,$4,$5,$6,now(),now())`,
-              [postId, (f.title || "").trim(), (f.caption || "").trim(), mem.workspace_id, user.id, /^[0-9a-f-]{36}$/.test(f.media_id || "") ? f.media_id : null]);
+              [postId, (f.title || "").trim(), (f.caption || "").trim(), mem.workspace_id, user.id, mediaId]);
             // One draft platform post per connected account, like the Django composer.
             const accs = await client.query(
               `SELECT id, provider FROM social_accounts_social_account WHERE workspace_id=$1 AND connection_status='connected'`, [mem.workspace_id]);
