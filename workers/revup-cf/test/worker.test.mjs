@@ -363,3 +363,25 @@ test('calendar cancellation treats an already-gone event as removed',async()=>{
  const {calendarSync}=await import('../dist-test/index.mjs');const {encryptTenantKey}=await import('../dist-test/tenant-crypto.mjs');const e={TENANT_FIELD_KEY:btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))};const c={access_token:await encryptTenantKey('synthetic-access',e),token_expiry:new Date(Date.now()+3600000)};let writes=[];
  assert.equal(await calendarSync({query:async(q,p)=>{if(q.startsWith('SELECT'))return {rows:[c]};writes.push(p);return {rows:[]};}},e,'ws',{id:'booking',google_event_id:'existing'},true,async()=>new Response('',{status:404})),'synced');assert.equal(writes.length,1);
 });
+
+// Fresh-stranger entry regressions.
+test('signup includes linked existing terms/privacy and visible password rule', async () => {
+  const {signupPage} = await import('../dist-test/index.mjs');
+  const h=signupPage();
+  assert.match(h,/href="\/legal\/terms\/"/);assert.match(h,/href="\/legal\/privacy\/"/);
+  assert.match(h,/Use at least 8 characters/);
+});
+test('login offers password recovery', async () => {
+  const {loginPage} = await import('../dist-test/index.mjs');
+  assert.match(loginPage(),/href="\/forgot-password"/);
+});
+test('recovery uses the established shared-database flow, no caller-controlled redirect', async () => {
+  const r=await worker.fetch(new Request('https://revup.nahalabs.co.za/forgot-password?next=https://evil.invalid'),{},{});
+  assert.equal(r.status,303);assert.equal(r.headers.get('location'),'https://revup-8g3m.onrender.com/accounts/password/reset/');
+});
+for (const [path,title] of [['terms','Terms of Service'],['privacy','Privacy Policy']]) {
+ test(`public ${path} accessible signed out`,async()=>{
+  const r=await worker.fetch(new Request(`https://revup.nahalabs.co.za/legal/${path}/`),{},{});
+  assert.equal(r.status,200);const h=await r.text();assert.ok(h.includes(title));assert.ok(h.includes('17 October 2026'));assert.match(h,/href="\/signup"/);
+ });
+}

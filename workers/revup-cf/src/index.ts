@@ -1,5 +1,6 @@
 export {calendarPanel,calendarState,checkCalendarState,calendarEventId,calendarEventBody,calendarConnect,calendarSync} from "./calendar";
 import {calendarPanel,calendarConfigured,calendarAuthUrl,checkCalendarState,calendarConnect,calendarSync} from "./calendar";
+import { legalPage } from "./legal";
 import { decryptTenantKey } from "./tenant-crypto";
 import { connectFailure, saveTenantKey } from "./connect-errors";
 // RevUp on Cloudflare Workers — revenue path. Shares the live Neon DB with the
@@ -419,23 +420,26 @@ ${err ? `<p class="bad">${esc(err)}</p>` : ""}
 <button>Send enquiry</button></form></div>`);
 
 // ---------- pages ----------
-const signupPage = (err = "") => layout("Create your RevUp account", `
+export const signupPage = (err = "") => layout("Create your RevUp account", `
 ${err ? `<p class="bad">${esc(err)}</p>` : ""}
 <div class="card"><form method="post" action="/signup">
 <label>Your name<input name="name" required maxlength="150"></label>
 <label>Email<input name="email" type="email" required maxlength="254"></label>
-<label>Password<input name="password" type="password" required minlength="8"></label>
+<label>Password<input name="password" type="password" autocomplete="new-password" required minlength="8" aria-describedby="password-help"></label>
+<p id="password-help" class="mut">Use at least 8 characters.</p>
 <label>Business name<input name="business" required maxlength="200"></label>
+<p class="mut">By creating an account, you agree to the <a style="color:var(--ink2);text-decoration:underline" href="/legal/terms/">Terms of Service</a> and acknowledge the <a style="color:var(--ink2);text-decoration:underline" href="/legal/privacy/">Privacy Policy</a>.</p>
 <button>Create account</button>
 <p class="mut">One monthly price from day one - no setup fee. Choose your plan during setup and activate it with your first payment.</p>
 </form></div>`);
 
-const loginPage = (err = "") => layout("Log in to RevUp", `
+export const loginPage = (err = "") => layout("Log in to RevUp", `
 ${err ? `<p class="bad">${esc(err)}</p>` : ""}
 <div class="card"><form method="post" action="/login">
 <label>Email<input name="email" type="email" required></label>
 <label>Password<input name="password" type="password" required></label>
 <button>Log in</button>
+<p style="margin-top:16px"><a style="color:var(--ink2);text-decoration:underline" href="/forgot-password">Forgot your password?</a></p>
 </form></div>`);
 
 function statusLabel(s: string): string { return s === "active" ? "active" : "activation pending"; }
@@ -1173,6 +1177,14 @@ async function handle(req: Request, env: Env): Promise<Response> {
     if (path === "/billing/payfast-itn" && req.method === "POST") {
       const db = pool(env);
       try { return await handlePayfastItn(db, env, req); } finally { await db.end().catch(() => {}); }
+    }
+
+    // Reuse the existing shared-database recovery flow, including its email,
+    // expiring tokens and single-use checks. Do not invent a second reset system.
+    if (path === "/forgot-password" && req.method === "GET") return redirect("https://revup-8g3m.onrender.com/accounts/password/reset/");
+    if ((path === "/legal/terms/" || path === "/legal/privacy/") && req.method === "GET") {
+      const kind = path.includes("terms") ? "terms" : "privacy";
+      return html(layout(kind === "terms" ? "Terms of Service" : "Privacy Policy", legalPage(kind)));
     }
 
     if (path === "/signup") {
