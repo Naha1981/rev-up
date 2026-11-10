@@ -1,5 +1,7 @@
 import subprocess
+
 from playwright.sync_api import sync_playwright
+
 DB='postgres://sandbox@127.0.0.1:55432/brightbean_test'
 def sql(q):return subprocess.check_output(['psql',DB,'-Atc',q],text=True).strip()
 org=sql("SELECT o.id FROM organizations_organization o WHERE o.name='Mokoena Plumbing' LIMIT 1")
