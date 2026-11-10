@@ -9,7 +9,7 @@ name: RevUp CF release gate
 
 on:
   push:
-    branches: [main]
+    branches: [main, review/guided-b850bdc-ci-only]
     paths: ["workers/revup-cf/**", "tools/safe-release/**", ".github/workflows/revup-cf-gate.yml"]
   pull_request:
     branches: [main]
