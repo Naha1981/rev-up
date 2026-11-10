@@ -406,3 +406,15 @@ test('bookings route awaits page queries before pool cleanup',async()=>{
  async function route(){try{return await bookingsPage(db,{}, {workspace_id:'synthetic'},{},new URL('https://example.invalid/bookings'));}finally{await db.end();}}
  assert.equal((await route()).status,200);assert.ok(ended);
 });
+
+test('landing text passes AA contrast on its light background',()=>{
+ const h=landingPage();
+ const lum=hex=>{const v=hex.match(/../g).map(x=>parseInt(x,16)/255).map(x=>x<=0.04045?x/12.92:((x+0.055)/1.055)**2.4);return v.reduce((s,x,i)=>s+x*[.2126,.7152,.0722][i],0)};
+ const ratio=(a,b)=>(Math.max(lum(a),lum(b))+.05)/(Math.min(lum(a),lum(b))+.05);
+ const cream=h.match(/--cream:#([a-f0-9]{6})/)[1];
+ for(const token of ['muted','orange-text'])assert.ok(ratio(h.match(new RegExp('--'+token+':#([a-f0-9]{6})'))[1],cream)>=4.5,token);
+ assert.ok(h.includes('--orange:#f47721'));
+ assert.ok(h.includes('font-size:12px'));
+ assert.ok(!/font-size:(8|9|9\.5|10|10\.5|11)px/.test(h));
+ assert.ok(h.includes('.faq h2 [style*="--orange-text"]'));
+});
