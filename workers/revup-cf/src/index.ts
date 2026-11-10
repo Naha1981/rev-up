@@ -1,3 +1,5 @@
+export {calendarPanel,calendarState,checkCalendarState,calendarEventId,calendarEventBody,calendarConnect,calendarSync} from "./calendar";
+import {calendarPanel,calendarConfigured,calendarAuthUrl,checkCalendarState,calendarConnect,calendarSync} from "./calendar";
 import { decryptTenantKey } from "./tenant-crypto";
 import { connectFailure, saveTenantKey } from "./connect-errors";
 // RevUp on Cloudflare Workers — revenue path. Shares the live Neon DB with the
@@ -14,6 +16,8 @@ import { waitlistAdd, waitlistExpire, waitlistAction, loyaltySettings, loyaltyAc
 
 interface Env {
   DATABASE_URL: string;
+  GOOGLE_CALENDAR_CLIENT_ID?: string;
+  GOOGLE_CALENDAR_CLIENT_SECRET?: string;
   TENANT_FIELD_KEY?: string;
   DJANGO_SECRET_KEY?: string;
   ENCRYPTION_KEY_SALT?: string;
@@ -1527,6 +1531,16 @@ ${conn && conn.status === "connected" && conn.last_error ? `<p class="warn">${es
         }
       }
 
+      if (path === "/receptionist/calendar/connect" && req.method === "POST") {
+        if(req.headers.get("origin")!==base)return html("Calendar request did not come from this site.",403);
+        try { return redirect(await calendarAuthUrl(env,base,mem.workspace_id,user.id)); }
+        catch { return redirect("/bookings?msg="+encodeURIComponent("Google Calendar connection is not configured. Contact NahaLabs.")); }
+      }
+      if (path === "/receptionist/google-calendar/callback/") {
+        if(!await checkCalendarState(env,url.searchParams.get("state")||"",mem.workspace_id,user.id)) return html(layout("Calendar connection",'<p class="bad">Calendar connection expired or belongs to another business. Start again from Bookings.</p>',user),403);
+        try {const code=url.searchParams.get("code");if(!code)throw Error();await calendarConnect(db,env,mem.workspace_id,code,base);return redirect("/bookings?msg="+encodeURIComponent("Google Calendar connected. Confirmed bookings will sync to your primary calendar."));}
+        catch {return redirect("/bookings?msg="+encodeURIComponent("Calendar connection did not complete. Start again from Bookings."));}
+      }
       if (path === "/receptionist") {
         const [ch, prof, usedM, planRow] = await Promise.all([
           db.query(`SELECT phone_number, label, is_sandbox, connected_at FROM receptionist_zerniochannel WHERE workspace_id=$1`, [mem.workspace_id]),
@@ -1892,28 +1906,37 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
            JOIN receptionist_contact c ON c.id=b.contact_id
            WHERE b.workspace_id=$1 ORDER BY b.created_at DESC LIMIT 50`, [mem.workspace_id]);
         const msg = url.searchParams.get("msg") || "";
+        const calendar=(await db.query("SELECT google_email,calendar_id FROM receptionist_calendarconnection WHERE workspace_id=$1",[mem.workspace_id])).rows[0];
+
         const rows = bk.rows.map((b: any) => `<tr>
 <td><b>${esc(b.contact_name || b.wa_id)}</b><br><span class="mut">${esc(b.service || "booking")}</span></td>
 <td class="mut">${b.status === "confirmed" && b.scheduled_start ? new Date(b.scheduled_start).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" }) : esc(b.preferred_time || "to confirm")}${b.table_label ? `<br><span class="pill pill-live">${esc(b.table_label)}</span>` : ""}</td>
 <td>${b.status === "confirmed" ? '<span class="ok">confirmed</span>' : b.status === "done" ? "done" : b.status === "cancelled" ? '<span class="mut">cancelled</span>' : "<b>requested</b>"}</td>
 <td>${b.status === "requested" ? `<form class="inline" method="post" action="/bookings/${b.id}/confirm"><input type="datetime-local" name="when" required style="width:auto"><input name="table_label" maxlength="40" placeholder="Table (optional)" style="width:110px"><button>Confirm</button></form>` : ""}
-${b.status === "confirmed" ? `<form class="inline" method="post" action="/bookings/${b.id}/done"><button>Mark done</button></form>` : ""}
+${b.status === "confirmed" ? `<form class="inline" method="post" action="/bookings/${b.id}/move"><label>Move to<input type="datetime-local" name="when" required value="${b.scheduled_start?new Date(new Date(b.scheduled_start).getTime()+7200000).toISOString().slice(0,16):''}"></label><input name="table_label" maxlength="40" value="${esc(b.table_label||'')}" placeholder="Table (optional)"><button>Move booking</button></form><form class="inline" method="post" action="/bookings/${b.id}/done"><button>Mark done</button></form>` : ""}
 ${["requested", "confirmed"].includes(b.status) ? `<form class="inline" method="post" action="/bookings/${b.id}/cancel"><button class="link">Cancel</button></form>` : ""}</td></tr>`).join("");
         return html(layout("Bookings", `
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
+${calendarPanel(calendar,calendarConfigured(env))}
 <p class="mut">Booking requests land here from your WhatsApp receptionist. Confirm a time, and when the job is finished mark it done - that starts the review request flow automatically.</p>
 <div class="card">${bk.rows.length ? `<table><tr><th>Customer</th><th>Time</th><th>Status</th><th></th></tr>${rows}</table>` : `<p class="mut">No bookings yet. When a customer books on WhatsApp, it shows up here.</p>`}</div>`, user));
       }
 
-      const bact = /^\/bookings\/([0-9a-f-]{36})\/(confirm|done|cancel)$/.exec(path);
+      const bact = /^\/bookings\/([0-9a-f-]{36})\/(confirm|move|done|cancel)$/.exec(path);
       if (bact && req.method === "POST") {
-        const own = await db.query(`SELECT id, contact_id, status FROM receptionist_booking WHERE id=$1 AND workspace_id=$2`, [bact[1], mem.workspace_id]);
+        const own = await db.query(`SELECT b.*,c.name AS contact_name FROM receptionist_booking b JOIN receptionist_contact c ON c.id=b.contact_id WHERE b.id=$1 AND b.workspace_id=$2`, [bact[1], mem.workspace_id]);
         const b = own.rows[0];
         if (!b) return redirect("/bookings");
-        if (bact[2] === "confirm" && b.status === "requested") {
+        if ((bact[2] === "confirm" && b.status === "requested") || (bact[2] === "move" && b.status === "confirmed")) {
           const f = await formData(req);
           const when = String(f.when || "").trim();
           if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(when)) return redirect("/bookings");
+          const start=new Date(when.slice(0,16)+":00+02:00");
+          if(!Number.isFinite(start.getTime()))return redirect("/bookings?msg="+encodeURIComponent("Choose a valid booking date and time."));
+          const clashes=await db.query(`SELECT id FROM receptionist_booking WHERE workspace_id=$1 AND id<>$2 AND status='confirmed' AND scheduled_start < $3::timestamptz + ($4 || ' minutes')::interval AND scheduled_start + (duration_minutes || ' minutes')::interval > $3::timestamptz LIMIT 1`,[mem.workspace_id,b.id,start.toISOString(),String(b.duration_minutes||60)]);
+          if(clashes.rows.length)return redirect("/bookings?msg="+encodeURIComponent("That time overlaps another confirmed booking. Choose another time."));
+          try {await calendarSync(db,env,mem.workspace_id,{...b,scheduled_start:start.toISOString()});}
+          catch {return redirect("/bookings?msg="+encodeURIComponent("Calendar sync did not complete. Booking time has not changed; try again."));}
           await db.query(`UPDATE receptionist_booking SET status='confirmed', scheduled_start=($1 || ':00+02')::timestamptz, table_label=$3 WHERE id=$2`, [when.slice(0, 16), b.id, String(f.table_label || "").trim().slice(0, 40)]);
           return redirect("/bookings?msg=" + encodeURIComponent("Booking confirmed."));
         }
@@ -1930,6 +1953,8 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
           return redirect("/bookings?msg=" + encodeURIComponent((evId ? "Marked done - the review check-in goes out in 15 minutes." : "Marked done. (This customer opted out of messages.)") + extra + loyaltyNote));
         }
         if (bact[2] === "cancel" && ["requested", "confirmed"].includes(b.status)) {
+          try {await calendarSync(db,env,mem.workspace_id,b,true);}
+          catch {return redirect("/bookings?msg="+encodeURIComponent("Calendar removal did not complete. Booking has not been cancelled."));}
           await db.query(`UPDATE receptionist_booking SET status='cancelled' WHERE id=$1`, [b.id]);
           return redirect("/bookings?msg=" + encodeURIComponent("Booking cancelled."));
         }

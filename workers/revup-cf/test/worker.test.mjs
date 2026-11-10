@@ -295,3 +295,71 @@ test('lead pipeline stacks rows and stage controls at phone width',async()=>{
  assert.ok(page.includes('flex-wrap:wrap'));
  assert.ok(page.includes('qa@example.invalid'));
 });
+
+test('calendar OAuth state binds workspace, user, purpose and 15-minute expiry',async()=>{
+ const {calendarState,checkCalendarState}=await import('../dist-test/index.mjs');
+ const e={TENANT_FIELD_KEY:btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))};
+ const s=await calendarState(e,'ws','user',1000);
+ assert.ok(await checkCalendarState(e,s,'ws','user',2000));
+ assert.equal(await checkCalendarState(e,s,'other','user',2000),false);
+ assert.equal(await checkCalendarState(e,s,'ws','other',2000),false);
+ assert.equal(await checkCalendarState(e,s,'ws','user',901000),false);
+ assert.equal(await checkCalendarState(e,s+'x','ws','user',2000),false);
+});
+test('calendar event uses explicit UTC instant, Johannesburg zone and no invitees',async()=>{
+ const {calendarEventBody,calendarEventId}=await import('../dist-test/index.mjs');
+ const b=calendarEventBody({scheduled_start:'2026-11-10T10:00:00+02:00',duration_minutes:30,service:'Synthetic job',contact_name:'QA'});
+ assert.equal(b.start.dateTime,'2026-11-10T08:00:00.000Z');assert.equal(b.end.dateTime,'2026-11-10T08:30:00.000Z');
+ assert.equal(b.start.timeZone,'Africa/Johannesburg');assert.equal(b.attendees,undefined);
+ assert.equal(calendarEventId('AA000000-0000-4000-8000-000000000001'),'aa000000000040008000000000000001');
+ assert.throws(()=>calendarEventBody({scheduled_start:'invalid'}));
+});
+test('calendar connect stores encrypted access and refresh tokens only',async()=>{
+ const {calendarConnect}=await import('../dist-test/index.mjs');
+ const e={TENANT_FIELD_KEY:btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))),GOOGLE_CALENDAR_CLIENT_ID:'synthetic-id',GOOGLE_CALENDAR_CLIENT_SECRET:'synthetic-secret'};let written;
+ await calendarConnect({query:async(q,p)=>{written=p;return {rows:[]};}},e,'ws','synthetic-code','https://example.invalid',async()=>new Response(JSON.stringify({access_token:'synthetic-access',refresh_token:'synthetic-refresh',expires_in:3600})));
+ assert.ok(written);assert.notEqual(written[2],'synthetic-access');assert.notEqual(written[3],'synthetic-refresh');
+});
+test('calendar sync refuses a conflicting event before any write',async()=>{
+ const {calendarSync}=await import('../dist-test/index.mjs');const {encryptTenantKey}=await import('../dist-test/tenant-crypto.mjs');
+ const e={TENANT_FIELD_KEY:btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))};const c={id:'conn',access_token:await encryptTenantKey('synthetic-access',e),token_expiry:new Date(Date.now()+3600000)};let methods=[];
+ await assert.rejects(calendarSync({query:async()=>({rows:[c]})},e,'ws',{id:'00000000-0000-4000-8000-000000000001',scheduled_start:'2026-11-10T08:00:00Z'},false,async(u,o)=>{methods.push(o.method||'GET');return new Response(JSON.stringify({items:[{id:'busy'}]}));}),/overlaps/);
+ assert.deepEqual(methods,['GET']);
+});
+test('calendar sync creates deterministic event after availability check and persists id',async()=>{
+ const {calendarSync}=await import('../dist-test/index.mjs');const {encryptTenantKey}=await import('../dist-test/tenant-crypto.mjs');
+ const e={TENANT_FIELD_KEY:btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))};const c={id:'conn',access_token:await encryptTenantKey('synthetic-access',e),token_expiry:new Date(Date.now()+3600000)};let writes=[],calls=[];
+ const db={query:async(q,p)=>{if(q.startsWith('SELECT'))return {rows:[c]};writes.push(p);return {rows:[]};}};
+ const result=await calendarSync(db,e,'ws',{id:'00000000-0000-4000-8000-000000000001',scheduled_start:'2026-11-10T08:00:00Z'},false,async(u,o)=>{calls.push([u,o]);return new Response(JSON.stringify(o.method==='POST'?{id:JSON.parse(o.body).id}:{items:[]}));});
+ assert.equal(result,'synced');assert.equal(calls.length,2);assert.ok(calls[1][0].includes('sendUpdates=none'));assert.equal(writes[0][0],'00000000000040008000000000000001');
+});
+
+test('calendar provider error never marks a booking synced',async()=>{
+ const {calendarSync}=await import('../dist-test/index.mjs');const {encryptTenantKey}=await import('../dist-test/tenant-crypto.mjs');const e={TENANT_FIELD_KEY:btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))};const c={access_token:await encryptTenantKey('synthetic-access',e),token_expiry:new Date(Date.now()+3600000)};let writes=0;
+ await assert.rejects(calendarSync({query:async q=>{if(!q.startsWith('SELECT'))writes++;return {rows:[c]};}},e,'ws',{id:'00000000-0000-4000-8000-000000000001',scheduled_start:'2026-11-10T08:00:00Z'},false,async(u,o)=>o.method==='POST'?new Response('unavailable',{status:503}):new Response(JSON.stringify({items:[]}))),/sync failed/);assert.equal(writes,0);
+});
+test('calendar cancellation preserves booking link when Google refuses removal',async()=>{
+ const {calendarSync}=await import('../dist-test/index.mjs');const {encryptTenantKey}=await import('../dist-test/tenant-crypto.mjs');const e={TENANT_FIELD_KEY:btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))};const c={access_token:await encryptTenantKey('synthetic-access',e),token_expiry:new Date(Date.now()+3600000)};let writes=0;
+ await assert.rejects(calendarSync({query:async q=>{if(!q.startsWith('SELECT'))writes++;return {rows:[c]};}},e,'ws',{id:'booking',google_event_id:'event'},true,async()=>new Response('unavailable',{status:503})),/not been cancelled/);assert.equal(writes,0);
+});
+test('calendar expired access refreshes through encrypted storage before syncing',async()=>{
+ const {calendarSync}=await import('../dist-test/index.mjs');const {encryptTenantKey}=await import('../dist-test/tenant-crypto.mjs');const e={TENANT_FIELD_KEY:btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))),GOOGLE_CALENDAR_CLIENT_ID:'synthetic-id',GOOGLE_CALENDAR_CLIENT_SECRET:'synthetic-secret'};const c={id:'conn',access_token:await encryptTenantKey('old-access',e),refresh_token:await encryptTenantKey('synthetic-refresh',e),token_expiry:new Date(0)};let stored;
+ await calendarSync({query:async(q,p)=>{if(q.startsWith('SELECT'))return {rows:[c]};if(q.includes('access_token='))stored=p[0];return {rows:[]};}},e,'ws',{id:'00000000-0000-4000-8000-000000000001',scheduled_start:'2026-11-10T08:00:00Z'},false,async(u,o)=>new Response(JSON.stringify(u.includes('oauth2.googleapis')?{access_token:'new-access',expires_in:3600}:o.method==='POST'?{id:'00000000000040008000000000000001'}:{items:[]})));
+ assert.ok(stored);assert.notEqual(stored,'new-access');
+});
+test('calendar disconnected workspace makes no provider request',async()=>{
+ const {calendarSync}=await import('../dist-test/index.mjs');let called=false;assert.equal(await calendarSync({query:async()=>({rows:[]})},{},'ws',{},false,async()=>{called=true;return new Response();}),'not-connected');assert.equal(called,false);
+});
+
+test('calendar panel distinguishes configuration, connection and account safely',async()=>{
+ const {calendarPanel}=await import('../dist-test/index.mjs');assert.ok(calendarPanel(null,false).includes('not configured'));assert.ok(!calendarPanel(null,false).includes('<button>'));assert.ok(calendarPanel(null,true).includes('Connect Google Calendar'));assert.ok(calendarPanel({google_email:'<unsafe>',calendar_id:'primary'},true).includes('&lt;unsafe&gt;'));
+});
+
+test('calendar move patches the linked event, with no new event or invite',async()=>{
+ const {calendarSync}=await import('../dist-test/index.mjs');const {encryptTenantKey}=await import('../dist-test/tenant-crypto.mjs');const e={TENANT_FIELD_KEY:btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))};const c={access_token:await encryptTenantKey('synthetic-access',e),token_expiry:new Date(Date.now()+3600000)};let methods=[];
+ await calendarSync({query:async q=>({rows:q.startsWith('SELECT')?[c]:[]})},e,'ws',{id:'booking',google_event_id:'existing',scheduled_start:'2026-11-10T08:00:00Z'},false,async(u,o)=>{methods.push(o.method||'GET');return new Response(JSON.stringify(o.method==='PATCH'?{id:'existing'}:{items:[{id:'existing'}]}));});assert.deepEqual(methods,['GET','PATCH']);
+});
+test('calendar cancellation treats an already-gone event as removed',async()=>{
+ const {calendarSync}=await import('../dist-test/index.mjs');const {encryptTenantKey}=await import('../dist-test/tenant-crypto.mjs');const e={TENANT_FIELD_KEY:btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))};const c={access_token:await encryptTenantKey('synthetic-access',e),token_expiry:new Date(Date.now()+3600000)};let writes=[];
+ assert.equal(await calendarSync({query:async(q,p)=>{if(q.startsWith('SELECT'))return {rows:[c]};writes.push(p);return {rows:[]};}},e,'ws',{id:'booking',google_event_id:'existing'},true,async()=>new Response('',{status:404})),'synced');assert.equal(writes.length,1);
+});
