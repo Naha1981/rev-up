@@ -1536,6 +1536,11 @@ ${conn && conn.status === "connected" && conn.last_error ? `<p class="warn">${es
         try { return redirect(await calendarAuthUrl(env,base,mem.workspace_id,user.id)); }
         catch { return redirect("/bookings?msg="+encodeURIComponent("Google Calendar connection is not configured. Contact NahaLabs.")); }
       }
+      if (path === "/receptionist/calendar/disconnect" && req.method === "POST") {
+        if(req.headers.get("origin")!==base)return html("Calendar request did not come from this site.",403);
+        await db.query("DELETE FROM receptionist_calendarconnection WHERE workspace_id=$1",[mem.workspace_id]);
+        return redirect("/bookings?msg="+encodeURIComponent("Google Calendar disconnected. Existing calendar events were kept."));
+      }
       if (path === "/receptionist/google-calendar/callback/") {
         if(!await checkCalendarState(env,url.searchParams.get("state")||"",mem.workspace_id,user.id)) return html(layout("Calendar connection",'<p class="bad">Calendar connection expired or belongs to another business. Start again from Bookings.</p>',user),403);
         try {const code=url.searchParams.get("code");if(!code)throw Error();await calendarConnect(db,env,mem.workspace_id,code,base);return redirect("/bookings?msg="+encodeURIComponent("Google Calendar connected. Confirmed bookings will sync to your primary calendar."));}
@@ -1924,6 +1929,7 @@ ${calendarPanel(calendar,calendarConfigured(env))}
 
       const bact = /^\/bookings\/([0-9a-f-]{36})\/(confirm|move|done|cancel)$/.exec(path);
       if (bact && req.method === "POST") {
+        if(req.headers.get("origin")!==base)return html("Booking request did not come from this site.",403);
         const own = await db.query(`SELECT b.*,c.name AS contact_name FROM receptionist_booking b JOIN receptionist_contact c ON c.id=b.contact_id WHERE b.id=$1 AND b.workspace_id=$2`, [bact[1], mem.workspace_id]);
         const b = own.rows[0];
         if (!b) return redirect("/bookings");
