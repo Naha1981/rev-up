@@ -1,3 +1,6 @@
 # docs/agent-api.md shows a redacted curl example ("Authorization: Bearer REDACTED"),
 # not a real credential. Committed 17 Oct 2026; trips the curl-auth-header rule.
 225aa72336c7bc92b9255cdc55ed6c1419acbc57:docs/agent-api.md:curl-auth-header:49
+
+# Non-production fixture derived from the test-only root/salt in tenant-crypto.test.mjs.
+94ed366a66221dcb76bd53f8b4f7624c0ccd52a1:workers/revup-cf/test/tenant-crypto.test.mjs:generic-api-key:36
