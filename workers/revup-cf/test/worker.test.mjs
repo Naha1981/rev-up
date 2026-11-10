@@ -275,3 +275,12 @@ test('post draft with no selected image adds no attachment',async()=>{
  assert.ok(!html.includes('name="media"'));
  assert.ok(!html.includes('name="media_id"'));
 });
+
+test('WiFi card grid permits phone-width tracks without intrinsic overflow', async()=>{
+ const {readFileSync}=await import('node:fs');
+ const src=readFileSync(new URL('../src/wificard.ts',import.meta.url),'utf8');
+ assert.ok(src.includes('grid-template-columns:minmax(0,1fr)'));
+ assert.ok(src.includes('.wc-grid>*{min-width:0}'));
+ assert.ok(src.includes('.wifi-card{box-sizing:border-box;width:148mm;max-width:100%'));
+ assert.ok(src.includes('.wc-net{overflow-wrap:anywhere;'));
+});

@@ -1,5 +1,6 @@
 [
  "test::AI fully unavailable gives a plain honest reply",
+ "test::WiFi card grid permits phone-width tracks without intrinsic overflow",
  "test::action intent parks for Go + Sure; approval resolves oldest pending",
  "test::action intents vs queries",
  "test::admin assets include all six element classes with attribution",

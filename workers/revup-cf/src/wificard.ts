@@ -16,10 +16,12 @@ export function wifiCardPage(opts: { businessName: string; enquiryUrl: string; p
 <p>This is the exact card your customers would see in your waiting room. Guests scan one code to join your guest WiFi and the other to send you an enquiry - it lands straight in your RevUp inbox. The sample below is filled in with demo details; your own card uses your business name and your real enquiry form.</p>
 <p style="margin-bottom:0"><a class="btn btn-primary" href="/signup">Get your own card - start free</a></p></div>` : "";
   return `<style>
-.wc-grid{display:grid;grid-template-columns:minmax(280px,380px) 1fr;gap:22px;align-items:start}
-@media(max-width:860px){.wc-grid{grid-template-columns:1fr}}
+.wc-grid{display:grid;grid-template-columns:minmax(280px,380px) minmax(0,1fr);gap:22px;align-items:start}
+.wc-grid>*{min-width:0}
+.wc-grid input,.wc-grid select{box-sizing:border-box;max-width:100%}
+@media(max-width:860px){.wc-grid{grid-template-columns:minmax(0,1fr)}}
 .wc-preview-wrap{position:sticky;top:16px}
-.wifi-card{width:148mm;max-width:100%;aspect-ratio:148/105;background:#fff;border:1px solid #E7E5E4;border-radius:10px;box-shadow:0 1px 2px rgba(28,25,23,.05),0 8px 24px rgba(249,115,22,.10);display:flex;flex-direction:column;overflow:hidden}
+.wifi-card{box-sizing:border-box;width:148mm;max-width:100%;aspect-ratio:148/105;background:#fff;border:1px solid #E7E5E4;border-radius:10px;box-shadow:0 1px 2px rgba(28,25,23,.05),0 8px 24px rgba(249,115,22,.10);display:flex;flex-direction:column;overflow:hidden}
 .wc-head{background:#FAFAF9;border-bottom:1px solid #E7E5E4;padding:10px 16px;display:flex;align-items:baseline;justify-content:space-between;gap:8px}
 .wc-biz{font-size:17px;font-weight:700;letter-spacing:-0.2px;color:#1C1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wc-tag{font-size:11px;font-weight:600;color:#EA580C;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
@@ -29,7 +31,7 @@ export function wifiCardPage(opts: { businessName: string; enquiryUrl: string; p
 .wc-qr .qrbox svg{width:26mm;height:26mm;max-width:104px;max-height:104px}
 .wc-lab{font-size:12px;font-weight:600;color:#1C1917;line-height:1.35}
 .wc-sub{font-size:10.5px;color:#57534E;line-height:1.35;max-width:34mm}
-.wc-net{font-size:11px;color:#57534E;margin-top:2px;line-height:1.4}
+.wc-net{overflow-wrap:anywhere;font-size:11px;color:#57534E;margin-top:2px;line-height:1.4}
 .wc-net b{color:#1C1917;font-weight:600}
 .wc-foot{border-top:1px solid #E7E5E4;padding:6px 16px;display:flex;justify-content:space-between;align-items:center}
 .wc-foot span{font-size:9.5px;color:#A8A29E}
