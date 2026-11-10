@@ -13,6 +13,7 @@
  "test::bad JSON from every provider is never returned for persistence",
  "test::base64url: url-safe, unpadded",
  "test::bookings phone view labels rows, wraps controls and shows last scheduled time",
+ "test::bookings route awaits page queries before pool cleanup",
  "test::calendar OAuth state binds workspace, user, purpose and 15-minute expiry",
  "test::calendar cancellation preserves booking link when Google refuses removal",
  "test::calendar cancellation treats an already-gone event as removed",

@@ -1944,7 +1944,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
       }
 
 
-      if (path === "/bookings") return bookingsPage(db,user,mem,env,url);
+      if (path === "/bookings") return await bookingsPage(db,user,mem,env,url);
 
       const bact = /^\/bookings\/([0-9a-f-]{36})\/(confirm|move|done|cancel)$/.exec(path);
       if (bact && req.method === "POST") {

@@ -397,3 +397,12 @@ test('bookings phone view labels rows, wraps controls and shows last scheduled t
  assert.ok(h.includes('14:30:00'));assert.ok(!h.includes('original text'));
  assert.ok(h.includes('class="booking-notice bad"'));assert.ok(h.includes('role="status"'));
 });
+
+
+test('bookings route awaits page queries before pool cleanup',async()=>{
+ const {readFileSync}=await import('node:fs');const src=readFileSync(new URL('../src/index.ts',import.meta.url),'utf8');assert.ok(src.includes('if (path === "/bookings") return await bookingsPage(db,user,mem,env,url);'));
+ let ended=false;const db={query:async q=>{await new Promise(r=>setTimeout(r,1));if(ended)throw Error('pool closed early');return {rows:[]};},end:async()=>{ended=true;}};
+ const {bookingsPage}=await import('../dist-test/index.mjs');
+ async function route(){try{return await bookingsPage(db,{}, {workspace_id:'synthetic'},{},new URL('https://example.invalid/bookings'));}finally{await db.end();}}
+ assert.equal((await route()).status,200);assert.ok(ended);
+});
