@@ -364,6 +364,27 @@ test('calendar cancellation treats an already-gone event as removed',async()=>{
  assert.equal(await calendarSync({query:async(q,p)=>{if(q.startsWith('SELECT'))return {rows:[c]};writes.push(p);return {rows:[]};}},e,'ws',{id:'booking',google_event_id:'existing'},true,async()=>new Response('',{status:404})),'synced');assert.equal(writes.length,1);
 });
 
+// Fresh-stranger entry regressions.
+test('signup includes linked existing terms/privacy and visible password rule', async () => {
+  const {signupPage} = await import('../dist-test/index.mjs');
+  const h=signupPage();
+  assert.match(h,/href="\/legal\/terms\/"/);assert.match(h,/href="\/legal\/privacy\/"/);
+  assert.match(h,/Use at least 8 characters/);
+});
+test('login offers password recovery', async () => {
+  const {loginPage} = await import('../dist-test/index.mjs');
+  assert.match(loginPage(),/href="\/forgot-password"/);
+});
+test('recovery uses the established shared-database flow, no caller-controlled redirect', async () => {
+  const r=await worker.fetch(new Request('https://revup.nahalabs.co.za/forgot-password?next=https://evil.invalid'),{},{});
+  assert.equal(r.status,303);assert.equal(r.headers.get('location'),'https://revup-8g3m.onrender.com/accounts/password/reset/');
+});
+for (const [path,title] of [['terms','Terms of Service'],['privacy','Privacy Policy']]) {
+ test(`public ${path} accessible signed out`,async()=>{
+  const r=await worker.fetch(new Request(`https://revup.nahalabs.co.za/legal/${path}/`),{},{});
+  assert.equal(r.status,200);const h=await r.text();assert.ok(h.includes(title));assert.ok(h.includes('17 October 2026'));assert.match(h,/href="\/signup"/);
+ });
+}
 
 test('bookings phone view labels rows, wraps controls and shows last scheduled time',async()=>{
  const {bookingsPage}=await import('../dist-test/index.mjs');
@@ -375,4 +396,36 @@ test('bookings phone view labels rows, wraps controls and shows last scheduled t
  assert.ok(h.includes('content:attr(data-label)'));assert.ok(h.includes('max-width:100%!important'));
  assert.ok(h.includes('14:30:00'));assert.ok(!h.includes('original text'));
  assert.ok(h.includes('class="booking-notice bad"'));assert.ok(h.includes('role="status"'));
+});
+
+
+test('bookings route awaits page queries before pool cleanup',async()=>{
+ const {readFileSync}=await import('node:fs');const src=readFileSync(new URL('../src/index.ts',import.meta.url),'utf8');assert.ok(src.includes('if (path === "/bookings") return await bookingsPage(db,user,mem,env,url);'));
+ let ended=false;const db={query:async q=>{await new Promise(r=>setTimeout(r,1));if(ended)throw Error('pool closed early');return {rows:[]};},end:async()=>{ended=true;}};
+ const {bookingsPage}=await import('../dist-test/index.mjs');
+ async function route(){try{return await bookingsPage(db,{}, {workspace_id:'synthetic'},{},new URL('https://example.invalid/bookings'));}finally{await db.end();}}
+ assert.equal((await route()).status,200);assert.ok(ended);
+});
+
+test('landing text passes AA contrast on its light background',()=>{
+ const h=landingPage();
+ const lum=hex=>{const v=hex.match(/../g).map(x=>parseInt(x,16)/255).map(x=>x<=0.04045?x/12.92:((x+0.055)/1.055)**2.4);return v.reduce((s,x,i)=>s+x*[.2126,.7152,.0722][i],0)};
+ const ratio=(a,b)=>(Math.max(lum(a),lum(b))+.05)/(Math.min(lum(a),lum(b))+.05);
+ const cream=h.match(/--cream:#([a-f0-9]{6})/)[1];
+ for(const token of ['muted','orange-text'])assert.ok(ratio(h.match(new RegExp('--'+token+':#([a-f0-9]{6})'))[1],cream)>=4.5,token);
+ assert.ok(h.includes('--orange:#f47721'));
+ assert.ok(h.includes('font-size:12px'));
+ assert.ok(!/font-size:(8|9|9\.5|10|10\.5|11)px/.test(h));
+ assert.ok(h.includes('.faq h2 [style*="--orange-text"]'));
+});
+
+test('onboarding reads saved goals from the existing text-field JSON contract',async()=>{
+ const {onboardingPage}=await import('../dist-test/index.mjs');
+ const db={query:async q=>({rows:q.includes('businessprofile')?[{custom_rules:JSON.stringify({goals:['leads','social']})}]:[{}]})};
+ const h=await onboardingPage(db,{}, {workspace_id:'synthetic',plan:'business-pro'});
+ assert.match(h,/name="goal_leads" checked/);assert.match(h,/name="goal_social" checked/);
+});
+test('onboarding stores goals in custom rules, not operating hours',async()=>{
+ const {readFileSync}=await import('node:fs');const s=readFileSync(new URL('../src/index.ts',import.meta.url),'utf8');
+ assert.ok(s.includes("VALUES($1,$2,$3,$4,'{}'::jsonb,'{}'::jsonb,'{}'::jsonb,'','',$6,$5,true,true,2,'reviews',now(),now())"));
 });

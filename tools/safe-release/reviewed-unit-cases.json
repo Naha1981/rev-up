@@ -13,6 +13,7 @@
  "test::bad JSON from every provider is never returned for persistence",
  "test::base64url: url-safe, unpadded",
  "test::bookings phone view labels rows, wraps controls and shows last scheduled time",
+ "test::bookings route awaits page queries before pool cleanup",
  "test::calendar OAuth state binds workspace, user, purpose and 15-minute expiry",
  "test::calendar cancellation preserves booking link when Google refuses removal",
  "test::calendar cancellation treats an already-gone event as removed",
@@ -132,5 +133,12 @@
  "test::worker: OAuth + MCP discovery endpoints are public",
  "test::worker: resources/read returns the skybridge widget",
  "test::worker: tools/call without token -> 401 with WWW-Authenticate pointing at protected resource metadata",
- "test::zero-price guard and free model on every secondary call"
+ "test::zero-price guard and free model on every secondary call",
+ "test::signup includes linked existing terms/privacy and visible password rule",
+ "test::login offers password recovery",
+ "test::recovery uses the established shared-database flow, no caller-controlled redirect",
+ "test::landing text passes AA contrast on its light background",
+ "test::onboarding reads saved goals from the existing text-field JSON contract",
+ "test::onboarding stores goals in custom rules, not operating hours",
+ "test::order database failure is not reported as a successful duplicate"
 ]

@@ -187,7 +187,7 @@ export async function createOrder(db: Pool, workspaceId: string, f: Record<strin
   const ins = await db.query(
     `INSERT INTO menus_order(id,workspace_id,customer_name,customer_contact,notes,status,total_cents,request_key,created_at,updated_at)
      VALUES($1,$2,$3,$4,$5,'new',$6,$7,now(),now()) ON CONFLICT (workspace_id,request_key) WHERE request_key<>'' DO NOTHING RETURNING id`,
-    [orderId, workspaceId, name, contact, notes, totalCents, key]).catch(() => ({ rows: [] as any[] }));
+    [orderId, workspaceId, name, contact, notes, totalCents, key]);
   const oid = ins.rows[0]?.id;
   if (!oid) return { ok: true, err: "", totalCents }; // same order re-submitted: treat as sent
   for (const i of chosen) {

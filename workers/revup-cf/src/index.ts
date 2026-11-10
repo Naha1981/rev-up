@@ -1,5 +1,6 @@
 export {calendarPanel,calendarState,checkCalendarState,calendarEventId,calendarEventBody,calendarConnect,calendarSync} from "./calendar";
 import {calendarPanel,calendarConfigured,calendarAuthUrl,checkCalendarState,calendarConnect,calendarSync} from "./calendar";
+import { legalPage } from "./legal";
 import { decryptTenantKey } from "./tenant-crypto";
 import { connectFailure, saveTenantKey } from "./connect-errors";
 // RevUp on Cloudflare Workers — revenue path. Shares the live Neon DB with the
@@ -419,23 +420,26 @@ ${err ? `<p class="bad">${esc(err)}</p>` : ""}
 <button>Send enquiry</button></form></div>`);
 
 // ---------- pages ----------
-const signupPage = (err = "") => layout("Create your RevUp account", `
+export const signupPage = (err = "") => layout("Create your RevUp account", `
 ${err ? `<p class="bad">${esc(err)}</p>` : ""}
 <div class="card"><form method="post" action="/signup">
 <label>Your name<input name="name" required maxlength="150"></label>
 <label>Email<input name="email" type="email" required maxlength="254"></label>
-<label>Password<input name="password" type="password" required minlength="8"></label>
+<label>Password<input name="password" type="password" autocomplete="new-password" required minlength="8" aria-describedby="password-help"></label>
+<p id="password-help" class="mut">Use at least 8 characters.</p>
 <label>Business name<input name="business" required maxlength="200"></label>
+<p class="mut">By creating an account, you agree to the <a style="color:var(--ink2);text-decoration:underline" href="/legal/terms/">Terms of Service</a> and acknowledge the <a style="color:var(--ink2);text-decoration:underline" href="/legal/privacy/">Privacy Policy</a>.</p>
 <button>Create account</button>
 <p class="mut">One monthly price from day one - no setup fee. Choose your plan during setup and activate it with your first payment.</p>
 </form></div>`);
 
-const loginPage = (err = "") => layout("Log in to RevUp", `
+export const loginPage = (err = "") => layout("Log in to RevUp", `
 ${err ? `<p class="bad">${esc(err)}</p>` : ""}
 <div class="card"><form method="post" action="/login">
 <label>Email<input name="email" type="email" required></label>
 <label>Password<input name="password" type="password" required></label>
 <button>Log in</button>
+<p style="margin-top:16px"><a style="color:var(--ink2);text-decoration:underline" href="/forgot-password">Forgot your password?</a></p>
 </form></div>`);
 
 function statusLabel(s: string): string { return s === "active" ? "active" : "activation pending"; }
@@ -480,7 +484,9 @@ export async function onboardingPage(db: Pool, user: any, mem: any, msg = ""): P
   const b = bp.rows[0] || {};
   const w = await db.query(`SELECT industry, website_url, timezone FROM workspaces_workspace WHERE id=$1`, [mem.workspace_id]);
   const ws = w.rows[0] || {};
-  const savedGoals: string[] = Array.isArray(b.custom_rules?.goals) ? b.custom_rules.goals : [];
+  let rules: any = b.custom_rules || {};
+  if (typeof rules === "string") { try { rules = JSON.parse(rules); } catch { rules = {}; } }
+  const savedGoals: string[] = Array.isArray(rules.goals) ? rules.goals : [];
   const rec = recommendPlan(savedGoals);
   const cur = mem.plan || rec;
   return layout("Onboarding", `
@@ -1202,6 +1208,14 @@ async function handle(req: Request, env: Env): Promise<Response> {
       try { return await handlePayfastItn(db, env, req); } finally { await db.end().catch(() => {}); }
     }
 
+    // Reuse the existing shared-database recovery flow, including its email,
+    // expiring tokens and single-use checks. Do not invent a second reset system.
+    if (path === "/forgot-password" && req.method === "GET") return redirect("https://revup-8g3m.onrender.com/accounts/password/reset/");
+    if ((path === "/legal/terms/" || path === "/legal/privacy/") && req.method === "GET") {
+      const kind = path.includes("terms") ? "terms" : "privacy";
+      return html(layout(kind === "terms" ? "Terms of Service" : "Privacy Policy", legalPage(kind)));
+    }
+
     if (path === "/signup") {
       if (req.method === "GET") return html(signupPage());
       {
@@ -1648,7 +1662,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
           await client.query(`UPDATE organizations_organization SET plan=$1, goals=$3::jsonb, updated_at=now() WHERE id=$2`, [plan, mem.org_id, JSON.stringify(goals)]);
             await client.query(
               `INSERT INTO receptionist_businessprofile(id,workspace_id,business_name,industry,operating_hours,pricing_data,banking_details,payment_link_url,emergency_contact_phone,custom_rules,google_review_url,is_active,review_requests_enabled,service_reminder_days,revenue_mode,created_at,updated_at)
-               VALUES($1,$2,$3,$4,$6::jsonb,'{}'::jsonb,'{}'::jsonb,'','','',$5,true,true,2,'reviews',now(),now())
+               VALUES($1,$2,$3,$4,'{}'::jsonb,'{}'::jsonb,'{}'::jsonb,'','',$6,$5,true,true,2,'reviews',now(),now())
                ON CONFLICT (workspace_id) DO UPDATE SET business_name=EXCLUDED.business_name, industry=EXCLUDED.industry,
                  google_review_url=EXCLUDED.google_review_url, custom_rules=EXCLUDED.custom_rules, updated_at=now()`,
               [crypto.randomUUID(), mem.workspace_id, f.business_name || mem.org_name, f.industry || "", f.google_review_url || "", JSON.stringify({ goals })]);
@@ -1932,7 +1946,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
       }
 
 
-      if (path === "/bookings") return bookingsPage(db,user,mem,env,url);
+      if (path === "/bookings") return await bookingsPage(db,user,mem,env,url);
 
       const bact = /^\/bookings\/([0-9a-f-]{36})\/(confirm|move|done|cancel)$/.exec(path);
       if (bact && req.method === "POST") {

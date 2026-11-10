@@ -10,7 +10,7 @@ const CHAT_JPG = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBAU
 
 const STYLE = `
 @import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap");
-:root{--cream:#f6f0e7;--paper:#fffaf2;--ink:#171714;--orange:#f47721;--green:#214b3b;--muted:#77736d;--line:rgba(23,23,20,.14)}
+:root{--cream:#f6f0e7;--paper:#fffaf2;--ink:#171714;--orange:#f47721;--green:#214b3b;--muted:#68645f;--orange-text:#b34a0c;--line:rgba(23,23,20,.14)}
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
 body{font-family:Manrope,Arial,sans-serif;background:var(--cream);color:var(--ink);-webkit-font-smoothing:antialiased}
@@ -19,13 +19,13 @@ body{font-family:Manrope,Arial,sans-serif;background:var(--cream);color:var(--in
 h1,h2,h3,.display{font-family:"Space Grotesk",Manrope,sans-serif;letter-spacing:-0.02em}
 img{max-width:100%;display:block}
 a{color:inherit;text-decoration:none}
-.topbar{background:var(--ink);color:#f6f0e7;font-family:"DM Mono",monospace;font-size:10.5px;letter-spacing:.14em;padding:8px 0}
+.topbar{background:var(--ink);color:#f6f0e7;font-family:"DM Mono",monospace;font-size:12px;letter-spacing:.14em;padding:8px 0}
 .topbar .wrap{display:flex;justify-content:space-between;gap:14px}
 .topbar .dot{color:var(--orange)}
 nav{position:sticky;top:0;z-index:50;background:rgba(246,240,231,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 nav .wrap{display:flex;align-items:center;justify-content:space-between;height:66px}
 nav .links{display:flex;gap:26px;font-size:14px;font-weight:600}
-nav .links a:hover{color:var(--orange)}
+nav .links a:hover{color:var(--orange-text)}
 nav .navcta{display:flex;align-items:center;gap:18px;font-size:14px;font-weight:600}
 .logo img{height:30px;width:auto}
 .btn{display:inline-flex;align-items:center;gap:10px;padding:13px 22px;font-weight:700;font-size:14.5px;border:1px solid transparent;transition:transform .15s ease}
@@ -34,7 +34,7 @@ nav .navcta{display:flex;align-items:center;gap:18px;font-size:14px;font-weight:
 .btn-dark{background:var(--ink);color:#f6f0e7}
 .btn-ghost{border-color:var(--ink);color:var(--ink);background:transparent}
 .btn-line{font-weight:700;font-size:14.5px;border-bottom:2px solid var(--ink);padding-bottom:4px}
-.eyebrow{font-family:"DM Mono",monospace;font-size:11px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;display:flex;align-items:center;gap:10px}
+.eyebrow{font-family:"DM Mono",monospace;font-size:12px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;display:flex;align-items:center;gap:10px}
 .eyebrow:before{content:"";width:26px;height:2px;background:var(--orange);display:inline-block}
 section{padding:96px 0}
 .h-big{font-size:clamp(40px,5.6vw,76px);line-height:1.02;font-weight:700}
@@ -44,17 +44,17 @@ section{padding:96px 0}
 .hero{padding:80px 0 0}
 .hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;padding:36px 0 70px}
 .hero h1{font-size:clamp(44px,5.8vw,84px);line-height:1.0;font-weight:700}
-.hero .o{color:var(--orange)}.hero .g{color:var(--green)}
+.hero .o{color:var(--orange-text)}.hero .g{color:var(--green)}
 .hero-cta{display:flex;gap:16px;align-items:center;margin:30px 0 26px;flex-wrap:wrap}
 .hero-note{display:flex;align-items:center;gap:12px;font-size:13.5px;color:var(--muted)}
 .dots{display:flex}.dots span{width:26px;height:26px;border-radius:50%;border:2px solid var(--cream);margin-left:-8px}
 .dots span:first-child{margin-left:0}
 .mock{position:relative;background:var(--paper);border:1px solid var(--line);padding:18px;box-shadow:0 24px 60px -30px rgba(23,23,20,.35)}
-.mock .mockhead{font-family:"DM Mono",monospace;font-size:10.5px;letter-spacing:.14em;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:12px}
+.mock .mockhead{font-family:"DM Mono",monospace;font-size:12px;letter-spacing:.14em;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:12px}
 .badge{position:absolute;background:var(--paper);border:1px solid var(--line);padding:10px 14px;font-size:12px;font-weight:700;box-shadow:0 10px 30px -12px rgba(23,23,20,.3);display:flex;gap:8px;align-items:center}
-.badge small{display:block;font-weight:500;color:var(--muted);font-size:11px}
-.badge .b1{color:var(--orange)}
-.metastrip{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:16px 0;display:flex;justify-content:space-between;gap:16px;font-family:"DM Mono",monospace;font-size:10.5px;letter-spacing:.16em;color:var(--muted);flex-wrap:wrap}
+.badge small{display:block;font-weight:500;color:var(--muted);font-size:12px}
+.badge .b1{color:var(--orange-text)}
+.metastrip{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:16px 0;display:flex;justify-content:space-between;gap:16px;font-family:"DM Mono",monospace;font-size:12px;letter-spacing:.16em;color:var(--muted);flex-wrap:wrap}
 .marquee{background:var(--orange);color:var(--ink);overflow:hidden;padding:13px 0;border-top:1px solid rgba(23,23,20,.2)}
 .marquee-track{display:flex;justify-content:center;text-align:center;font-family:"Space Grotesk";font-weight:700;font-size:15px;letter-spacing:.06em}
 .cards3{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
@@ -62,10 +62,10 @@ section{padding:96px 0}
 .ecard.dark{background:var(--green);color:#f6f0e7}
 .ecard.paper{background:var(--paper);border:1px solid var(--line)}
 .ecard.orange{background:var(--orange);color:var(--ink)}
-.ecard .num{font-family:"DM Mono",monospace;font-size:10.5px;letter-spacing:.16em;opacity:.75}
+.ecard .num{font-family:"DM Mono",monospace;font-size:12px;letter-spacing:.16em;opacity:.75}
 .ecard h3{font-size:26px;line-height:1.12}
 .ecard p{font-size:14.5px;line-height:1.6;opacity:.85}
-.ecard .foot{margin-top:auto;font-family:"DM Mono",monospace;font-size:10px;letter-spacing:.12em;border-top:1px solid currentColor;padding-top:12px;opacity:.8}
+.ecard .foot{margin-top:auto;font-family:"DM Mono",monospace;font-size:12px;letter-spacing:.12em;border-top:1px solid currentColor;padding-top:12px;opacity:.8}
 .phone{background:#fff;border-radius:22px;padding:12px;border:1px solid rgba(23,23,20,.12)}
 .status-banner{margin:64px 0 0;border:1px solid var(--line);background:var(--paper);padding:18px 22px;display:flex;justify-content:space-between;align-items:center;gap:18px;font-size:14px;flex-wrap:wrap}
 .status-banner b{font-weight:800}
@@ -77,59 +77,59 @@ section{padding:96px 0}
 .chev{position:absolute;right:-30px;top:50%;transform:translateY(-50%);color:var(--orange);font-size:200px;font-family:"Space Grotesk";font-weight:700;opacity:.9}
 .igrid{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid var(--line);background:var(--paper)}
 .icell{padding:22px 20px 26px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);min-height:190px;display:flex;flex-direction:column;gap:10px}
-.icell .num{font-family:"DM Mono",monospace;font-size:10.5px;color:var(--muted);display:flex;justify-content:space-between}
-.icell .num i{color:var(--orange);font-style:normal}
+.icell .num{font-family:"DM Mono",monospace;font-size:12px;color:var(--muted);display:flex;justify-content:space-between}
+.icell .num i{color:var(--orange-text);font-style:normal}
 .icell h3{font-size:16.5px}
-.icell .tags{font-family:"DM Mono",monospace;font-size:9.5px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.icell .tags{font-family:"DM Mono",monospace;font-size:12px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
 .icell p{font-size:12.5px;line-height:1.55;color:var(--muted)}
 .dark-sec{background:var(--green);color:#f6f0e7}
 .dark-sec .lede{color:#b9c4bd}
 .panel{background:var(--paper);color:var(--ink);padding:26px;border:1px solid var(--line)}
-.panel .phead{font-family:"DM Mono",monospace;font-size:10.5px;letter-spacing:.14em;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:8px}
+.panel .phead{font-family:"DM Mono",monospace;font-size:12px;letter-spacing:.14em;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:8px}
 .panel h3{font-size:24px;margin-bottom:16px}
 .bignum{font-family:"Space Grotesk";font-size:56px;font-weight:700}
-.prow{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--line);font-size:14px;font-weight:600}
+.prow{display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--line);font-size:14px;font-weight:600}
 .prow:last-child{border-bottom:none}
-.tag{font-family:"DM Mono",monospace;font-size:9.5px;letter-spacing:.1em}
+.tag{font-family:"DM Mono",monospace;font-size:12px;letter-spacing:.1em}
 .tag.ok{color:var(--green)}
-.tag.wip{color:var(--orange)}
+.tag.wip{color:var(--orange-text)}
 .tick{color:var(--green);font-weight:800}
-.circle{color:var(--orange)}
+.circle{color:var(--orange-text)}
 .checkline{display:flex;gap:10px;align-items:flex-start;font-size:14.5px;font-weight:600;margin:10px 0}
 .checkline:before{content:"\\2713";color:var(--green);font-weight:800}
 .tgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
 .tcell{background:var(--paper);border:1px solid var(--line);padding:24px;min-height:210px;display:flex;flex-direction:column;gap:10px}
-.tcell .num{font-family:"DM Mono",monospace;font-size:10.5px;color:var(--muted)}
+.tcell .num{font-family:"DM Mono",monospace;font-size:12px;color:var(--muted)}
 .tcell h3{font-size:18px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .tcell p{font-size:13.5px;line-height:1.6;color:var(--muted)}
-.pill{font-family:"DM Mono",monospace;font-size:9px;letter-spacing:.1em;padding:4px 9px;border-radius:99px;text-transform:uppercase;white-space:nowrap}
+.pill{font-family:"DM Mono",monospace;font-size:12px;letter-spacing:.1em;padding:4px 9px;border-radius:99px;text-transform:uppercase;white-space:nowrap}
 .pill-live{background:#dff2e5;color:#1d5c38}
 .pill-wip{background:#fbe3c2;color:#9a4d00}
 .dashcard{background:var(--paper);border:1px solid var(--line);padding:16px;box-shadow:0 24px 60px -30px rgba(23,23,20,.3)}
 .dashcard .bar{display:flex;gap:6px;margin-bottom:12px;align-items:center}
 .dashcard .bar i{width:9px;height:9px;border-radius:50%;background:var(--line)}
-.dashcard .bar .url{font-family:"DM Mono",monospace;font-size:10.5px;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:3px 12px;margin-left:8px}
+.dashcard .bar .url{font-family:"DM Mono",monospace;font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:3px 12px;margin-left:8px}
 .pricing{background:var(--ink);color:#f6f0e7}
 .pricing .lede{color:#b9b4aa;margin:0 auto}
 .pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:56px}
 .plan{background:var(--paper);color:var(--ink);padding:30px;display:flex;flex-direction:column;gap:14px;position:relative}
-.plan .num{font-family:"DM Mono",monospace;font-size:10.5px;letter-spacing:.14em;color:var(--muted);display:flex;justify-content:space-between}
+.plan .num{font-family:"DM Mono",monospace;font-size:12px;letter-spacing:.14em;color:var(--muted);display:flex;justify-content:space-between}
 .plan h3{font-size:24px}
 .plan .p{font-family:"Space Grotesk";font-size:52px;font-weight:700}
 .plan .p sup{font-size:18px;vertical-align:top;top:14px;position:relative}
 .plan .per{font-size:13px;color:var(--muted);margin-top:-10px}
 .plan ul{list-style:none;display:flex;flex-direction:column;gap:9px;font-size:14px;font-weight:600;margin:8px 0 18px}
 .plan ul li{display:flex;gap:9px}
-.plan ul li:before{content:"\\25CF";color:var(--orange);font-size:9px;margin-top:4px}
+.plan ul li:before{content:"\\25CF";color:var(--orange-text);font-size:12px;margin-top:4px}
 .plan .btn{margin-top:auto;justify-content:center}
 .plan.hot{background:var(--orange)}
-.plan.hot .num,.plan.hot .per{color:rgba(23,23,20,.65)}
+.plan.hot .num,.plan.hot .per{color:var(--ink)}
 .plan.hot ul li:before{color:var(--ink)}
-.plan .most{position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:var(--paper);border:1px solid var(--line);font-family:"DM Mono",monospace;font-size:9.5px;letter-spacing:.14em;padding:5px 12px}
-.pfoot{font-family:"DM Mono",monospace;font-size:9.5px;letter-spacing:.14em;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
+.plan .most{position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:var(--paper);border:1px solid var(--line);font-family:"DM Mono",monospace;font-size:12px;letter-spacing:.14em;padding:5px 12px}
+.pfoot{font-family:"DM Mono",monospace;font-size:12px;letter-spacing:.14em;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
 .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:40px}
 .step{border-top:1px solid var(--line);padding-top:18px}
-.step .num{font-family:"DM Mono",monospace;font-size:10.5px;color:var(--muted)}
+.step .num{font-family:"DM Mono",monospace;font-size:12px;color:var(--muted)}
 .step h3{font-size:20px;margin:14px 0 8px}
 .step p{font-size:14px;line-height:1.6;color:var(--muted)}
 .faq{background:var(--ink);color:#f6f0e7}
@@ -143,15 +143,20 @@ details[open] summary:after{content:"\\2013"}
 details p{color:#b9b4aa;font-size:14.5px;line-height:1.65;padding:0 0 20px;max-width:560px}
 .cta{background:var(--orange);color:var(--ink);text-align:center;padding:110px 0 70px;position:relative;overflow:hidden}
 .cta h2{font-size:clamp(40px,5.4vw,74px);line-height:1.02}
-.cta .lede{color:rgba(23,23,20,.7);margin:18px auto 30px}
-.cta .foot{font-family:"DM Mono",monospace;font-size:10px;letter-spacing:.18em;margin-top:70px;opacity:.75}
+.cta .lede{color:var(--ink);margin:18px auto 30px}
+.cta .foot{font-family:"DM Mono",monospace;font-size:12px;letter-spacing:.18em;margin-top:70px;opacity:.75}
 footer{background:var(--ink);color:#f6f0e7;padding:64px 0 26px}
 .foot-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:40px;margin-bottom:50px}
 footer .tagline{font-size:14.5px;line-height:1.7;color:#b9b4aa;margin-top:16px}
-footer h4{font-family:"DM Mono",monospace;font-size:10.5px;letter-spacing:.16em;color:#b9b4aa;margin-bottom:14px;font-weight:500}
+footer h4{font-family:"DM Mono",monospace;font-size:12px;letter-spacing:.16em;color:#b9b4aa;margin-bottom:14px;font-weight:500}
 footer ul{list-style:none;display:flex;flex-direction:column;gap:9px;font-size:14px;font-weight:600}
 footer ul a:hover{color:var(--orange)}
-.foot-base{border-top:1px solid rgba(246,240,231,.14);padding-top:20px;display:flex;justify-content:space-between;font-family:"DM Mono",monospace;font-size:9.5px;letter-spacing:.14em;color:#77736d;flex-wrap:wrap;gap:10px}
+.foot-base{border-top:1px solid rgba(246,240,231,.14);padding-top:20px;display:flex;justify-content:space-between;font-family:"DM Mono",monospace;font-size:12px;letter-spacing:.14em;color:#b9b4aa;flex-wrap:wrap;gap:10px}
+/* Readable text on coloured sections keeps the original orange accents. */
+.dark-sec .eyebrow,.dark-sec .pfoot{color:#d3ddd6}
+.dark-sec h2 [style*="--orange-text"],.pricing h2 [style*="--orange-text"],.faq h2 [style*="--orange-text"]{color:var(--orange)!important}
+.ecard.dark .tag.ok{color:#d3efdc}
+.ecard.orange .tag,.plan.hot [style*="--muted"],.plan.hot .pfoot{color:var(--ink)!important}
 @media (max-width:900px){
 .hero-grid,.split-head,.banner-dark .grid,.faq-grid{grid-template-columns:1fr;gap:34px}
 .cards3,.tgrid,.pgrid,.steps{grid-template-columns:1fr}
@@ -228,7 +233,7 @@ export function landingPage(): string {
 
 <section id="platform"><div class="wrap">
 <div class="split-head">
-<div><p class="eyebrow">The RevUp edge</p><h2 class="h-mid" style="margin-top:16px">Less chasing.<br><span style="color:var(--orange)">More momentum.</span></h2></div>
+<div><p class="eyebrow">The RevUp edge</p><h2 class="h-mid" style="margin-top:16px">Less chasing.<br><span style="color:var(--orange-text)">More momentum.</span></h2></div>
 <p class="lede">Customers do not wait around. RevUp helps you stay on top of the moments that shape your reputation and move business forward.</p>
 </div>
 <div class="cards3">
@@ -243,9 +248,9 @@ export function landingPage(): string {
 <span class="num">02 / REPUTATION</span>
 <h3>Make great service count for more.</h3>
 <p>Send trackable review requests, see link activity and give unhappy customers a route back to you before their issue goes public.</p>
-<p><span class="bignum">4.9</span> <span style="color:var(--orange)">&#9733;&#9733;&#9733;&#9733;&#9733;</span><br><span class="tag" style="color:var(--muted)">ILLUSTRATIVE RATING DISPLAY</span></p>
+<p><span class="bignum">4.9</span> <span style="color:var(--orange-text)">&#9733;&#9733;&#9733;&#9733;&#9733;</span><br><span class="tag" style="color:var(--muted)">ILLUSTRATIVE RATING DISPLAY</span></p>
 <div class="checkline">Review request sent - tracked</div>
-<div class="checkline"><span style="color:var(--orange)">Unhappy customer flagged - owner first</span></div>
+<div class="checkline"><span style="color:var(--orange-text)">Unhappy customer flagged - owner first</span></div>
 <div class="foot">GOOGLE REVIEW BOOSTER &nbsp;&nbsp; 02 &#8599;<br><span class="tag ok">&#9679; LIVE</span></div>
 </div>
 <div class="ecard orange">
@@ -271,7 +276,7 @@ export function landingPage(): string {
 
 <section id="industries"><div class="wrap">
 <div class="split-head">
-<div><p class="eyebrow">Built for your world</p><h2 class="h-mid" style="margin-top:16px">Your industry.<br><span style="color:var(--orange)">Your workflow.</span></h2></div>
+<div><p class="eyebrow">Built for your world</p><h2 class="h-mid" style="margin-top:16px">Your industry.<br><span style="color:var(--orange-text)">Your workflow.</span></h2></div>
 <p class="lede">From urgent call-outs to viewing requests, RevUp is designed to fit the way customers approach your business.</p>
 </div>
 <div class="igrid">
@@ -292,10 +297,10 @@ export function landingPage(): string {
 <section class="dark-sec" id="leadfinder"><div class="wrap">
 <div class="split-head" style="align-items:start">
 <div><p class="eyebrow" style="color:#b9c4bd">Grow your pipeline</p>
-<h2 class="h-mid" style="margin-top:16px">Find the right<br>businesses to<br><span style="color:var(--orange)">talk to next.</span></h2>
+<h2 class="h-mid" style="margin-top:16px">Find the right<br>businesses to<br><span style="color:var(--orange-text)">talk to next.</span></h2>
 <p class="lede" style="margin-top:20px">Every enquiry becomes a tracked lead: captured, followed up, and reported on until it is won or lost. Lead-Finder presets help identify businesses by industry, so prospecting starts with a focused market instead of a blank page.</p>
 <p style="margin-top:18px"><a class="btn-line" style="color:#f6f0e7;border-color:#f6f0e7" href="/signup">Ask about Lead-Finder &#8599;</a></p>
-<p class="tag" style="margin-top:14px;color:#8fa398">PRESET COVERAGE IS SHOWN HONESTLY ALONGSIDE. MORE INDUSTRIES ARE BEING ADDED.</p>
+<p class="tag" style="margin-top:14px;color:#d3ddd6">PRESET COVERAGE IS SHOWN HONESTLY ALONGSIDE. MORE INDUSTRIES ARE BEING ADDED.</p>
 </div>
 <div class="panel">
 <div class="phead"><span>REVUP / LEAD-FINDER</span><span>&#9679; PRESET STATUS</span></div>
@@ -317,7 +322,7 @@ export function landingPage(): string {
 
 <section><div class="wrap">
 <div class="split-head">
-<div><p class="eyebrow">One clear view</p><h2 class="h-mid" style="margin-top:16px">Know what&#39;s<br>moving. Know<br><span style="color:var(--orange)">what needs you.</span></h2></div>
+<div><p class="eyebrow">One clear view</p><h2 class="h-mid" style="margin-top:16px">Know what&#39;s<br>moving. Know<br><span style="color:var(--orange-text)">what needs you.</span></h2></div>
 <div>
 <p class="lede">A practical view of the customer touchpoints that matter: approvals, review links sent and clicked, and subscription status.</p>
 <div style="margin-top:18px">
@@ -336,7 +341,7 @@ export function landingPage(): string {
 
 <section style="padding-top:0"><div class="wrap">
 <div class="split-head">
-<div><p class="eyebrow">Toolbox</p><h2 class="h-mid" style="margin-top:16px">And everything<br><span style="color:var(--orange)">around it.</span></h2></div>
+<div><p class="eyebrow">Toolbox</p><h2 class="h-mid" style="margin-top:16px">And everything<br><span style="color:var(--orange-text)">around it.</span></h2></div>
 <p class="lede">The quiet machinery that keeps the front of house running. Every item marked honestly: live means working today.</p>
 </div>
 <div class="tgrid">
@@ -356,11 +361,11 @@ export function landingPage(): string {
 <section class="pricing" id="pricing"><div class="wrap">
 <div class="center" style="text-align:center">
 <p class="eyebrow" style="justify-content:center;color:#b9b4aa">Straight-up pricing</p>
-<h2 class="h-mid" style="margin-top:16px">Choose your level<br>of <span style="color:var(--orange)">momentum.</span></h2>
+<h2 class="h-mid" style="margin-top:16px">Choose your level<br>of <span style="color:var(--orange-text)">momentum.</span></h2>
 <p class="lede" style="margin-top:16px">Three monthly options. A clear starting point for businesses ready to take customer engagement seriously.</p>
 </div>
 <div class="pgrid">
-<div class="plan"><span class="num">01 / START <i style="color:var(--orange);font-style:normal">&#9679;</i></span>
+<div class="plan"><span class="num">01 / START <i style="color:var(--orange-text);font-style:normal">&#9679;</i></span>
 <h3>Starter</h3><p style="font-size:13.5px;color:var(--muted)">For businesses ready to build a more consistent customer experience.</p>
 <div class="p" aria-label="R499 per month"><sup>R</sup>499</div><div class="per">per month</div>
 <ul><li>Google review booster</li><li>Enquiry inbox</li><li>Review links and reminders</li></ul>
@@ -372,7 +377,7 @@ export function landingPage(): string {
 <ul><li>Everything in Starter</li><li>Social posting with approvals</li><li>Campaigns to your customers</li><li>Bookings, waitlist and loyalty</li></ul>
 <a class="btn btn-dark" href="/signup">Start today &#8599;</a>
 <div class="pfoot" style="border-color:rgba(23,23,20,.2);color:rgba(23,23,20,.65)">MONTH-TO-MONTH PRICING</div></div>
-<div class="plan"><span class="num">03 / SCALE <i style="color:var(--orange);font-style:normal">&#9679;</i></span>
+<div class="plan"><span class="num">03 / SCALE <i style="color:var(--orange-text);font-style:normal">&#9679;</i></span>
 <h3>Business Pro</h3><p style="font-size:13.5px;color:var(--muted)">For ambitious businesses looking for a stronger operating rhythm.</p>
 <div class="p" aria-label="R1,999 per month"><sup>R</sup>1,999</div><div class="per">per month</div>
 <ul><li>Everything in Growth</li><li>Hands-free auto-posting</li><li>Lead pipeline and follow-ups</li><li>Your own WhatsApp Assistant</li></ul>
@@ -383,7 +388,7 @@ export function landingPage(): string {
 
 <section><div class="wrap">
 <div class="split-head">
-<div><p class="eyebrow">Get moving</p><h2 class="h-mid" style="margin-top:16px">Three steps.<br><span style="color:var(--orange)">Clearer momentum.</span></h2></div>
+<div><p class="eyebrow">Get moving</p><h2 class="h-mid" style="margin-top:16px">Three steps.<br><span style="color:var(--orange-text)">Clearer momentum.</span></h2></div>
 <p class="lede">No complicated transformation project. Start with your business, choose the right workflow and give customers a better way to connect.</p>
 </div>
 <div class="steps">
@@ -395,7 +400,7 @@ export function landingPage(): string {
 
 <section class="faq" id="faq"><div class="wrap"><div class="faq-grid">
 <div><p class="eyebrow" style="color:#b9b4aa">Good questions</p>
-<h2 class="h-mid" style="margin-top:16px">Clear answers.<br><span style="color:var(--orange)">No surprises.</span></h2>
+<h2 class="h-mid" style="margin-top:16px">Clear answers.<br><span style="color:var(--orange-text)">No surprises.</span></h2>
 <p class="lede" style="margin-top:18px">We would rather be upfront about what is ready than promise the moon.</p>
 <p style="margin-top:20px"><a class="btn-line" style="color:#f6f0e7;border-color:#f6f0e7" href="/signup">Still have a question? &#8599;</a></p>
 </div>
