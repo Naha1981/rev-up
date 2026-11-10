@@ -503,8 +503,6 @@ export async function onboardingPage(db: Pool, user: any, mem: any, msg = ""): P
   let rules: any = b.custom_rules || {};
   if (typeof rules === "string") { try { rules = JSON.parse(rules); } catch { rules = {}; } }
   const savedGoals: string[] = Array.isArray(rules.goals) ? rules.goals : [];
-  const rec = recommendPlan(savedGoals);
-  const cur = mem.plan || rec;
   return layout("Business details", `
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <div class="card"><form method="post" action="/onboarding">
@@ -1033,11 +1031,12 @@ ${p.slug === mem.plan
   : `<a class="btn btn-primary" href="${YOCO_LINKS[p.slug]}" target="_blank" rel="noopener">Pay R${p.price.toLocaleString("en-ZA")}</a>`}
 </div>`).join("");
   return layout("Billing", `
+${mem.subscription_status === 'active' ? '<p class="ok" role="status">Your plan is active. Selecting another plan will not change it until payment is confirmed.</p>' : mem.subscription_status === 'expired' ? '<p class="warn" role="status">Your plan has ended. Make a monthly payment below to reactivate your business.</p>' : '<p class="warn" role="status">Payment needed. Choose a monthly plan to activate your business.</p>'}
 <p>Plan <b>${esc(mem.plan)}</b> · status <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc(statusLabel(mem.subscription_status))}</span>
 ${mem.payment_reference ? ` · ref <span class="mut">${esc(mem.payment_reference)}</span>` : ""}</p>
 ${mem.activated_at ? `<p class="mut">Active since ${new Date(mem.activated_at).toLocaleDateString("en-ZA")}</p>` : ""}
 <div class="grid">${cards}</div>
-<p class="mut">Tap your plan to pay securely by card, in rand. Each month is a fresh payment - we never charge your card automatically. Your plan activates when your payment lands, usually within a few hours on business days. You can cancel any time.</p>`, user);
+<p class="mut">Tap your plan to pay securely by card, in rand. Each month is a fresh payment - we never charge your card automatically. Your plan activates after payment is confirmed. Payments made here are for one month, with no automatic renewal. If you have an older recurring subscription, contact billing support before stopping payments.</p>`, user);
 }
 
 // ---------- router ----------
@@ -1659,7 +1658,6 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
         if (req.method === "POST") {
           const f = await formData(req);
           const goals = GOALS.map(([v]) => v).filter((v) => f["goal_" + v]);
-          const plan = ["starter", "growth", "business-pro"].includes(f.plan || "") ? f.plan! : recommendPlan(goals);
           const client = await db.connect();
           try {
             await client.query("BEGIN");

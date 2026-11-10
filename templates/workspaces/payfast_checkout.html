@@ -4,14 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Redirecting to secure payment</title>
-</head>
+<style>
+:root{color-scheme:light dark}*{box-sizing:border-box}body{margin:0;padding:32px 20px!important;background:#faf9f7;color:#292524!important;font:16px/1.6 system-ui!important}main{max-width:520px;margin:8vh auto;padding:28px;background:white;border:1px solid #d6d3d1;border-radius:20px}h1{font-size:24px;line-height:1.2}button{min-height:48px;border:0;border-radius:12px;background:#c2410c;color:white;font:600 16px system-ui;padding:12px 20px}button:focus-visible{outline:3px solid #9a3412;outline-offset:4px}@media(prefers-color-scheme:dark){body{background:#1c1917;color:#fafaf9!important}main{background:#292524;border-color:#57534e}}
+</style></head>
 <body style="font-family: -apple-system, Helvetica, Arial, sans-serif; text-align: center; padding-top: 4rem; color: #222;">
-<p>Taking you to the secure payment page for RevUp {{ card.name }} (R{{ card.price_fmt }}/month){% if sandbox %} - test mode, no real charge{% endif %}&hellip;</p>
+<main><h1>Continue to secure payment</h1><p role="status">Taking you to the secure payment page for RevUp {{ card.name }} (R{{ card.price_fmt }}/month){% if sandbox %} - test mode, no real charge{% endif %}&hellip;</p>
 <form id="pay" method="post" action="{{ process_url }}">
   {% for k, v in params.items %}<input type="hidden" name="{{ k }}" value="{{ v }}">
   {% endfor %}
-  <noscript><button type="submit">Continue to payment</button></noscript>
+  <button type="submit">Continue to payment</button>
 </form>
-<script>document.getElementById("pay").submit();</script>
+<p>Your plan changes only after payment is confirmed.</p></main>
+<script>document.getElementById('pay').addEventListener('submit',function(){var b=this.querySelector('button');b.disabled=true;b.textContent='Opening secure payment...'});document.getElementById('pay').requestSubmit();</script>
 </body>
 </html>

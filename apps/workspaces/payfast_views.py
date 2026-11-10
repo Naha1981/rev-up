@@ -43,6 +43,7 @@ def checkout(request, workspace_id):
         org.save()  # assigns the RU- reference when blank
     base = request.build_absolute_uri("/").rstrip("/")
     params = payfast.build_subscription_params(org, card, base)
+    request.session["billing_checkout_workspace"] = str(workspace.id)
     return render(
         request,
         "workspaces/payfast_checkout.html",
@@ -118,7 +119,9 @@ def payfast_return(request):
 
 def _billing_after_checkout(request):
     membership = (
-        WorkspaceMembership.objects.filter(user=request.user).select_related("workspace").first()
+        WorkspaceMembership.objects.filter(
+            user=request.user, workspace_id=request.session.get("billing_checkout_workspace")
+        ).first()
         if request.user.is_authenticated
         else None
     )
