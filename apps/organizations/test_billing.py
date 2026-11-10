@@ -113,7 +113,25 @@ class BillingPageTests(TestCase):
         resp = self.client.post(f"/workspaces/{ws.id}/billing/", {"plan": "growth"})
         self.assertEqual(resp.status_code, 302)
         org.refresh_from_db()
-        self.assertEqual(org.plan, "growth")
+        self.assertEqual(org.plan, "starter")
+        self.assertEqual(self.client.session[f"billing_plan_{ws.id}"], "growth")
+
+    def test_paid_starter_cannot_upgrade_without_payment(self):
+        org, ws, user = _setup(email="paid-plan-regression@example.com")
+        org.subscription_status = "active"
+        org.save(update_fields=["subscription_status"])
+        self.client.force_login(user)
+        response = self.client.post(f"/workspaces/{ws.id}/billing/", {"plan": "business-pro"})
+        self.assertEqual(response.status_code, 302)
+        org.refresh_from_db()
+        self.assertEqual(org.plan, "starter")
+        self.assertEqual(org.subscription_status, "active")
+
+    def test_unknown_stored_plan_has_safe_billing_fallback(self):
+        org, ws, user = _setup(email="bad-plan-regression@example.com")
+        Organization.objects.filter(pk=org.pk).update(plan="unknown-old-plan")
+        self.client.force_login(user)
+        self.assertEqual(self.client.get(f"/workspaces/{ws.id}/billing/").status_code, 200)
 
     def test_viewer_member_cannot_choose_plan(self):
         org, ws, user = _setup(email="viewer-owner@example.com")

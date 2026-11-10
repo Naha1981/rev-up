@@ -422,3 +422,12 @@ test('onboarding stores goals in custom rules, not operating hours',async()=>{
  const {readFileSync}=await import('node:fs');const s=readFileSync(new URL('../src/index.ts',import.meta.url),'utf8');
  assert.ok(s.includes("VALUES($1,$2,$3,$4,'{}'::jsonb,'{}'::jsonb,'{}'::jsonb,'','',$6,$5,true,true,2,'reviews',now(),now())"));
 });
+
+// Money safety: business setup cannot upgrade a paid account.
+test('onboarding never changes the paid plan',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const src=readFileSync(new URL('../src/index.ts',import.meta.url),'utf8');
+ const block=src.slice(src.indexOf('if (path === "/onboarding")'),src.indexOf('if (path === "/radar")'));
+ assert.ok(!/SET plan=/.test(block));
+ assert.ok(block.includes('SET goals='));
+});

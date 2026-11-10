@@ -288,14 +288,15 @@ def workspace_billing(request, workspace_id):
             raise Http404
         chosen = request.POST.get("plan", "")
         if chosen in org.PLAN_PRICES_RAND:
-            org.plan = chosen
-            org.save(update_fields=["plan", "payment_reference", "trial_started_at"])
-            messages.success(request, f"{dict(org.Plan.choices)[chosen]} selected.")
+            # A selection is not a payment. Only verified settlement activates a plan.
+            request.session[f"billing_plan_{workspace.id}"] = chosen
+            messages.info(request, "Plan selected. Complete payment to activate it.")
         return redirect("workspaces:billing", workspace_id=workspace.id)
     if not org.payment_reference:
         org.save()  # save() assigns the RU- reference when blank
     status, day, days_left = org.trial_state()
-    card = next(c for c in PLAN_CARDS if c["id"] == org.plan)
+    selected = request.session.get(f"billing_plan_{workspace.id}", org.plan)
+    card = next((c for c in PLAN_CARDS if c["id"] == selected), PLAN_CARDS[0])
     number = getattr(django_settings, "REVUP_BILLING_WHATSAPP", "")
     text = (
         f"Hi NahaLabs, I want to pay my RevUp {card['name']} subscription "

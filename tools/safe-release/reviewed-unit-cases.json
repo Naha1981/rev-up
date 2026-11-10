@@ -91,6 +91,7 @@
  "test::no plaintext or corrupted-ciphertext fallback 80",
  "test::non-enquiry callers: backup behaviour unchanged by consent flags",
  "test::normal answer uses AI and stores an extracted durable fact",
+ "test::onboarding never changes the paid plan",
  "test::onboarding reads saved goals from the existing text-field JSON contract",
  "test::onboarding stores goals in custom rules, not operating hours",
  "test::openrouter call carries zero-price guard AND no-training flag",

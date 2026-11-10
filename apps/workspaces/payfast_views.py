@@ -112,10 +112,23 @@ def notify(request):
 
 
 def payfast_return(request):
-    messages.success(request, "Payment received - your plan activates as soon as the bank confirms.")
+    messages.info(request, "Payment submitted. Your plan changes only after payment is confirmed.")
+    return _billing_after_checkout(request)
+
+
+def _billing_after_checkout(request):
+    membership = (
+        WorkspaceMembership.objects.filter(user=request.user).select_related("workspace").first()
+        if request.user.is_authenticated
+        else None
+    )
+    if membership:
+        return redirect("workspaces:billing", workspace_id=membership.workspace_id)
     return redirect("dashboard")
 
 
 def payfast_cancel(request):
-    messages.info(request, "Payment cancelled. Nothing was charged.")
-    return redirect("dashboard")
+    messages.info(
+        request, "Checkout cancelled. No plan change was made. Check your payment provider for any payment status."
+    )
+    return _billing_after_checkout(request)
