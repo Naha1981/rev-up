@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import worker, { navLinks, recommendPlan } from '../dist-test/index.mjs';
+import worker, { navLinks, recommendPlan, dashboardPage } from '../dist-test/index.mjs';
 import { verifyZernioSignature, industryBrief, profileBlock, customerBlock } from '../dist-test/receptionist.mjs';
 import { landingPage } from '../dist-test/index.mjs';
 import crypto from 'node:crypto';
@@ -11,28 +11,21 @@ test('recommendPlan: social -> growth', () => assert.equal(recommendPlan(['socia
 test('recommendPlan: reviews only -> starter', () => assert.equal(recommendPlan(['reviews']), 'starter'));
 test('recommendPlan: empty -> starter', () => assert.equal(recommendPlan([]), 'starter'));
 
-// --- goal-driven nav tailoring ---
+// --- guided navigation: five stable destinations, all tools remain reachable ---
 const nav = (goals) => navLinks({ _goals: goals });
-test('nav: no goals shows everything', () => {
-  const h = nav([]);
-  for (const item of ['Analytics', 'Radar', 'Posts', 'Reviews', 'Inbox', 'Leads', 'Approvals', 'Billing', 'Receptionist'])
-    assert.ok(h.includes(item), item);
+test('nav: exactly five plain destinations', () => {
+  const h=nav([]);
+  assert.equal((h.match(/<a /g)||[]).length,5);
+  for(const label of ['Home','Customers','Bookings','Posts','Settings'])assert.ok(h.includes('>'+label+'</span>'),label);
 });
-test('nav: social+reviews hides Inbox/Leads/Receptionist', () => {
-  const h = nav(['social', 'reviews']);
-  for (const item of ['Analytics', 'Radar', 'Posts', 'Reviews']) assert.ok(h.includes(item), item);
-  for (const item of ['Inbox', 'Leads', 'Receptionist']) assert.ok(!h.includes(item), item);
+test('nav: goals never hide the five stable destinations',()=>{
+  assert.equal(nav(['social','reviews']),nav(['leads','receptionist']));
 });
-test('nav: leads+receptionist hides social/review features', () => {
-  const h = nav(['leads', 'receptionist']);
-  for (const item of ['Inbox', 'Leads', 'Receptionist']) assert.ok(h.includes(item), item);
-  for (const item of ['Analytics', 'Radar', 'Posts', 'Reviews']) assert.ok(!h.includes(item), item);
+test('nav: accessible names and visible icons',()=>{
+  const h=nav([]);assert.ok(h.includes('aria-label="Main navigation"'));assert.equal((h.match(/aria-hidden="true"/g)||[]).length,5);
 });
-test('nav: Dashboard/Onboarding/Billing always present', () => {
-  for (const g of [[], ['social'], ['leads']]) {
-    const h = nav(g);
-    for (const item of ['Dashboard', 'Onboarding', 'Billing']) assert.ok(h.includes(item), item);
-  }
+test('nav: no crowded More overflow',()=>{
+  const h=nav([]);assert.ok(!h.includes('<details'));assert.ok(!h.includes('Dashboard'));assert.ok(!h.includes('More'));
 });
 
 // --- webhook signature ---
@@ -429,3 +422,9 @@ test('onboarding stores goals in custom rules, not operating hours',async()=>{
  const {readFileSync}=await import('node:fs');const s=readFileSync(new URL('../src/index.ts',import.meta.url),'utf8');
  assert.ok(s.includes("VALUES($1,$2,$3,$4,'{}'::jsonb,'{}'::jsonb,'{}'::jsonb,'','',$6,$5,true,true,2,'reviews',now(),now())"));
 });
+// Home status and next-action design uses only workspace-backed counts.
+const homeFixture=async (counts={},active=false)=>dashboardPage({query:async()=>({rows:[{details:'0',whatsapp:'0',calendar:'0',sent:'0',approvals:'0',handovers:'0',bookings:'0',...counts}]})},{name:'Fictional Lerato'},{workspace_id:'fictional',workspace_name:'Fictional Plumbing',subscription_status:active?'active':'pending_activation'});
+test('home: empty state has an honest next action',async()=>{const h=await homeFixture();assert.ok(h.includes('You are up to date'));assert.ok(h.includes('View customers'));assert.ok(!h.includes('Reply needed'));});
+test('home: status and next action for each waiting item',async()=>{const h=await homeFixture({handovers:'1',bookings:'2',approvals:'3'});for(const t of ['Reply needed','Open inbox','Needs confirmation','Review booking','Review needed','Review posts','2 requests waiting for a time','3 posts waiting for your review'])assert.ok(h.includes(t),t);assert.equal((h.match(/class="attention-action attention-primary"/g)||[]).length,1);});
+test('home: setup row disappears only after all steps complete',async()=>{const h=await homeFixture({details:'1',whatsapp:'1',calendar:'1',sent:'1'},true);assert.ok(!h.includes('class="setup-compact"'));});
+test('home: untrusted names remain escaped',async()=>{const h=await dashboardPage({query:async()=>({rows:[{details:0,whatsapp:0,calendar:0,sent:0,approvals:0,handovers:0,bookings:0}]})},{name:'<script>x</script>'},{workspace_id:'fictional',workspace_name:'<img src=x>',subscription_status:'active'});assert.ok(h.includes('&lt;img src=x&gt;'));assert.ok(!h.includes('<script>x</script>'));});

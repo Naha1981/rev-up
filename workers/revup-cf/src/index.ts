@@ -1,3 +1,4 @@
+import { JOURNEY_CSS, THEME_SCRIPT, JOURNEY_SCRIPT, journeyNav, toolRow, disclosure, COMMAND_CSS, LEGIBILITY_CSS, SETUP_CSS, FINISH_CSS, commandPalette } from "./journey";
 export {calendarPanel,calendarState,checkCalendarState,calendarEventId,calendarEventBody,calendarConnect,calendarSync} from "./calendar";
 import {calendarPanel,calendarConfigured,calendarAuthUrl,checkCalendarState,calendarConnect,calendarSync} from "./calendar";
 import { legalPage } from "./legal";
@@ -64,45 +65,13 @@ export function md5(input: string): string { return SparkMD5.hash(input); }
 export function esc(s: any): string {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
 }
-export function navLinks(user: any): string {
-  const g: string[] = Array.isArray(user._goals) ? user._goals : [];
-  const show = (...need: string[]) => !g.length || need.some((n) => g.includes(n));
-  // Daily work stays on the bar; everything else sits under More.
-  let h = `<a href="/">Dashboard</a>`;
-  if (show("leads", "receptionist")) h += `<a href="/inbox">Inbox</a>`;
-  if (show("leads")) h += `<a href="/frontdesk">Leads</a>`;
-  if (show("reviews", "leads", "receptionist")) h += `<a href="/approvals">Approvals</a>`;
-  if (show("social")) h += `<a href="/posts">Posts</a>`;
-  if (show("social")) h += `<a href="/team">Team</a>`;
-  if (show("reviews")) h += `<a href="/reviews">Reviews</a>`;
-  if (show("receptionist")) h += `<a href="/receptionist">Receptionist</a>`;
-  let more = "";
-  if (show("social")) more += `<a href="/analytics">Analytics</a>`;
-  if (show("reviews")) more += `<a href="/radar">Radar</a>`;
-  if (show("social")) more += `<a href="/media">Media</a>`;
-  more += `<a href="/onboarding">Onboarding</a>`;
-  if (show("receptionist")) more += `<a href="/assistant">Assistant</a>`;
-  if (show("receptionist")) more += `<a href="/bookings">Bookings</a>`;
-  if (show("receptionist")) more += `<a href="/waitlist">Waitlist</a>`;
-  if (show("receptionist")) more += `<a href="/loyalty">Loyalty</a>`;
-  if (show("receptionist")) more += `<a href="/quotes">Quotes</a>`;
-  if (show("receptionist")) more += `<a href="/campaigns">Campaigns</a>`;
-  if (show("receptionist", "social", "leads")) more += `<a href="/pages">Pages</a>`;
-  if (show("receptionist")) more += `<a href="/competitors">Competitors</a>`;
-  if (show("receptionist")) more += `<a href="/support">Support</a>`;
-  if (show("receptionist")) more += `<a href="/wifi-card">WiFi Card</a>`;
-  if (show("receptionist")) more += `<a href="/menu">Menu</a>`;
-  if (show("receptionist")) more += `<a href="/orders">Orders</a>`;
-  more += `<a href="/billing">Billing</a>`;
-  h += `<details class="nav-more"><summary>More</summary><div class="nav-more-panel">${more}</div></details>`;
-  return h;
-}
+export function navLinks(user: any): string { return journeyNav(); }
 
 export function layout(title: string, body: string, user?: any): string {
   const nav = user
-    ? `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links">${navLinks(user)}${user._cur_ws ? `<a href="/switch" title="Switch business" style="border:1px solid var(--line);border-radius:8px;padding:2px 8px">${esc(user._cur_ws)}${(user._ws_count||0) > 1 ? " &#9662;" : ""}</a>` : ""}<form method="post" action="/logout" style="display:inline"><button class="link">Log out</button></form></div></nav>`
-    : `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a class="btn btn-ghost" href="/login">Log in</a><a class="btn btn-primary" href="/signup">Get started</a></div></nav>`;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="/static/brand/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/static/brand/favicon-16.png"><link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png"><title>${esc(title)} · RevUp</title><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&display=swap" rel="stylesheet"><style>
+    ? `<header class="app-header"><a class="logo" href="/" aria-label="RevUp home"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="header-tools"><button type="button" class="command-open" data-command-open>Search</button><span class="business-label">${esc(user._cur_ws || "Your business")}</span><button class="theme-toggle" type="button" aria-label="Change colour theme">Dark</button></div></header>${navLinks(user)}`
+    : `<nav><a class="logo" href="/"><img src="/static/brand/revup-light.png" alt="RevUp"></a><div class="nav-links"><a class="btn btn-ghost" href="/login">Log in</a><a class="btn btn-primary" href="/signup">Start</a></div></nav>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="/static/brand/favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="/static/brand/favicon-16.png"><link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png"><title>${esc(title)} · RevUp</title>${user ? THEME_SCRIPT : ""}<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&display=swap" rel="stylesheet"><style>
 :root{--brand:#F97316;--brand-dark:#EA580C;--brand-soft:#FFF7ED;--ink:#1C1917;--ink2:#57534E;--ink3:#78716C;--line:#E7E5E4;--bg:#FAFAF9}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:Manrope,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6;font-size:17px}
@@ -154,7 +123,7 @@ form.inline{display:inline-block;margin:0 14px 6px 0}
 .stat-t{font-size:20px;font-weight:500;margin:2px 0}
 label{font-size:15px;font-weight:500;color:var(--ink2);display:block}
 label input:not([type=checkbox]),label select,label textarea{display:block;width:100%;margin-top:6px}
-</style></head><body><div class="wrap">${nav}<h1>${esc(title)}</h1>${body}</div><script>(function(){document.querySelectorAll('input[type="password"]').forEach(function(inp){var w=document.createElement('span');w.style.cssText='position:relative;display:block';inp.parentNode.insertBefore(w,inp);w.appendChild(inp);inp.style.paddingRight='48px';var b=document.createElement('button');b.type='button';b.textContent='Show';b.setAttribute('aria-label','Show password');b.setAttribute('aria-pressed','false');b.style.cssText='position:absolute;right:4px;top:50%;transform:translateY(-50%);min-width:44px;min-height:44px;background:none;border:none;color:var(--ink2);font:inherit;cursor:pointer;padding:0';b.addEventListener('click',function(){var t=inp.type==='password';inp.type=t?'text':'password';b.textContent=t?'Hide':'Show';b.setAttribute('aria-label',t?'Hide password':'Show password');b.setAttribute('aria-pressed',String(t));});w.appendChild(b);});})();</script></body></html>`;
+${user ? JOURNEY_CSS + COMMAND_CSS + LEGIBILITY_CSS + SETUP_CSS + FINISH_CSS : ""}</style></head><body><a class="skip-link" href="#main-content">Skip to content</a><div class="wrap">${nav}<main id="main-content">${user && user._path && !["/","/customers","/work","/growth","/settings","/setup","/business-type"].includes(user._path) ? `<a class="back-link" href="${["/inbox","/frontdesk","/waitlist","/loyalty","/prospects","/wifi-card"].some(p=>user._path.startsWith(p))?"/customers":["/bookings","/quotes","/menu","/orders"].some(p=>user._path.startsWith(p))?"/work":["/posts","/reviews","/approvals","/team","/media","/analytics","/radar","/competitors","/campaigns"].some(p=>user._path.startsWith(p))?"/growth":"/settings"}">‹ ${["/inbox","/frontdesk","/waitlist","/loyalty","/prospects","/wifi-card"].some(p=>user._path.startsWith(p))?"Customers":["/bookings","/quotes","/menu","/orders"].some(p=>user._path.startsWith(p))?"Bookings and quotes":["/posts","/reviews","/approvals","/team","/media","/analytics","/radar","/competitors","/campaigns"].some(p=>user._path.startsWith(p))?"Posts and reviews":"Settings"}</a>` : ""}${title ? `<h1>${esc(title)}</h1>` : ""}${body}</main></div>${user ? JOURNEY_SCRIPT + commandPalette() : ""}<script>(function(){document.querySelectorAll('input[type="password"]').forEach(function(inp){var w=document.createElement('span');w.style.cssText='position:relative;display:block';inp.parentNode.insertBefore(w,inp);w.appendChild(inp);inp.style.paddingRight='48px';var b=document.createElement('button');b.type='button';b.textContent='Show';b.setAttribute('aria-label','Show password');b.setAttribute('aria-pressed','false');b.style.cssText='position:absolute;right:4px;top:50%;transform:translateY(-50%);min-width:44px;min-height:44px;background:none;border:none;color:var(--ink2);font:inherit;cursor:pointer;padding:0';b.addEventListener('click',function(){var t=inp.type==='password';inp.type=t?'text':'password';b.textContent=t?'Hide':'Show';b.setAttribute('aria-label',t?'Hide password':'Show password');b.setAttribute('aria-pressed',String(t));});w.appendChild(b);});})();</script></body></html>`;
 }
 export function html(body: string, status = 200): Response {
   return new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8" } });
@@ -214,7 +183,7 @@ const MAKE_HASH_SQL = `SELECT 'bcrypt_sha256$' || '$2b$' || substring(crypt(enco
 
 export async function membership(db: Pool, userId: string, req?: Request): Promise<any | null> {
   const r = await db.query(
-    `SELECT w.id AS workspace_id, w.name AS workspace_name, w.approval_workflow_mode,
+    `SELECT w.id AS workspace_id, w.name AS workspace_name, w.approval_workflow_mode,w.industry,
             o.id AS org_id, o.name AS org_name, o.plan, o.subscription_status, o.payment_reference,
             o.trial_started_at, o.activated_at, o.goals, m.workspace_role
      FROM members_workspace_membership m
@@ -443,22 +412,75 @@ ${err ? `<p class="bad">${esc(err)}</p>` : ""}
 </form></div>`);
 
 function statusLabel(s: string): string { return s === "active" ? "active" : "activation pending"; }
-export async function dashboardPage(db: Pool, user: any, mem: any, msg = ""): Promise<string> {
-  const [pending, links, clicks, posts] = await Promise.all([
-    db.query(`SELECT count(*) c FROM composer_platform_post pp JOIN composer_post p ON p.id=pp.post_id WHERE p.workspace_id=$1 AND pp.status='pending_review'`, [mem.workspace_id]),
-    db.query(`SELECT count(*) c FROM receptionist_reviewlink WHERE workspace_id=$1`, [mem.workspace_id]),
-    db.query(`SELECT count(*) c FROM receptionist_reviewlink WHERE workspace_id=$1 AND clicked_at IS NOT NULL`, [mem.workspace_id]),
-    db.query(`SELECT count(*) c FROM composer_post WHERE workspace_id=$1`, [mem.workspace_id]),
-  ]);
-  return layout("Dashboard", `
-${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
-<p class="mut">${esc(mem.org_name)}${mem.workspace_name && mem.workspace_name !== mem.org_name ? ` · ${esc(mem.workspace_name)}` : ""} · <span class="pill">${esc(mem.plan)}</span> <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc(statusLabel(mem.subscription_status))}</span></p>
-<div class="grid">
-<div class="card"><h2>Posts</h2><p class="stat">${posts.rows[0].c}</p><p class="mut">total in this workspace</p></div>
-<div class="card"><h2>Awaiting approval</h2><p class="stat">${pending.rows[0].c}</p><p class="mut"><a href="/approvals">review now →</a></p></div>
-<div class="card"><h2>Review links</h2><p class="stat">${links.rows[0].c}</p><p class="mut">${clicks.rows[0].c} clicked · <a href="/reviews">manage →</a></p></div>
-<div class="card"><h2>Subscription</h2><p class="stat-t">${esc(mem.plan)}</p><p class="mut"><a href="/billing">billing →</a></p></div>
-</div>`, user);
+export async function journeyStatus(db: Pool, mem: any): Promise<any> {
+  const id=mem.workspace_id;
+  const result=await db.query(`SELECT
+    (SELECT count(*) FROM receptionist_tenantmessagingconnection WHERE workspace_id=$1 AND status='connected') AS whatsapp,
+    (SELECT count(*) FROM receptionist_calendarconnection WHERE workspace_id=$1) AS calendar,
+    (SELECT count(*) FROM receptionist_message m JOIN receptionist_contact c ON c.id=m.contact_id WHERE c.workspace_id=$1 AND m.direction='outbound' AND m.is_draft=false) AS sent,
+    (SELECT count(*) FROM composer_platform_post pp JOIN composer_post p ON p.id=pp.post_id WHERE p.workspace_id=$1 AND pp.status='pending_review') AS approvals,
+    (SELECT count(*) FROM receptionist_contact WHERE workspace_id=$1 AND needs_human=true) AS handovers,
+    (SELECT count(*) FROM receptionist_booking WHERE workspace_id=$1 AND status='requested') AS bookings,
+    (SELECT count(*) FROM workspaces_workspace WHERE id=$1 AND industry<>'' AND (website_url<>'' OR facebook_url<>'')) AS details`,[id]);
+  const r=result.rows[0];
+  const steps=[Boolean(Number(r.details)),Boolean(Number(r.whatsapp)),Boolean(Number(r.calendar)),mem.subscription_status==='active',Boolean(Number(r.sent))];
+  return {...r,steps,complete:steps.filter(Boolean).length};
+}
+export async function setupPage(db:Pool,user:any,mem:any):Promise<string>{
+  const s=await journeyStatus(db,mem);
+  const steps=[
+    ['Business details','Your name, business type and website.','/onboarding','Add business details'],
+    ['Connect WhatsApp','Use your own business number.','/receptionist/connect','Connect your number'],
+    ['Connect calendar','Keep confirmed bookings together.','/bookings','Connect calendar'],
+    ['Choose a monthly plan','Paid monthly. From R499. No setup fee.','/billing','Choose a plan'],
+    ['Send your first message','Reply to an existing customer conversation.','/inbox','Open customer messages']
+  ];
+  const next=s.steps.findIndex((v:boolean)=>!v);
+  return layout('Your setup',`<p class="page-intro">Five steps to get started.</p><div class="setup-progress" role="progressbar" aria-label="Setup completed" aria-valuemin="0" aria-valuemax="5" aria-valuenow="${s.complete}"><span style="width:${s.complete*20}%"></span></div><p class="section-help">${s.complete} of 5 complete</p><div class="setup-checklist">${steps.map((a,i)=>`<details class="setup-item ${s.steps[i]?'done':''}"${i===next?' open':''}><summary><span class="step-number">${s.steps[i]?'✓':i+1}</span><span>${a[0]}${s.steps[i]?'<small>Complete</small>':''}</span><span class="setup-chevron" aria-hidden="true">⌄</span></summary><div class="setup-item-body"><p>${a[1]}</p><a href="${a[2]}" class="${i===next?'btn btn-primary':''}">${s.steps[i]?'Review settings':a[3]}</a></div></details>`).join('')}</div><a class="back-link" href="/">Go to Home</a>`,user);
+
+}
+export async function dashboardPage(db:Pool,user:any,mem:any,msg=''):Promise<string>{
+  const s=await journeyStatus(db,mem);
+  const needs=Number(s.approvals)+Number(s.handovers)+Number(s.bookings);
+  const business=esc(mem.workspace_name||mem.org_name||'Your business');
+  const first=esc(String(user.name||'').split(' ')[0]||'there');
+  const attention=(label:string,title:string,count:number,detail:string,href:string,action:string,primary=false)=>`<article class="attention-item"><p class="attention-status">${label}</p><h3>${title}</h3><p class="attention-detail">${count} ${detail}</p><a class="attention-action ${primary?'attention-primary':''}" href="${href}">${action}</a></article>`;
+  return layout('',`<div class="action-home"><div class="journey-hero"><p class="greeting">${business}</p><h1>Hello, ${first}.</h1></div>${msg?`<p class="ok" role="status">${esc(msg)}</p>`:''}
+  <h2 class="action-title">Your next actions</h2>
+  ${s.complete<5?`<div class="setup-compact"><span>Setup: ${s.complete} of 5 complete</span><a href="/setup">Continue<span aria-hidden="true"> ›</span></a></div>`:''}
+  <section class="journey-section attention-section" aria-labelledby="attention-title"><h2 id="attention-title">Needs your attention</h2>
+  ${Number(s.handovers)?attention('Reply needed','Customer conversation',Number(s.handovers),Number(s.handovers)===1?'conversation waiting for you':'conversations waiting for you','/inbox','Open inbox',true):''}
+  ${Number(s.bookings)?attention('Needs confirmation','Booking request',Number(s.bookings),Number(s.bookings)===1?'request waiting for a time':'requests waiting for a time','/bookings','Review booking',!Number(s.handovers)):''}
+  ${Number(s.approvals)?attention('Review needed','Posts to approve',Number(s.approvals),Number(s.approvals)===1?'post waiting for your review':'posts waiting for your review','/approvals','Review posts',!Number(s.handovers)&&!Number(s.bookings)):''}
+  ${!needs?'<div class="attention-empty"><h3>You are up to date</h3><p>No conversations, booking requests or posts need your attention.</p><a class="attention-action" href="/customers">View customers</a></div>':''}</section>
+  <section class="journey-section"><h2>Your business</h2><div class="tool-list">${toolRow('/customers','Customers','Messages, enquiries and follow ups')}${toolRow('/work','Bookings and quotes','Upcoming work and prices to send')}${toolRow('/growth','Posts and reviews','Stay visible and build customer trust')}${toolRow('/settings','Settings','Business details, connections and your plan')}</div></section></div>`,user);
+}
+export async function journeyHubPage(kind:string,user:any,db:Pool,mem:any):Promise<string>{
+  let recent='';
+  if(kind==='customers'){
+    const contacts=await db.query(`SELECT c.id,c.name,c.wa_id,c.needs_human,(SELECT body FROM receptionist_message m WHERE m.contact_id=c.id AND m.workspace_id=$1 ORDER BY m.created_at DESC LIMIT 1) AS last_message FROM receptionist_contact c WHERE c.workspace_id=$1 ORDER BY c.needs_human DESC,c.updated_at DESC LIMIT 4`,[mem.workspace_id]);
+    recent=contacts.rows.length?`<section class="journey-section"><h2>Recent conversations</h2><div class="tool-list">${contacts.rows.map((c:any)=>toolRow('/inbox/'+c.id,esc(c.name||c.wa_id),esc(c.last_message||'Open customer details'),c.needs_human?'Needs a reply':'')).join('')}</div></section>`:'';
+  }
+  if(kind==='work'){
+    const bookings=await db.query(`SELECT b.id,b.service,b.status,b.preferred_time,b.scheduled_start,c.name FROM receptionist_booking b JOIN receptionist_contact c ON c.id=b.contact_id AND c.workspace_id=$1 WHERE b.workspace_id=$1 AND b.status IN ('requested','confirmed') ORDER BY CASE WHEN b.status='requested' THEN 0 ELSE 1 END,b.scheduled_start NULLS LAST LIMIT 4`,[mem.workspace_id]);
+    recent=bookings.rows.length?`<section class="journey-section"><h2>Upcoming work</h2><div class="tool-list">${bookings.rows.map((b:any)=>toolRow('/bookings#booking-'+b.id,esc(b.name),esc(b.service)+(b.scheduled_start?' · '+esc(new Date(b.scheduled_start).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg'})):b.preferred_time?' · '+esc(b.preferred_time):''),b.status==='requested'?'Confirm time':'Confirmed')).join('')}</div></section>`:'';
+  }
+
+  let title='',intro='',body='';
+  if(kind==='customers'){
+    title='Customers';intro='Messages, enquiries and repeat business.';
+    body=`<div class="next-action"><h2>Your customer messages</h2><p>Read, reply and keep their details together.</p><a href="/inbox">Open messages</a></div><div class="tool-list">${toolRow('/frontdesk','Enquiries and follow ups','Move each enquiry toward a booked job')}</div>${disclosure('Keep customers coming back',toolRow('/loyalty','Loyalty and vouchers','Points, rewards and repeat visits')+toolRow('/waitlist','Waiting customers','Offer a place when one becomes available'))}${disclosure('Customer tools',toolRow('/receptionist','WhatsApp receptionist','Answers, business knowledge and handover')+toolRow('/wifi-card','Guest WiFi card','Help visitors join and get in touch')+toolRow('/prospects','Tracked links','See which shared links get opened'))}`;
+  } else if(kind==='work'){
+    title='Bookings and quotes';intro='From the first price to the finished job.';
+    body=`<div class="next-action"><h2>Your upcoming bookings</h2><p>Confirm a time. Keep every job on track.</p><a href="/bookings">Open bookings</a></div><div class="tool-list">${toolRow('/quotes','Quotes to customers','Send a price and keep track of the answer')}</div>${disclosure(user._industry==='restaurant'?'Restaurant tools':'Other business tools',toolRow('/waitlist','Waitlist','Make space for waiting guests')+toolRow('/menu','Menu and specials','Dishes, prices, availability and sales')+toolRow('/orders','Customer orders','Confirm, prepare and hand over'))}`;
+  } else if(kind==='growth'){
+    title='Posts and reviews';intro='Show up for your next customer.';
+    body=`<div class="next-action"><h2>Your words. Your approval.</h2><p>Review posts before they are shared on your connected channels.</p><a href="/approvals">Review waiting posts</a></div><div class="tool-list">${toolRow('/posts','Social posts','Drafts, scheduled posts and published posts')}${toolRow('/reviews','Customer reviews','Request feedback and track review links')}</div>${disclosure('Create and organise content',toolRow('/posts/new','Write a post','Create a caption for your channels')+toolRow('/team','Content team','Research, writing and review')+toolRow('/media','Photos','Keep your business images together'))}${disclosure('Find your next opportunity',toolRow('/competitors','Competitor watch','Prices, promotions and opportunities')+toolRow('/radar','Industry ideas','Current stories and ideas for your business')+toolRow('/campaigns','Customer campaigns','Approved messages to consenting customers')+toolRow('/analytics','Results','Messages, posts and review link activity'))}`;
+  } else {
+    title='Settings';intro='Make RevUp fit your business.';
+    body=`<div class="tool-list">${toolRow('/setup','Setup checklist','Your five steps to getting started')}${toolRow('/onboarding','Business details','Business type, website, hours and goals')}${toolRow('/receptionist/connect','WhatsApp connection','Connect your own business number')}${toolRow('/bookings','Calendar connection','Manage the calendar for your bookings')}${toolRow('/billing','Plan and payments','Monthly plan, payment link and status')}</div>${disclosure('More business tools',toolRow('/assistant','Your WhatsApp assistant','Private help for the business owner')+toolRow('/support','Help with your business','Answers grounded in your business records')+toolRow('/switch','Switch business','Choose a business you can access'))}<form method="post" action="/logout"><button class="link">Log out</button></form><p class="section-help"><a href="/legal/privacy/">Privacy</a> &nbsp; <a href="/legal/terms/">Terms</a></p>`;
+  }
+  return layout(title,`<p class="page-intro">${intro}</p>${recent}${body}`,user);
 }
 
 const GOALS: [string, string][] = [
@@ -1641,6 +1663,9 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 </div>`, user));
       }
 
+      user._path=path;user._industry=mem.industry||'';
+      if (path === "/setup") return html(await setupPage(db,user,mem));
+      if (["/customers","/work","/growth","/settings"].includes(path)) return html(await journeyHubPage(path.slice(1),user,db,mem));
       if (path === "/") return html(await dashboardPage(db, user, mem, url.searchParams.get("msg") || ""));
       if (path === "/favicon.ico") return new Response(Uint8Array.from(atob(FAVICON_ICO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/x-icon", "cache-control": "public, max-age=86400" } });
       if (path === "/static/brand/favicon-32.png") return new Response(Uint8Array.from(atob(FAVICON_32_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
