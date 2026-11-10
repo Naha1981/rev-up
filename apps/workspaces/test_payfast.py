@@ -229,7 +229,7 @@ def test_cancelled_itn_lapses_active_org(merchant, db):
     org.subscription_status = "active"
     org.payfast_token = "tok-123"
     org.save()
-    data = _post(m_payment_id="RU-ABC12345-growth", payment_status="CANCELLED", pf_payment_id="88888")
+    data = _post(m_payment_id="RU-ABC12345-growth", payment_status="CANCELLED", pf_payment_id="88888", token="tok-123")
     with mock.patch("apps.workspaces.payfast.httpx.post") as p:
         p.return_value.text = "VALID"
         resp = Client().post("/billing/payfast/notify/", data)
@@ -312,3 +312,95 @@ def test_payment_cancel_returns_to_exact_checkout_workspace(client):
     assert response.url == f"/workspaces/{ws.id}/billing/"
     org.refresh_from_db()
     assert org.subscription_status == "pending_activation"
+
+
+@pytest.mark.django_db
+def test_recurring_cancel_requires_confirmation_and_keeps_plan_on_provider_failure(client):
+    from apps.organizations.test_billing import _setup
+
+    org, ws, user = _setup(email="cancel-failure@example.com")
+    org.subscription_status = "active"
+    org.payfast_token = "00000000-0000-4000-8000-000000000001"
+    org.save(update_fields=["subscription_status", "payfast_token"])
+    client.force_login(user)
+    url = f"/workspaces/{ws.id}/billing/payfast/subscription/cancel/"
+    with mock.patch("apps.workspaces.payfast.cancel_subscription", return_value=False) as cancel:
+        assert client.get(url).status_code == 405
+        assert client.post(url, {}).status_code == 400
+        cancel.assert_not_called()
+        assert (
+            client.post(
+                url,
+                {
+                    "confirm": "cancel",
+                    "confirmation": hashlib.sha256(f"{user.id}:{org.id}:{org.payfast_token}".encode()).hexdigest(),
+                },
+            ).status_code
+            == 302
+        )
+        cancel.assert_called_once_with(org.payfast_token)
+    org.refresh_from_db()
+    assert org.subscription_status == "active"
+    assert org.payfast_token
+
+
+@pytest.mark.django_db
+def test_recurring_cancel_success_stops_billing_without_deleting_business(client):
+    from apps.organizations.test_billing import _setup
+
+    org, ws, user = _setup(email="cancel-success@example.com")
+    org.subscription_status = "active"
+    org.payfast_token = "00000000-0000-4000-8000-000000000001"
+    org.save(update_fields=["subscription_status", "payfast_token"])
+    client.force_login(user)
+    with mock.patch("apps.workspaces.payfast.cancel_subscription", return_value=True):
+        assert (
+            client.post(
+                f"/workspaces/{ws.id}/billing/payfast/subscription/cancel/",
+                {
+                    "confirm": "cancel",
+                    "confirmation": hashlib.sha256(f"{user.id}:{org.id}:{org.payfast_token}".encode()).hexdigest(),
+                },
+            ).status_code
+            == 302
+        )
+    org.refresh_from_db()
+    assert org.subscription_status == "expired"
+    assert org.payfast_token == ""
+    assert org.deleted_at is None
+
+
+def test_cancel_api_signature_and_sandbox_contract(merchant):
+    with mock.patch("apps.workspaces.payfast.httpx.put") as put:
+        put.return_value.status_code = 200
+        put.return_value.json.return_value = {"code": 200, "status": "success"}
+        assert payfast.cancel_subscription("00000000-0000-4000-8000-000000000001")
+        args, kwargs = put.call_args
+        assert args[0].endswith("/subscriptions/00000000-0000-4000-8000-000000000001/cancel")
+        assert kwargs["params"] == {"testing": "true"}
+        assert kwargs["follow_redirects"] is False
+        h = kwargs["headers"]
+        fields = {k: v for k, v in h.items() if k != "signature"}
+        fields["passphrase"] = "testpass"
+        text = "&".join(k + "=" + quote_plus(v) for k, v in sorted(fields.items()))
+        assert h["signature"] == hashlib.md5(text.encode()).hexdigest()
+
+
+@pytest.mark.django_db
+def test_old_subscription_cancel_notification_cannot_cancel_new_subscription(merchant):
+    from django.test import Client
+
+    org, user, ws = _owner_with_workspace()
+    org.payment_reference = "RU-ABC12345"
+    org.subscription_status = "active"
+    org.payfast_token = "new-token"
+    org.save()
+    data = _post(
+        m_payment_id="RU-ABC12345-starter", payment_status="CANCELLED", pf_payment_id="old-cancel", token="old-token"
+    )
+    with mock.patch("apps.workspaces.payfast.httpx.post") as p:
+        p.return_value.text = "VALID"
+        assert Client().post("/billing/payfast/notify/", data).status_code == 200
+    org.refresh_from_db()
+    assert org.subscription_status == "active"
+    assert org.payfast_token == "new-token"

@@ -148,3 +148,33 @@ def verify_itn(post_data: dict, remote_ip: str = "") -> tuple[bool, str]:
         logger.exception("payfast validate-back failed")
         return False, "validate-back unreachable"
     return True, ""
+
+
+def cancel_subscription(token: str) -> bool:
+    """Stop renewal through PayFast's API, not the browser checkout cancel URL."""
+    import re
+
+    from django.utils import timezone
+
+    if not configured() or not _passphrase() or not re.fullmatch(r"[a-fA-F0-9-]{36}", token):
+        return False
+    headers = {
+        "merchant-id": str(getattr(settings, "PAYFAST_MERCHANT_ID", "")),
+        "version": "v1",
+        "timestamp": timezone.now().strftime("%Y-%m-%dT%H:%M:%S%z"),
+    }
+    values = {**headers, "passphrase": _passphrase()}
+    payload = "&".join(f"{k}={quote_plus(v)}" for k, v in sorted(values.items()))
+    headers["signature"] = hashlib.md5(payload.encode()).hexdigest()
+    try:
+        response = httpx.put(
+            f"https://api.payfast.co.za/subscriptions/{token}/cancel",
+            headers=headers,
+            params={"testing": "true"} if sandbox() else {},
+            timeout=15,
+            follow_redirects=False,
+        )
+        result = response.json()
+        return response.status_code == 200 and result.get("code") == 200 and result.get("status") == "success"
+    except (httpx.HTTPError, ValueError):
+        return False

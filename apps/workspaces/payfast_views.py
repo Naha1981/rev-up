@@ -75,11 +75,12 @@ def notify(request):
     if org is None or plan not in Organization.PLAN_PRICES_RAND:
         logger.warning("payfast ITN for unknown reference %r", m_payment_id)
         return HttpResponseBadRequest("unknown reference")
+    status = post.get("payment_status", "")
     try:
-        gross = Decimal(post.get("amount_gross", ""))
+        gross = Decimal(post.get("amount_gross") or "0")
     except InvalidOperation:
         return HttpResponseBadRequest("bad amount")
-    if gross != Decimal(Organization.PLAN_PRICES_RAND[plan]):
+    if status == "COMPLETE" and gross != Decimal(Organization.PLAN_PRICES_RAND[plan]):
         logger.warning("payfast ITN amount mismatch: %s for %s", gross, plan)
         return HttpResponseBadRequest("amount mismatch")
 
@@ -97,7 +98,11 @@ def notify(request):
         org.save(update_fields=["plan", "subscription_status", "payfast_token", "activated_at"])
         logger.info("payfast ITN: org %s active on %s", org.id, plan)
     elif status == "CANCELLED":
-        if org.subscription_status == Organization.SubscriptionStatus.ACTIVE:
+        if (
+            org.subscription_status == Organization.SubscriptionStatus.ACTIVE
+            and post.get("token")
+            and post["token"] == org.payfast_token
+        ):
             org.subscription_status = Organization.SubscriptionStatus.EXPIRED
             org.payfast_token = ""
             org.save(update_fields=["subscription_status", "payfast_token"])
@@ -135,3 +140,38 @@ def payfast_cancel(request):
         request, "Checkout cancelled. No plan change was made. Check your payment provider for any payment status."
     )
     return _billing_after_checkout(request)
+
+
+@login_required
+@require_POST
+def cancel_subscription(request, workspace_id):
+    """Explicit recurring cancellation; never confused with checkout abandonment."""
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    membership = WorkspaceMembership.objects.filter(user=request.user, workspace=workspace).first()
+    if membership is None or membership.workspace_role not in ("owner", "manager"):
+        return HttpResponseNotFound()
+    if request.POST.get("confirm") != "cancel":
+        return HttpResponseBadRequest("Confirm the cancellation first.")
+    org = workspace.organization
+    import hashlib
+    import hmac
+
+    expected = hashlib.sha256(f"{request.user.id}:{org.id}:{org.payfast_token}".encode()).hexdigest()
+    if not hmac.compare_digest(request.POST.get("confirmation", ""), expected):
+        return HttpResponseBadRequest("Review the current subscription before cancelling.")
+    if not org.payfast_token:
+        messages.info(request, "No recurring subscription is attached to this business.")
+    elif payfast.cancel_subscription(org.payfast_token):
+        Organization.objects.filter(pk=org.pk, payfast_token=org.payfast_token).update(
+            subscription_status=Organization.SubscriptionStatus.EXPIRED, payfast_token=""
+        )
+        messages.success(
+            request,
+            "Subscription cancelled. Automatic payments and plan access have stopped. Your business records have not been deleted.",
+        )
+    else:
+        messages.error(
+            request,
+            "Cancellation was not confirmed. Your plan has not changed. Check subscription status with billing support before trying again.",
+        )
+    return redirect("workspaces:billing", workspace_id=workspace.id)

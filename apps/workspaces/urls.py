@@ -9,6 +9,11 @@ urlpatterns = [
     path("create/", views.workspace_create, name="create"),
     path("<uuid:workspace_id>/settings/", views.workspace_settings, name="settings"),
     path("<uuid:workspace_id>/billing/", views.workspace_billing, name="billing"),
+    path(
+        "<uuid:workspace_id>/billing/payfast/subscription/cancel/",
+        payfast_views.cancel_subscription,
+        name="billing_cancel_subscription",
+    ),
     path("<uuid:workspace_id>/billing/payfast/", payfast_views.checkout, name="billing_payfast"),
     path("<uuid:workspace_id>/settings/approvals/", views.approvals_settings, name="approvals_settings"),
 ]

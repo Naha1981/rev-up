@@ -1,3 +1,4 @@
+import {cancelRecurring} from './subscription';
 import { JOURNEY_CSS, THEME_SCRIPT, JOURNEY_SCRIPT, journeyNav, toolRow, disclosure, COMMAND_CSS, LEGIBILITY_CSS, SETUP_CSS, FINISH_CSS, commandPalette } from "./journey";
 export {calendarPanel,calendarState,checkCalendarState,calendarEventId,calendarEventBody,calendarConnect,calendarSync} from "./calendar";
 import {calendarPanel,calendarConfigured,calendarAuthUrl,checkCalendarState,calendarConnect,calendarSync} from "./calendar";
@@ -26,6 +27,7 @@ interface Env {
   PF_MERCHANT_ID: string;
   PF_MERCHANT_KEY: string;
   PF_PASSPHRASE: string;
+  PF_SANDBOX?: string;
   GROQ_API_KEY: string;
   OPENROUTER_API_KEY?: string;
   ZERNIO_API_KEY: string;
@@ -185,7 +187,7 @@ export async function membership(db: Pool, userId: string, req?: Request): Promi
   const r = await db.query(
     `SELECT w.id AS workspace_id, w.name AS workspace_name, w.approval_workflow_mode,w.industry,
             o.id AS org_id, o.name AS org_name, o.plan, o.subscription_status, o.payment_reference,
-            o.trial_started_at, o.activated_at, o.goals, m.workspace_role
+            o.trial_started_at, o.activated_at, o.goals, o.payfast_token, m.workspace_role
      FROM members_workspace_membership m
      JOIN workspaces_workspace w ON w.id=m.workspace_id
      JOIN organizations_organization o ON o.id=w.organization_id
@@ -293,7 +295,7 @@ async function handlePayfastItn(db: Pool, env: Env, req: Request): Promise<Respo
   const baseStr = pairs.filter(([k]) => k !== "signature").map(([k, v]) => `${k}=${pfQuotePlus(dec(v).trim())}`).join("&");
   const ours = md5(baseStr + `&passphrase=${pfQuotePlus(env.PF_PASSPHRASE)}`);
   if (!received || !timingSafeEq(received, ours)) return new Response("bad signature", { status: 400 });
-  const check = await fetch("https://sandbox.payfast.co.za/eng/query/validate", {
+  const check = await fetch(`https://${env.PF_SANDBOX === "false" ? "www" : "sandbox"}.payfast.co.za/eng/query/validate`, {
     method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: raw,
   });
   if ((await check.text()).trim() !== "VALID") return new Response("payfast validate-back rejected", { status: 400 });
@@ -314,8 +316,8 @@ async function handlePayfastItn(db: Pool, env: Env, req: Request): Promise<Respo
   }
   if (status === "CANCELLED") {
     await db.query(
-      `UPDATE organizations_organization SET subscription_status='expired', payfast_token='', updated_at=now() WHERE payment_reference=$1 AND subscription_status='active'`,
-      [reference]);
+      `UPDATE organizations_organization SET subscription_status='expired', payfast_token='', updated_at=now() WHERE payment_reference=$1 AND subscription_status='active' AND payfast_token=$2 AND payfast_token<>''`,
+      [reference,post['token']||'']);
   } else {
     const r = await db.query(
       `UPDATE organizations_organization SET plan=$1, subscription_status='active', payfast_token=$2, activated_at=COALESCE(activated_at, now()), updated_at=now() WHERE payment_reference=$3`,
@@ -1035,6 +1037,7 @@ ${mem.subscription_status === 'active' ? '<p class="ok" role="status">Your plan 
 <p>Plan <b>${esc(mem.plan)}</b> · status <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc(statusLabel(mem.subscription_status))}</span>
 ${mem.payment_reference ? ` · ref <span class="mut">${esc(mem.payment_reference)}</span>` : ""}</p>
 ${mem.activated_at ? `<p class="mut">Active since ${new Date(mem.activated_at).toLocaleDateString("en-ZA")}</p>` : ""}
+${mem.payfast_token ? '<div class="card"><h2>Recurring subscription</h2><p>Your earlier subscription renews automatically until cancelled.</p><a class="btn" href="/billing/subscription/cancel">Cancel recurring subscription</a></div>' : ''}
 <div class="grid">${cards}</div>
 <p class="mut">Tap your plan to pay securely by card, in rand. Each month is a fresh payment - we never charge your card automatically. Your plan activates after payment is confirmed. Payments made here are for one month, with no automatic renewal. If you have an older recurring subscription, contact billing support before stopping payments.</p>`, user);
 }
@@ -2289,6 +2292,20 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
         } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }
       }
 
+      if (path === "/billing/subscription/cancel") {
+        if(!['owner','manager'].includes(mem.workspace_role))return html(layout('Not allowed','<p>Only the business owner or manager can cancel billing.</p>',user),403);
+        if(!mem.payfast_token)return html(layout('No recurring subscription','<p>No recurring subscription is attached to this business. No plan change was made.</p><a class="btn" href="/billing">Back to billing</a>',user));
+        const confirmation=await sha256hex(user.id+':'+mem.org_id+':'+mem.payfast_token);
+        if(req.method==='POST'){
+          if(req.headers.get('origin')!==base)return html('Request did not come from this site.',403);
+          const f=await formData(req);
+          if(f.confirm!=='cancel' || f.confirmation!==confirmation)return html('Review the cancellation confirmation first.',400);
+          try{await cancelRecurring(env,mem.payfast_token)}catch{return html(layout('Cancellation not confirmed','<p role="alert">We could not confirm cancellation. Your RevUp plan has not changed. Check subscription status with billing support before trying again.</p><a class="btn" href="/billing">Back to billing</a>',user),502)}
+          await db.query(`UPDATE organizations_organization SET subscription_status='expired',payfast_token='',updated_at=now() WHERE id=$1 AND payfast_token=$2`,[mem.org_id,mem.payfast_token]);
+          return html(layout('Subscription cancelled','<p role="status">Your recurring subscription was cancelled. Automatic payments and plan access have stopped. Your business records have not been deleted.</p><a class="btn" href="/billing">Back to billing</a>',user));
+        }
+        return html(layout('Cancel recurring subscription',`<div class="card"><h2>Cancel this business subscription?</h2><p>This stops automatic renewal and plan access when cancellation is confirmed. It does not delete your business records or refund earlier payments.</p><form method="post"><input type="hidden" name="confirmation" value="${confirmation}"><button name="confirm" value="cancel">Yes, cancel recurring subscription</button></form><a class="btn" href="/billing">Keep my subscription</a></div>`,user));
+      }
       if (path === "/billing") return html(await billingPage(db, user, mem, base, env));
 
       return html(layout("Not found", `<p class="bad">Nothing here yet.</p>`, user), 404);

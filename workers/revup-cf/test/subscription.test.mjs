@@ -1,0 +1,11 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import crypto from 'node:crypto';
+import {cancelRecurring,subscriptionHeaders} from '../dist-test/subscription.mjs';
+const env={PF_MERCHANT_ID:'10000100',PF_PASSPHRASE:'fictional pass'};const token='00000000-0000-4000-8000-000000000001';
+test('recurring cancellation uses sorted API signature',()=>{const h=subscriptionHeaders(env,'2026-11-10T13:00:00+0000');const text='merchant-id=10000100&passphrase=fictional+pass&timestamp=2026-11-10T13%3A00%3A00%2B0000&version=v1';assert.equal(h.signature,crypto.createHash('md5').update(text).digest('hex'))});
+test('cancel API defaults to sandbox and never posts to checkout cancel',async()=>{await cancelRecurring(env,token,async(url,o)=>{assert.equal(url,'https://api.payfast.co.za/subscriptions/'+token+'/cancel?testing=true');assert.equal(o.method,'PUT');assert.equal(o.redirect,'error');return new Response(JSON.stringify({code:200,status:'success'}))})});
+test('live cancel requires explicit sandbox false config',async()=>{await cancelRecurring({...env,PF_SANDBOX:'false'},token,async(url)=>{assert.ok(!url.includes('testing'));return new Response(JSON.stringify({code:200,status:'success'}))})});
+test('cancel missing secret fails without network',async()=>{await assert.rejects(cancelRecurring({...env,PF_PASSPHRASE:''},token,async()=>assert.fail('network')))});
+test('cancel rejects token path injection without network',async()=>{await assert.rejects(cancelRecurring(env,'../accounts',async()=>assert.fail('network')))});
+test('cancel failed provider response cannot claim cancellation',async()=>{await assert.rejects(cancelRecurring(env,token,async()=>new Response(JSON.stringify({code:200,status:'failed'}))))});
+test('cancel timeout is not retried',async()=>{let calls=0;await assert.rejects(cancelRecurring(env,token,async()=>{calls++;throw new Error('timeout')}));assert.equal(calls,1)});
+test('cancel non JSON and redirect errors stay failures',async()=>{await assert.rejects(cancelRecurring(env,token,async()=>new Response('bad')));await assert.rejects(cancelRecurring(env,token,async()=>new Response('',{status:302}))) });

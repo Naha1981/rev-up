@@ -1,3 +1,5 @@
+import hashlib
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
@@ -314,6 +316,9 @@ def workspace_billing(request, workspace_id):
             "trial_day": day,
             "days_left": days_left,
             "pay_url": (f"https://wa.me/{number}?text={quote_plus(text)}" if number else ""),
+            "cancel_confirmation": hashlib.sha256(
+                f"{request.user.id}:{org.id}:{org.payfast_token}".encode()
+            ).hexdigest(),
             "usage": _usage_snapshot(org),
             "payfast_available": _payfast_available(),
             "payfast_sandbox": _payfast_sandbox(),
