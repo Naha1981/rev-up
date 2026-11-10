@@ -25,7 +25,7 @@ with sync_playwright() as p:
         check(path + " exactly one active nav item", a.locator(".journey-nav [aria-current=page]").count() == 1)
         check(
             path + " primary action visible",
-            a.locator("main .btn-primary,main .next-action a,main .tool-row").first.bounding_box()["y"] < 740,
+            a.locator("main .attention-action,main .setup-compact a,main .btn-primary,main .next-action a,main .tool-row").first.bounding_box()["y"] < 740,
         )
         check(
             path + " readable nav",

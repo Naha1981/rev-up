@@ -454,10 +454,16 @@ export async function dashboardPage(db:Pool,user:any,mem:any,msg=''):Promise<str
   const needs=Number(s.approvals)+Number(s.handovers)+Number(s.bookings);
   const business=esc(mem.workspace_name||mem.org_name||'Your business');
   const first=esc(String(user.name||'').split(' ')[0]||'there');
-  return layout('',`<div class="journey-hero"><p class="greeting">${business}</p><h1>Hello, ${first}.</h1><p class="page-intro">Here is what needs your attention.</p></div>${msg?`<p class="ok" role="status">${esc(msg)}</p>`:''}
-  ${s.complete<5?`<section class="next-action"><p class="setup-label">${s.complete} of 5 steps complete</p><h2>Finish setting up</h2><p>Connect your business, then reply to your first customer.</p><div class="setup-progress"><span style="width:${s.complete*20}%"></span></div><a href="/setup">Continue setup</a></section>`:''}
-  <section class="journey-section"><h2>What needs you today</h2><div class="tool-list">${Number(s.handovers)?toolRow('/inbox','Customers need a reply','Open conversations waiting for you',s.handovers):''}${Number(s.bookings)?toolRow('/bookings','Booking requests','Choose a time and confirm',s.bookings):''}${Number(s.approvals)?toolRow('/approvals','Posts to approve','Check the words before they go out',s.approvals):''}${!needs?'<p class="section-help">Nothing waiting for your attention.</p>':''}</div></section>
-  <section class="journey-section"><h2>Your business, in one place</h2><div class="tool-list">${toolRow('/customers','Customers','Messages, enquiries and follow ups')}${toolRow('/work','Bookings and quotes','Upcoming work and prices to send')}${toolRow('/growth','Posts and reviews','Stay visible and build customer trust')}${toolRow('/settings','Settings','Business details, connections and your plan')}</div></section>`,user);
+  const attention=(label:string,title:string,count:number,detail:string,href:string,action:string,primary=false)=>`<article class="attention-item"><p class="attention-status">${label}</p><h3>${title}</h3><p class="attention-detail">${count} ${detail}</p><a class="attention-action ${primary?'attention-primary':''}" href="${href}">${action}</a></article>`;
+  return layout('',`<div class="action-home"><div class="journey-hero"><p class="greeting">${business}</p><h1>Hello, ${first}.</h1></div>${msg?`<p class="ok" role="status">${esc(msg)}</p>`:''}
+  <h2 class="action-title">Your next actions</h2>
+  ${s.complete<5?`<div class="setup-compact"><span>Setup: ${s.complete} of 5 complete</span><a href="/setup">Continue<span aria-hidden="true"> ›</span></a></div>`:''}
+  <section class="journey-section attention-section" aria-labelledby="attention-title"><h2 id="attention-title">Needs your attention</h2>
+  ${Number(s.handovers)?attention('Reply needed','Customer conversation',Number(s.handovers),Number(s.handovers)===1?'conversation waiting for you':'conversations waiting for you','/inbox','Open inbox',true):''}
+  ${Number(s.bookings)?attention('Needs confirmation','Booking request',Number(s.bookings),Number(s.bookings)===1?'request waiting for a time':'requests waiting for a time','/bookings','Review booking',!Number(s.handovers)):''}
+  ${Number(s.approvals)?attention('Review needed','Posts to approve',Number(s.approvals),Number(s.approvals)===1?'post waiting for your review':'posts waiting for your review','/approvals','Review posts',!Number(s.handovers)&&!Number(s.bookings)):''}
+  ${!needs?'<div class="attention-empty"><h3>You are up to date</h3><p>No conversations, booking requests or posts need your attention.</p><a class="attention-action" href="/customers">View customers</a></div>':''}</section>
+  <section class="journey-section"><h2>Your business</h2><div class="tool-list">${toolRow('/customers','Customers','Messages, enquiries and follow ups')}${toolRow('/work','Bookings and quotes','Upcoming work and prices to send')}${toolRow('/growth','Posts and reviews','Stay visible and build customer trust')}${toolRow('/settings','Settings','Business details, connections and your plan')}</div></section></div>`,user);
 }
 export async function journeyHubPage(kind:string,user:any,db:Pool,mem:any):Promise<string>{
   let recent='';
