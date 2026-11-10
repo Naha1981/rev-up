@@ -154,7 +154,7 @@ form.inline{display:inline-block;margin:0 14px 6px 0}
 .stat-t{font-size:20px;font-weight:500;margin:2px 0}
 label{font-size:15px;font-weight:500;color:var(--ink2);display:block}
 label input:not([type=checkbox]),label select,label textarea{display:block;width:100%;margin-top:6px}
-</style></head><body><div class="wrap">${nav}<h1>${esc(title)}</h1>${body}</div></body></html>`;
+</style></head><body><div class="wrap">${nav}<h1>${esc(title)}</h1>${body}</div><script>(function(){document.querySelectorAll('input[type="password"]').forEach(function(inp){var w=document.createElement('span');w.style.cssText='position:relative;display:block';inp.parentNode.insertBefore(w,inp);w.appendChild(inp);inp.style.paddingRight='48px';var b=document.createElement('button');b.type='button';b.textContent='Show';b.setAttribute('aria-label','Show password');b.setAttribute('aria-pressed','false');b.style.cssText='position:absolute;right:4px;top:50%;transform:translateY(-50%);min-width:44px;min-height:44px;background:none;border:none;color:var(--ink2);font:inherit;cursor:pointer;padding:0';b.addEventListener('click',function(){var t=inp.type==='password';inp.type=t?'text':'password';b.textContent=t?'Hide':'Show';b.setAttribute('aria-label',t?'Hide password':'Show password');b.setAttribute('aria-pressed',String(t));});w.appendChild(b);});})();</script></body></html>`;
 }
 export function html(body: string, status = 200): Response {
   return new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8" } });

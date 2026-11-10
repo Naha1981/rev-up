@@ -172,7 +172,7 @@ export function collectPage(token: string): string {
 <form method="POST" action="/vault/save"><input type="hidden" name="token" value="${token}">
 <input name="name" placeholder="Name (e.g. SomeService login)" required>
 <input name="secret" type="password" placeholder="The secret" required>
-<button type="submit">Save to vault</button></form></body></html>`;
+<button type="submit">Save to vault</button></form><script>(function(){var inp=document.querySelector('input[type="password"]');if(!inp)return;var b=document.createElement('button');b.type='button';b.textContent='Show';b.setAttribute('aria-label','Show secret');b.setAttribute('aria-pressed','false');b.addEventListener('click',function(){var t=inp.type==='password';inp.type=t?'text':'password';b.textContent=t?'Hide':'Show';b.setAttribute('aria-pressed',String(t));});inp.after(b);})();</script></body></html>`;
 }
 
 // ---------- the memory-first answer loop ----------
