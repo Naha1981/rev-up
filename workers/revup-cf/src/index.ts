@@ -1,3 +1,4 @@
+import {captureEnquiry} from "./enquiries";
 import {hasWorkspacePermission,requiredWorkspacePermission} from "./permissions";
 import { JOURNEY_CSS, THEME_SCRIPT, JOURNEY_SCRIPT, journeyNav, toolRow, disclosure, COMMAND_CSS, LEGIBILITY_CSS, SETUP_CSS, FINISH_CSS, commandPalette } from "./journey";
 export {calendarPanel,calendarState,checkCalendarState,calendarEventId,calendarEventBody,calendarConnect,calendarSync} from "./calendar";
@@ -1327,22 +1328,7 @@ async function handle(req: Request, env: Env): Promise<Response> {
           const f = await formData(req);
           const name = (f.name || "").trim().slice(0, 200), contact = (f.contact || "").trim().slice(0, 200), message = (f.message || "").trim().slice(0, 2000);
           if (!name || !contact || !message) return html(enquiryForm(biz.name, "Please fill in your name, contact and message."));
-          const ip = req.headers.get("cf-connecting-ip") || "";
-          const day = new Date().toISOString().slice(0, 10);
-          const key = (await sha256hex(fm[1] + ip + day)).slice(0, 40);
-          const leadId = crypto.randomUUID();
-          const ins = await pdb.query(
-            `INSERT INTO frontdesk_lead(id,workspace_id,name,contact,message,stage,value_cents,request_key,created_at,updated_at)
-             VALUES($1,$2,$3,$4,$5,'new',0,$6,now(),now()) ON CONFLICT (workspace_id,request_key) DO NOTHING RETURNING id`, [leadId, fm[1], name, contact, message, key]);
-          if (ins.rows[0]) {
-            const cid = crypto.randomUUID();
-            await pdb.query(
-              `INSERT INTO receptionist_contact(id,workspace_id,wa_id,name,tags,needs_human,opted_out,zernio_conversation_id,issue_note,review_status,dietary_notes,is_vip,notes,total_spend,visit_count,created_at,updated_at)
-               VALUES($1,$2,$3,$4,'[]'::jsonb,true,false,'','','new','',false,'web enquiry',0,0,now(),now())`, [cid, fm[1], ("web:" + contact).slice(0, 32), name.slice(0, 120)]);
-            await pdb.query(
-              `INSERT INTO receptionist_message(id,direction,sender_type,body,zernio_message_id,is_draft,created_at,contact_id,workspace_id,media_urls)
-               VALUES($1,'inbound','user',$2,$3,false,now(),$4,$5,'[]'::jsonb)`, [crypto.randomUUID(), message, "fd-" + leadId, cid, fm[1]]);
-          }
+          await captureEnquiry(pdb,fm[1],name,contact,message,new Date().toISOString().slice(0,10));
           return html(layout("Thank you", `<div class="card"><h2>Thank you, ${esc(name)}</h2><p>${esc(biz.name)} has your enquiry and will get back to you shortly.</p></div>`));
         }
         return html(enquiryForm(biz.name));
@@ -2121,7 +2107,9 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
         if (req.method === "POST") {
           const f = await formData(req);
           if (!String(f.customer_name || "").trim()) return redirect("/quotes");
+          try {
           await quoteCreate(db, mem.workspace_id, String(f.customer_name).trim(), /^[0-9a-f-]{36}$/.test(f.contact_id || "") ? f.contact_id : null, String(f.title || "").trim(), Number(f.amount) || 0, String(f.follow_up_on || ""));
+          } catch { return html(layout("Quote not saved",'<p>The customer or amount is not valid for this business.</p><a href="/quotes">Back to quotes</a>',user),400); }
           return redirect("/quotes?msg=" + encodeURIComponent("Quote saved."));
         }
         return html(await quotesPage(db, user, mem, url.searchParams.get("msg") || ""));

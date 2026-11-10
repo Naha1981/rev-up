@@ -120,6 +120,8 @@ export function balanceLine(settings: any, account: any): string {
 
 // ---------- quotes ----------
 export async function quoteCreate(db: Pool, ws: string, customerName: string, contactId: string | null, title: string, amountRand: number, followUpOn: string): Promise<void> {
+  if(contactId){const own=await db.query(`SELECT 1 FROM receptionist_contact WHERE id=$1 AND workspace_id=$2`,[contactId,ws]);if(!own.rows[0])throw new Error("Customer not found in this business.");}
+  if(!Number.isFinite(amountRand)||amountRand<0||amountRand>10000000)throw new Error("Enter a valid quote amount.");
   await db.query(
     `INSERT INTO receptionist_quote(id,workspace_id,contact_id,customer_name,title,amount_cents,status,created_at,follow_up_on)
      VALUES($1,$2,$3,$4,$5,$6,'draft',now(),$7)`,
@@ -133,7 +135,7 @@ export async function quoteAction(db: Pool, env: any, ws: string, id: string, ac
   if (action === "sent" && quote.status === "draft") {
     await db.query(`UPDATE receptionist_quote SET status='sent', sent_on=(now() AT TIME ZONE 'Africa/Johannesburg')::date WHERE id=$1`, [id]);
     if (quote.contact_id) {
-      const c = await db.query(`SELECT * FROM receptionist_contact WHERE id=$1`, [quote.contact_id]);
+      const c = await db.query(`SELECT * FROM receptionist_contact WHERE id=$1 AND workspace_id=$2`, [quote.contact_id,ws]);
       if (c.rows[0] && !c.rows[0].opted_out && c.rows[0].zernio_conversation_id) {
         const wname = await db.query(`SELECT name FROM workspaces_workspace WHERE id=$1`, [ws]);
         try {
