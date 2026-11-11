@@ -13,6 +13,8 @@
  "test::all providers fail: null, no false success, attempts carry no secrets or prompt text",
  "test::already redeemed voucher cannot report another success",
  "test::approval replies",
+ "test::assistant history cannot import another tenant row for supplied contact ID",
+ "test::assistant secret collection links expire and concurrent claims consume once",
  "test::attempts never contain keys, prompt text, or response bodies",
  "test::auth 401 marks only the requested workspace and gives a safe recovery message",
  "test::auth 403 marks only the requested workspace and gives a safe recovery message",
