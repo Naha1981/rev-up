@@ -1,5 +1,7 @@
 # Open-Source Social Media Management Platform - Feature Specification v2
 
+> **Scope notice (11 November 2026):** Historical inherited specification, not the current RevUp offer. The free/unlimited positioning, platform coverage and planned features below must not be read as current pricing or verified live capability. See the [current product map](../docs/current-product.md).
+
 ## Product Positioning
 
 An open-source, self-hostable social media management platform built for agencies and SMBs. The cloud-hosted version and the self-hosted version are identical - every feature is free, forever, with no per-seat, per-channel, or per-workspace limits. Monetization comes exclusively from optional paid support plans and consulting, not from feature gating.

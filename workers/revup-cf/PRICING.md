@@ -14,11 +14,11 @@ explicit approval.
    Everything in Starter, more social posting, up to 1,000 AI-drafted replies
    a month, 2 connected channels.
 3. **Business Pro - R1,999/month**
-   Everything in Growth, plus hands-free auto-posting and FrontDesk (public
+   Everything in Growth, plus hands-free auto-posting and lead pipeline (public
    enquiry form, shared lead pipeline, AI-drafted follow-ups you approve).
    Up to 2,500 AI-drafted replies a month, 3 connected channels.
 
-Free trial - choose a plan during setup, pay only when the trial ends.
+Choose a monthly plan during setup. The live billing screen uses a fresh one-off card payment each month, not automatic charging. Activation requires payment confirmation. Historical free-period wording is not the current billing offer.
 Plans include a monthly AI reply volume; extra usage and its rates are agreed
 with the customer before activation.
 
@@ -27,5 +27,9 @@ with the customer before activation.
 - Landing page pricing cards: `src/landing.ts` (#pricing section)
 - In-app plan picker: `PLAN_CARDS` in `src/index.ts` (~line 359)
 - Billing page cards: `src/index.ts` (~line 875)
-- PayFast amounts: `src/index.ts` (~line 183) - starter 499, growth 999,
-  business-pro 1999
+- Current payment buttons: Yoco one-off monthly links in `src/index.ts` (`billingPage`).
+- Retained PayFast sandbox amounts: `PLAN_PRICES` in `src/index.ts` - starter 499, growth 999, business-pro 1999. These are not the current payment buttons.
+
+The live plan-picker and billing-card feature summaries differ. This documentation update does not change plan entitlements or settle those copy differences; verify the relevant screen and access gate before promising a tier feature.
+
+See [the current product map](../../docs/current-product.md) for implementation scope.
