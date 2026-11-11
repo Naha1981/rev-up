@@ -1241,7 +1241,7 @@ async function handle(req: Request, env: Env): Promise<Response> {
           await client.query("BEGIN");
           await client.query(
             `INSERT INTO accounts_user(id,password,email,name,is_superuser,is_active,is_staff,totp_enabled,totp_recovery_codes,created_at,updated_at,avatar,tos_accepted_at)
-             VALUES($1,$2,$3,$4,false,true,false,false,'[]'::jsonb,now(),now(),'',now())`, [userId, h.rows[0].hash, email, f.name.trim()]);
+             VALUES($1,$2,$3,$4,false,true,false,false,NULL,now(),now(),'',now())`, [userId, h.rows[0].hash, email, f.name.trim()]);
           await client.query(
             `INSERT INTO organizations_organization(id,name,logo_url,default_timezone,plan,subscription_status,payment_reference,payfast_token,access_suspension_reason,trial_started_at,billing_email,created_at,updated_at)
              VALUES($1,$2,'','Africa/Johannesburg','starter','pending_activation',$3,'','',NULL,$4,now(),now())`, [orgId, f.business.trim(), ref, email]);
