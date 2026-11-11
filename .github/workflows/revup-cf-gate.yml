@@ -52,6 +52,10 @@ jobs:
         with:
           node-version: 22
 
+      - name: Test release verifier and evidence transport
+        working-directory: tools/safe-release
+        run: python3 -m unittest -v
+
       - name: Install worker deps
         working-directory: workers/revup-cf
         run: npm ci
