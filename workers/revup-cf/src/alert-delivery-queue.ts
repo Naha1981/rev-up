@@ -2,6 +2,8 @@
 import type {Pool} from 'pg';
 export async function queueSafetyAlerts(pool:Pool,workspaceId:string):Promise<number>{
  const c=await pool.connect();try{await c.query('BEGIN');
+  await c.query("SET LOCAL lock_timeout='1000ms'");await c.query("SET LOCAL statement_timeout='2500ms'");
+  await c.query(`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,['safety-alert:'+workspaceId]);
   const alerts=(await c.query(`SELECT * FROM cf_safety_alert WHERE workspace_id=$1 AND open ORDER BY kind FOR SHARE`,[workspaceId])).rows;
   let n=0;for(const a of alerts){const r=await c.query(`INSERT INTO cf_safety_alert_delivery(id,workspace_id,kind,alert_version,payload) VALUES($1,$2,$3,$4,$5) ON CONFLICT(workspace_id,kind,alert_version) DO NOTHING RETURNING id`,[crypto.randomUUID(),workspaceId,a.kind,a.version,JSON.stringify({kind:a.kind,version:String(a.version),count:String(a.affected_count),oldestAt:a.oldest_at?.toISOString()||null})]);n+=r.rowCount||0;}
   await c.query('COMMIT');return n;
@@ -9,6 +11,8 @@ export async function queueSafetyAlerts(pool:Pool,workspaceId:string):Promise<nu
 }
 export async function claimSafetyAlert(pool:Pool,workspaceId:string):Promise<any|null>{
  const c=await pool.connect();try{await c.query('BEGIN');
+  await c.query("SET LOCAL lock_timeout='1000ms'");await c.query("SET LOCAL statement_timeout='2500ms'");
+  await c.query(`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,['safety-alert:'+workspaceId]);
   // Source resolution/change invalidates unsent intent, not a silent stale alert.
   await c.query(`UPDATE cf_safety_alert_delivery d SET state='cancelled',lease_token=NULL,lease_until=NULL WHERE d.workspace_id=$1 AND d.state IN ('queued','processing') AND EXISTS(SELECT 1 FROM cf_safety_alert a WHERE a.workspace_id=d.workspace_id AND a.kind=d.kind AND (NOT a.open OR a.version<>d.alert_version))`,[workspaceId]);
   await c.query(`UPDATE cf_safety_alert_delivery SET state='dead',lease_token=NULL,lease_until=NULL,last_error_code='attempts_exhausted' WHERE workspace_id=$1 AND attempts>=5 AND (state='queued' OR(state='processing' AND lease_until<=clock_timestamp()))`,[workspaceId]);

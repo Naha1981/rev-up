@@ -10,6 +10,8 @@
  "test::accepted settlement requires exact start owner, tenant, account and provider ID",
  "test::alert attempt exhaustion deadletters without any send",
  "test::alert delivery one concurrent claim no false delivered success",
+ "test::alert source clear interleaving serialized before claim",
+ "test::alert source version interleaving serialized before claim",
  "test::alert stale lease and wrong tenant cannot fail newer delivery claim",
  "test::attempt exhaustion becomes dead letter, not dropped or endless retry",
  "test::authenticated STOP suppresses global identity even in standby and completes atomically",
