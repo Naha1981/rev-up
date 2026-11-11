@@ -1,0 +1,18 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {eligibilityReason,resolveCredential} from '../dist-test/messaging-safety.mjs';
+import {runIndependentJobs} from '../dist-test/cron-runner.mjs';
+import {encryptTenantKey} from '../dist-test/tenant-crypto.mjs';
+const now=1800000000000,valid={tenantMatches:true,credentialReady:true,permission:'allowed',approvalRequired:true,approved:true,lastInboundAt:now-1000,templateApproved:false,templateBound:false,now};
+test('eligible service response inside window',()=>assert.equal(eligibilityReason(valid),''));
+for(const [label,change,reason] of [
+ ['tenant',{tenantMatches:false},'tenant_mismatch'],['key',{credentialReady:false},'credential_unavailable'],['unknown consent',{permission:'unknown'},'permission_missing'],['withdrawn consent',{permission:'denied'},'permission_missing'],['approval',{approved:false},'approval_missing'],['missing inbound',{lastInboundAt:null},'template_required'],['future inbound',{lastInboundAt:now+1},'template_required'],['window boundary',{lastInboundAt:now-86400000},'template_required'],['unbound template',{lastInboundAt:null,templateApproved:true},'template_required'],['clock',{now:NaN},'invalid_clock']
+])test('fail closed '+label,()=>assert.equal(eligibilityReason({...valid,...change}),reason));
+test('bound approved template can pass outside window with permission',()=>assert.equal(eligibilityReason({...valid,lastInboundAt:null,templateApproved:true,templateBound:true}),''));
+test('template never overrides withdrawn permission',()=>assert.equal(eligibilityReason({...valid,lastInboundAt:null,templateApproved:true,templateBound:true,permission:'denied'}),'permission_missing'));
+const env={DJANGO_SECRET_KEY:'synthetic-key',ENCRYPTION_KEY_SALT:'synthetic-salt'};
+test('single credential path decrypts correct tenant/account',async()=>{const api_key=await encryptTenantKey('synthetic-provider-key',env);assert.equal(await resolveCredential({workspace_id:'w',account_id:'a',status:'connected',api_key},'w','a',env),'synthetic-provider-key');});
+for(const c of [null,{workspace_id:'other',account_id:'a',status:'connected',api_key:'bad'},{workspace_id:'w',account_id:'other',status:'connected',api_key:'bad'},{workspace_id:'w',account_id:'a',status:'needs_attention',api_key:'bad'},{workspace_id:'w',account_id:'a',status:'connected',api_key:''}])test('no cross-tenant/shared credential fallback '+JSON.stringify(c),async()=>assert.rejects(()=>resolveCredential(c,'w','a',env),/credential_unavailable/));
+test('plaintext cannot masquerade as encrypted tenant key',async()=>assert.rejects(()=>resolveCredential({workspace_id:'w',account_id:'a',status:'connected',api_key:'plaintext'},'w','a',env),/securely/));
+test('independent cron jobs continue and cleanup runs without raw exception leakage',async()=>{const calls=[];const r=await runIndependentJobs([{name:'one',run:async()=>{calls.push(1);throw Error('private payload')}},{name:'two',run:async()=>{calls.push(2);}}],async()=>{calls.push(3)});assert.deepEqual(calls,[1,2,3]);assert.deepEqual(r,[{name:'one',ok:false,errorCode:'job_failed'},{name:'two',ok:true},{name:'cleanup',ok:true}]);assert.ok(!JSON.stringify(r).includes('private'));});
+test('cleanup failure is explicit',async()=>assert.deepEqual(await runIndependentJobs([],async()=>{throw Error('private')}),[{name:'cleanup',ok:false,errorCode:'cleanup_failed'}]));
