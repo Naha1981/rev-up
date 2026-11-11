@@ -1,0 +1,306 @@
+{
+  "results": [
+    {
+      "industry": "plumber",
+      "intendedTier": "starter",
+      "viewport": [
+        390,
+        844
+      ],
+      "steps": [
+        {
+          "step": "discovery",
+          "status": 200
+        },
+        {
+          "step": "signup-native-form",
+          "url": "/onboarding"
+        },
+        {
+          "step": "saved-industry-after-reload",
+          "value": "plumber",
+          "business": "Fictional plumber journey 0"
+        },
+        {
+          "step": "billing",
+          "text": "Skip to content\nSearch\nDark\nHome\nCustomers\nBookings\nPosts\nSettings\n‹ Settings\nBilling\n\nPlan starter · status activation pending · ref RU-25C51458\n\nStarter\n\nR499/month\n\n1 workspace · core publishing\n\nActivate - pay R499\nGrowth\n\nR999/month\n\n3 workspaces · approvals · reviews\n\nPay R999\nBusiness Pro\n\nR1 999/month\n\neverything in Growth · lead pipeline + follow-ups · 3 channels\n\nPay R1 999\n\nTap your plan to pay securely by card, in rand. Each month is a fresh payment - we never charge your card automatically. Your plan activates when your payment lands, usually within a few hours on business days. You can cancel any time."
+        },
+        {
+          "step": "draft-controls",
+          "buttons": [
+            "Search",
+            "Dark",
+            "Write a draft",
+            "Save draft",
+            "Close"
+          ]
+        },
+        {
+          "step": "manual-draft-save",
+          "url": "/posts",
+          "text": "Draft created.\n\nSkip to content\nSearch\nDark\nHome\nCustomers\nBookings\nPosts\nSettings\n‹ Posts and reviews\nPosts\n\nNew post\n\nPost\tStatus\tChannels\tWhen\t\nFictional QA first draft plumber\nFictional plumber journey 0 is a fictional quality test. No offer or customer message.\t\t-\t2026/11/11\t"
+        },
+        {
+          "step": "password-recovery",
+          "status": 303,
+          "location": "https://revup-8g3m.onrender.com/accounts/password/reset/"
+        }
+      ],
+      "blockers": [
+        "No self-service verified Yoco payment activation tested; all new accounts remain pending_activation. No charge, fake webhook, hidden flag or account update performed.",
+        "Signup reached onboarding without an email-verification step; password recovery still redirects to the sleep-prone production Render origin. Redirect was not followed."
+      ],
+      "persisted": [
+        {
+          "plan": "starter",
+          "subscription_status": "pending_activation",
+          "industry": "plumber",
+          "draft_count": 1,
+          "verified_email_count": 0
+        }
+      ]
+    },
+    {
+      "industry": "restaurant",
+      "intendedTier": "growth",
+      "viewport": [
+        820,
+        1180
+      ],
+      "steps": [
+        {
+          "step": "discovery",
+          "status": 200
+        },
+        {
+          "step": "signup-native-form",
+          "url": "/onboarding"
+        },
+        {
+          "step": "saved-industry-after-reload",
+          "value": "restaurant",
+          "business": "Fictional restaurant journey 1"
+        },
+        {
+          "step": "billing",
+          "text": "Skip to content\nSearch\nFictional restaurant journey 1\nDark\nHome\nCustomers\nBookings\nPosts\nSettings\n‹ Settings\nBilling\n\nPlan starter · status activation pending · ref RU-5D74F32C\n\nStarter\n\nR499/month\n\n1 workspace · core publishing\n\nActivate - pay R499\nGrowth\n\nR999/month\n\n3 workspaces · approvals · reviews\n\nPay R999\nBusiness Pro\n\nR1 999/month\n\neverything in Growth · lead pipeline + follow-ups · 3 channels\n\nPay R1 999\n\nTap your plan to pay securely by card, in rand. Each month is a fresh payment - we never charge your card automatically. Your plan activates when your payment lands, usually within a few hours on business days. You can cancel any time."
+        },
+        {
+          "step": "draft-controls",
+          "buttons": [
+            "Search",
+            "Dark",
+            "Write a draft",
+            "Save draft",
+            "Close"
+          ]
+        },
+        {
+          "step": "manual-draft-save",
+          "url": "/posts",
+          "text": "Draft created.\n\nSkip to content\nSearch\nFictional restaurant journey 1\nDark\nHome\nCustomers\nBookings\nPosts\nSettings\n‹ Posts and reviews\nPosts\n\nNew post\n\nPost\tStatus\tChannels\tWhen\t\nFictional QA first draft restaurant\nFictional restaurant journey 1 is a fictional quality test. No offer or customer message.\t\t-\t2026/11/11\t"
+        },
+        {
+          "step": "password-recovery",
+          "status": 303,
+          "location": "https://revup-8g3m.onrender.com/accounts/password/reset/"
+        }
+      ],
+      "blockers": [
+        "No self-service verified Yoco payment activation tested; all new accounts remain pending_activation. No charge, fake webhook, hidden flag or account update performed.",
+        "Signup reached onboarding without an email-verification step; password recovery still redirects to the sleep-prone production Render origin. Redirect was not followed."
+      ],
+      "persisted": [
+        {
+          "plan": "starter",
+          "subscription_status": "pending_activation",
+          "industry": "restaurant",
+          "draft_count": 1,
+          "verified_email_count": 0
+        }
+      ]
+    },
+    {
+      "industry": "dental",
+      "intendedTier": "business-pro",
+      "viewport": [
+        1280,
+        900
+      ],
+      "steps": [
+        {
+          "step": "discovery",
+          "status": 200
+        },
+        {
+          "step": "signup-native-form",
+          "url": "/onboarding"
+        },
+        {
+          "step": "saved-industry-after-reload",
+          "value": "dental",
+          "business": "Fictional dental journey 2"
+        },
+        {
+          "step": "billing",
+          "text": "Skip to content\nSearch\nFictional dental journey 2\nDark\nHome\nCustomers\nBookings\nPosts\nSettings\n‹ Settings\nBilling\n\nPlan starter · status activation pending · ref RU-029C5497\n\nStarter\n\nR499/month\n\n1 workspace · core publishing\n\nActivate - pay R499\nGrowth\n\nR999/month\n\n3 workspaces · approvals · reviews\n\nPay R999\nBusiness Pro\n\nR1 999/month\n\neverything in Growth · lead pipeline + follow-ups · 3 channels\n\nPay R1 999\n\nTap your plan to pay securely by card, in rand. Each month is a fresh payment - we never charge your card automatically. Your plan activates when your payment lands, usually within a few hours on business days. You can cancel any time."
+        },
+        {
+          "step": "draft-controls",
+          "buttons": [
+            "Search",
+            "Dark",
+            "Write a draft",
+            "Save draft",
+            "Close"
+          ]
+        },
+        {
+          "step": "manual-draft-save",
+          "url": "/posts",
+          "text": "Draft created.\n\nSkip to content\nSearch\nFictional dental journey 2\nDark\nHome\nCustomers\nBookings\nPosts\nSettings\n‹ Posts and reviews\nPosts\n\nNew post\n\nPost\tStatus\tChannels\tWhen\t\nFictional QA first draft dental\nFictional dental journey 2 is a fictional quality test. No offer or customer message.\t\t-\t2026/11/11\t"
+        },
+        {
+          "step": "password-recovery",
+          "status": 303,
+          "location": "https://revup-8g3m.onrender.com/accounts/password/reset/"
+        }
+      ],
+      "blockers": [
+        "No self-service verified Yoco payment activation tested; all new accounts remain pending_activation. No charge, fake webhook, hidden flag or account update performed.",
+        "Signup reached onboarding without an email-verification step; password recovery still redirects to the sleep-prone production Render origin. Redirect was not followed."
+      ],
+      "persisted": [
+        {
+          "plan": "starter",
+          "subscription_status": "pending_activation",
+          "industry": "dental",
+          "draft_count": 1,
+          "verified_email_count": 0
+        }
+      ]
+    },
+    {
+      "industry": "real-estate",
+      "intendedTier": "growth",
+      "viewport": [
+        390,
+        844
+      ],
+      "steps": [
+        {
+          "step": "discovery",
+          "status": 200
+        },
+        {
+          "step": "signup-native-form",
+          "url": "/onboarding"
+        },
+        {
+          "step": "saved-industry-after-reload",
+          "value": "real-estate",
+          "business": "Fictional real-estate journey 3"
+        },
+        {
+          "step": "billing",
+          "text": "Skip to content\nSearch\nDark\nHome\nCustomers\nBookings\nPosts\nSettings\n‹ Settings\nBilling\n\nPlan starter · status activation pending · ref RU-CC8D78A8\n\nStarter\n\nR499/month\n\n1 workspace · core publishing\n\nActivate - pay R499\nGrowth\n\nR999/month\n\n3 workspaces · approvals · reviews\n\nPay R999\nBusiness Pro\n\nR1 999/month\n\neverything in Growth · lead pipeline + follow-ups · 3 channels\n\nPay R1 999\n\nTap your plan to pay securely by card, in rand. Each month is a fresh payment - we never charge your card automatically. Your plan activates when your payment lands, usually within a few hours on business days. You can cancel any time."
+        },
+        {
+          "step": "draft-controls",
+          "buttons": [
+            "Search",
+            "Dark",
+            "Write a draft",
+            "Save draft",
+            "Close"
+          ]
+        },
+        {
+          "step": "manual-draft-save",
+          "url": "/posts",
+          "text": "Draft created.\n\nSkip to content\nSearch\nDark\nHome\nCustomers\nBookings\nPosts\nSettings\n‹ Posts and reviews\nPosts\n\nNew post\n\nPost\tStatus\tChannels\tWhen\t\nFictional QA first draft real-estate\nFictional real-estate journey 3 is a fictional quality test. No offer or customer message.\t\t-\t2026/11/11\t"
+        },
+        {
+          "step": "password-recovery",
+          "status": 303,
+          "location": "https://revup-8g3m.onrender.com/accounts/password/reset/"
+        }
+      ],
+      "blockers": [
+        "No self-service verified Yoco payment activation tested; all new accounts remain pending_activation. No charge, fake webhook, hidden flag or account update performed.",
+        "Signup reached onboarding without an email-verification step; password recovery still redirects to the sleep-prone production Render origin. Redirect was not followed."
+      ],
+      "persisted": [
+        {
+          "plan": "starter",
+          "subscription_status": "pending_activation",
+          "industry": "real-estate",
+          "draft_count": 1,
+          "verified_email_count": 0
+        }
+      ]
+    },
+    {
+      "industry": "container-transport",
+      "intendedTier": "business-pro",
+      "viewport": [
+        1280,
+        900
+      ],
+      "steps": [
+        {
+          "step": "discovery",
+          "status": 200
+        },
+        {
+          "step": "signup-native-form",
+          "url": "/onboarding"
+        },
+        {
+          "step": "saved-industry-after-reload",
+          "value": "container-transport",
+          "business": "Fictional container-transport journey 4"
+        },
+        {
+          "step": "billing",
+          "text": "Skip to content\nSearch\nFictional container-transport journey 4\nDark\nHome\nCustomers\nBookings\nPosts\nSettings\n‹ Settings\nBilling\n\nPlan starter · status activation pending · ref RU-87022142\n\nStarter\n\nR499/month\n\n1 workspace · core publishing\n\nActivate - pay R499\nGrowth\n\nR999/month\n\n3 workspaces · approvals · reviews\n\nPay R999\nBusiness Pro\n\nR1 999/month\n\neverything in Growth · lead pipeline + follow-ups · 3 channels\n\nPay R1 999\n\nTap your plan to pay securely by card, in rand. Each month is a fresh payment - we never charge your card automatically. Your plan activates when your payment lands, usually within a few hours on business days. You can cancel any time."
+        },
+        {
+          "step": "draft-controls",
+          "buttons": [
+            "Search",
+            "Dark",
+            "Write a draft",
+            "Save draft",
+            "Close"
+          ]
+        },
+        {
+          "step": "manual-draft-save",
+          "url": "/posts",
+          "text": "Draft created.\n\nSkip to content\nSearch\nFictional container-transport journey 4\nDark\nHome\nCustomers\nBookings\nPosts\nSettings\n‹ Posts and reviews\nPosts\n\nNew post\n\nPost\tStatus\tChannels\tWhen\t\nFictional QA first draft container-transport\nFictional container-transport journey 4 is a fictional quality test. No offer or customer message.\t\t-\t2026/11/11\t"
+        },
+        {
+          "step": "password-recovery",
+          "status": 303,
+          "location": "https://revup-8g3m.onrender.com/accounts/password/reset/"
+        }
+      ],
+      "blockers": [
+        "No self-service verified Yoco payment activation tested; all new accounts remain pending_activation. No charge, fake webhook, hidden flag or account update performed.",
+        "Signup reached onboarding without an email-verification step; password recovery still redirects to the sleep-prone production Render origin. Redirect was not followed."
+      ],
+      "persisted": [
+        {
+          "plan": "starter",
+          "subscription_status": "pending_activation",
+          "industry": "container-transport",
+          "draft_count": 1,
+          "verified_email_count": 0
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "denied": []
+}
