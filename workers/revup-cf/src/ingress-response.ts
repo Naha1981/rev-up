@@ -22,7 +22,7 @@ async function ingressWithDeadline(req:Request,endpointId:string,pool:Pool,env:T
  if(!req.body)return reply(400,'body_required');
  const reader=req.body.getReader(),chunks:Uint8Array[]=[];let length=0;
  try{
-  while(true){const part=await bounded(reader.read());if(part.done)break;length+=part.value.byteLength;if(length>32768){await reader.cancel();return reply(413,'payload_too_large');}chunks.push(part.value);}
+  while(true){const part=await bounded(reader.read());if(part.done)break;length+=part.value.byteLength;if(length>32768){void reader.cancel().catch(()=>{});return reply(413,'payload_too_large');}chunks.push(part.value);}
  }catch{void reader.cancel().catch(()=>{});return reply(503,'body_unavailable');}finally{reader.releaseLock();}
  const raw=new Uint8Array(length);let i=0;for(const c of chunks){raw.set(c,i);i+=c.byteLength;}
  try{const accepted=await bounded(receive(pool,{endpointId,raw,signature,eventHeader,eventIdHeader,signal},env));return accepted&&!signal.aborted?reply(202,'accepted'):reply(503,'ingress_held');}

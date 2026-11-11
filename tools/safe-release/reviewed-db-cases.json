@@ -37,6 +37,8 @@
  "test::ingress DB lock wait bounded and connection usable after rollback",
  "test::ingress abort while registration row locked rolls back and retry keeps same durable ID",
  "test::ingress remapping or credential rotation before processing rolls back normalized effects",
+ "test::late acquired client is destroyed after total ingress abort",
+ "test::late pool acquire rejection after abort is handled",
  "test::lease expired during effects rolls back instead of committing stale effects",
  "test::malformed standby marker cannot become permission to reply",
  "test::mapped opt-out &quot;  sToP aLl  &quot; standby=false",

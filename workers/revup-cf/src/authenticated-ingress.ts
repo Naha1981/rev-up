@@ -14,7 +14,7 @@ export async function receiveSignedIngress(pool:Pool,input:{endpointId:string;ra
  if(input.signal?.aborted)return null;
  const pending=pool.connect();
  const acquired=await Promise.race([pending,new Promise<null>(resolve=>{if(input.signal)input.signal.addEventListener('abort',()=>{resolve(null)},{once:true});})]);
- if(!acquired){pending.then(c=>c.release(true));return null;}
+ if(!acquired){void pending.then(c=>c.release(true),()=>{});return null;}
  const c=acquired;try{
   await c.query('BEGIN');
   await c.query("SET LOCAL lock_timeout='1000ms'");

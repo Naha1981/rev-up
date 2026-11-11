@@ -169,6 +169,7 @@
  "test::opportunity state storage failure rolls back campaign insert",
  "test::order database failure is not reported as a successful duplicate",
  "test::overlapping campaign worker exits when workspace sender lock is held",
+ "test::overlimit hanging-cancel stream responds413 without awaiting untrusted cleanup",
  "test::owner positive business and customer actions",
  "test::page detail has publish toggle, stat cards, tooltips",
  "test::page: XSS escaping on idea and piece fields",
