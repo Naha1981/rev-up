@@ -249,6 +249,7 @@
  "test::send uses decrypted tenant key, no ciphertext or shared fallback true",
  "test::settings upsert normalises the phone",
  "test::signup includes linked existing terms/privacy and visible password rule",
+ "test::signup leaves unused encrypted authenticator recovery field null, never plaintext JSON",
  "test::single credential path decrypts correct tenant/account",
  "test::social team handoff checks ready state under transaction row lock",
  "test::social team handoff commits post and claimed piece together",
