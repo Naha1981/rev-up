@@ -246,7 +246,7 @@ export async function handleAssistantMessage(
   const hist = await db.query(
     `SELECT direction, body FROM receptionist_message WHERE contact_id=$1 AND body IS NOT NULL AND body <> '' ORDER BY created_at DESC LIMIT 20`,
     [contactId]);
-  const history: { role: string; content: string }[] = hist.rows.reverse().map((h: any) => `${h.direction === "inbound" ? "Owner" : "Assistant"}: ${h.body}`);
+  const history: string[] = hist.rows.reverse().map((h: any) => `${h.direction === "inbound" ? "Owner" : "Assistant"}: ${h.body}`);
   const [rules, memories] = await Promise.all([loadRules(db, ws), recall(db, ws, text)]);
   const prompt = [
     `You are ${name}, the business owner's own assistant on WhatsApp. The owner is in South Africa (SAST).`,
