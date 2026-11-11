@@ -9,10 +9,17 @@ export async function authenticRawBody(raw:Uint8Array,signature:string,secret:st
  return crypto.subtle.verify('HMAC',key,bytes,Uint8Array.from(raw).buffer);
 }
 const identifier=(x:unknown):x is string=>typeof x==='string'&&x.length>0&&x.length<=512;
-export async function receiveSignedIngress(pool:Pool,input:{endpointId:string;raw:Uint8Array;signature:string;eventHeader:string;eventIdHeader:string},env:TenantCryptoEnv):Promise<{jobId:string;workspaceId:string;channelId:string;event:string}|null>{
+export async function receiveSignedIngress(pool:Pool,input:{endpointId:string;raw:Uint8Array;signature:string;eventHeader:string;eventIdHeader:string;signal?:AbortSignal},env:TenantCryptoEnv):Promise<{jobId:string;workspaceId:string;channelId:string;event:string}|null>{
  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(input.endpointId)||input.raw.byteLength>32768)return null;
- const c=await pool.connect();try{
+ if(input.signal?.aborted)return null;
+ const pending=pool.connect();
+ const acquired=await Promise.race([pending,new Promise<null>(resolve=>{if(input.signal)input.signal.addEventListener('abort',()=>{resolve(null)},{once:true});})]);
+ if(!acquired){pending.then(c=>c.release(true));return null;}
+ const c=acquired;try{
   await c.query('BEGIN');
+  await c.query("SET LOCAL lock_timeout='1000ms'");
+  await c.query("SET LOCAL statement_timeout='2500ms'");
+  if(input.signal?.aborted)throw Error('ingress_deadline');
   const binding=(await c.query(`SELECT * FROM cf_webhook_ingress_binding WHERE endpoint_id=$1 FOR SHARE`,[input.endpointId])).rows[0];
   if(!binding||!binding.enabled){await c.query('ROLLBACK');return null;}
   let secret:string;try{secret=await decryptTenantKey(binding.encrypted_secret,env);}catch{await c.query('ROLLBACK');return null;}
@@ -31,7 +38,8 @@ export async function receiveSignedIngress(pool:Pool,input:{endpointId:string;ra
    // PostgreSQL jsonb key order differs, compare canonical recursively below.
    if(!r.rows[0]||canonical(r.rows[0].payload)!==canonical(e)){await c.query('ROLLBACK');return null;}
   }
-  await c.query('COMMIT');return{jobId:r.rows[0].id,workspaceId:binding.workspace_id,channelId:binding.channel_id,event:e.event};
+  if(input.signal?.aborted)throw Error('ingress_deadline');
+  await c.query('COMMIT');if(input.signal?.aborted)return null;return{jobId:r.rows[0].id,workspaceId:binding.workspace_id,channelId:binding.channel_id,event:e.event};
  }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
 }
 function canonical(x:any):string{if(x instanceof Date)return JSON.stringify(x.toISOString());return x===null||typeof x!=='object'?JSON.stringify(x):Array.isArray(x)?'['+x.map(canonical).join(',')+']':'{'+Object.keys(x).sort().map(k=>JSON.stringify(k)+':'+canonical(x[k])).join(',')+'}';}
