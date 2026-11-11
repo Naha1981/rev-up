@@ -82,7 +82,7 @@ async function reserveInternal(pool:Pool,s:Scope,messageId:string,e:Eligibility|
  });
 }
 export async function canBeginReservedAttempt(pool:Pool,s:Scope,messageId:string,attemptId:string):Promise<boolean>{
- const r=await pool.query(`SELECT 1 FROM cf_outbound_message m JOIN cf_conversation_control c USING(workspace_id,contact_id,channel_id) JOIN cf_contact_suppression g USING(workspace_id,contact_id) WHERE m.id=$1 AND m.workspace_id=$2 AND m.contact_id=$3 AND m.channel_id=$4 AND m.attempt_id=$5 AND m.state='dispatching' AND m.provider_started_at IS NULL AND m.lease_until>now() AND NOT g.suppressed AND c.state='active' AND NOT c.suppressed AND c.version=m.control_version`,[messageId,...scopeValues(s),attemptId]);
+ const r=await pool.query(`SELECT 1 FROM cf_outbound_message m JOIN cf_conversation_control c USING(workspace_id,contact_id,channel_id) JOIN cf_contact_suppression g USING(workspace_id,contact_id) WHERE m.id=$1 AND m.workspace_id=$2 AND m.contact_id=$3 AND m.channel_id=$4 AND m.attempt_id=$5 AND m.state='dispatching' AND m.provider_started_at IS NULL AND m.lease_until>clock_timestamp() AND NOT g.suppressed AND c.state='active' AND NOT c.suppressed AND c.version=m.control_version`,[messageId,...scopeValues(s),attemptId]);
  return !!r.rowCount; // Diagnostic only, never grants a provider-start right.
 }
 // Consuming start fence: exactly one caller can obtain a start token. The
@@ -97,15 +97,16 @@ async function startInternal(pool:Pool,s:Scope,messageId:string,attemptId:string
   if(!ctrl.rows[0]||ctrl.rows[0].state!=='active'||ctrl.rows[0].suppressed)return null;
   const m=(await c.query(`SELECT * FROM cf_outbound_message WHERE id=$1 AND workspace_id=$2 AND contact_id=$3 AND channel_id=$4 FOR UPDATE`,[messageId,...scopeValues(s)])).rows[0];if(!m)return null;
   if(!policyEnv&&(m.policy_version||(await c.query(`SELECT 1 FROM cf_workspace_dispatch_policy WHERE workspace_id=$1 FOR SHARE`,[s.workspaceId])).rowCount))return null;
-  if(policyEnv){if(!m.policy_version||!m.credential_version)return null;const p=await loadDispatchPolicy(c,s,m,policyEnv);if(p.reason||!p.eligibility||eligibilityReason(p.eligibility)||String(m.policy_version)!==p.policyVersion||String(m.credential_version)!==p.credentialVersion||m.policy_fingerprint!==p.fingerprint)return null;}
+  let validUntil:number|null=null;
+  if(policyEnv){if(!m.policy_version||!m.credential_version)return null;const p=await loadDispatchPolicy(c,s,m,policyEnv);if(p.reason||!p.eligibility||eligibilityReason(p.eligibility)||String(m.policy_version)!==p.policyVersion||String(m.credential_version)!==p.credentialVersion||m.policy_fingerprint!==p.fingerprint)return null;validUntil=p.validUntil;}
   const token=crypto.randomUUID();
-  const r=await c.query(`UPDATE cf_outbound_message SET provider_started_at=now(),start_token=$6,updated_at=now() WHERE id=$1 AND workspace_id=$2 AND contact_id=$3 AND channel_id=$4 AND attempt_id=$5 AND state='dispatching' AND provider_started_at IS NULL AND lease_until>now() AND control_version=$7 RETURNING id`,[messageId,...scopeValues(s),attemptId,token,ctrl.rows[0].version]);
+  const r=await c.query(`WITH wall AS MATERIALIZED (SELECT clock_timestamp() AS t) UPDATE cf_outbound_message m SET provider_started_at=wall.t,start_token=$6,updated_at=wall.t FROM wall WHERE m.id=$1 AND m.workspace_id=$2 AND m.contact_id=$3 AND m.channel_id=$4 AND m.attempt_id=$5 AND m.state='dispatching' AND m.provider_started_at IS NULL AND m.lease_until>wall.t AND m.control_version=$7 AND ($8::timestamptz IS NULL OR wall.t<$8::timestamptz) AND NOT EXISTS (SELECT 1 FROM cf_budget_reservation b WHERE b.attempt_id=m.attempt_id AND (b.bucket NOT IN ('hour','day','month') OR b.period_start<>(date_trunc(b.bucket,wall.t AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'))) RETURNING m.id`,[messageId,...scopeValues(s),attemptId,token,ctrl.rows[0].version,validUntil?new Date(validUntil).toISOString():null]);
   return r.rowCount?token:null;
  });
 }
 export async function expireDispatches(pool:Pool,workspaceId:string):Promise<number>{
  return tx(pool,async c=>{
-  const r=await c.query(`UPDATE cf_outbound_message SET state='unknown',hold_reason='reservation_expired_outcome_unverified',updated_at=now() WHERE workspace_id=$1 AND state='dispatching' AND lease_until<=now() RETURNING attempt_id`,[workspaceId]);
+  const r=await c.query(`UPDATE cf_outbound_message SET state='unknown',hold_reason='reservation_expired_outcome_unverified',updated_at=now() WHERE workspace_id=$1 AND state='dispatching' AND lease_until<=clock_timestamp() RETURNING attempt_id`,[workspaceId]);
   for(const row of r.rows)await c.query(`UPDATE cf_outbound_attempt SET result='unknown',error_code='reservation_expired_outcome_unverified',updated_at=now() WHERE id=$1 AND workspace_id=$2`,[row.attempt_id,workspaceId]);return r.rowCount||0;
  });
 }
