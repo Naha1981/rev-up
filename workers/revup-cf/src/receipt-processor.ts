@@ -12,7 +12,7 @@ export async function processReceiptJob(pool:Pool,workspaceId:string,id:string,l
   if(!b||!b.enabled||b.workspace_id!==workspaceId||b.channel_id!==j.ingress_channel_id||b.account_id!==j.account_id||b.provider!==j.provider||await ingressFingerprint(b)!==j.ingress_fingerprint)throw Error('ingress_remapped');
   const e=j.payload,kind=({'message.delivered':'delivered','message.read':'read','message.failed':'failed'} as const)[e.event as 'message.delivered'];
   if(!kind||typeof e.message?.id!=='string'||!e.message.id||e.message.id.length>512)throw Error('receipt_schema_invalid');
-  const result=await reduceReceiptOnClient(c,{workspaceId,provider:j.provider,accountId:j.account_id,eventId:j.event_id,providerMessageId:e.message.id,kind,authenticated:true,tenantMapped:true});
+  const result=await reduceReceiptOnClient(c,{workspaceId,channelId:j.ingress_channel_id,provider:j.provider,accountId:j.account_id,eventId:j.event_id,providerMessageId:e.message.id,kind,authenticated:true,tenantMapped:true});
   if(result==='invalid')throw Error('receipt_identity_conflict');
   // Keep unmatched durable job retryable, preserving inbox evidence atomically.
   const retry=result==='retryable_unmatched';
