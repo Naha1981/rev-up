@@ -24,4 +24,4 @@ export async function stagingFetch(req:Request,env:StagingEnv,makePool=(url:stri
   return Response.json({status:'not_available_in_isolated_staging'},{status:404});
  }catch{return Response.json({status:'staging_unavailable'},{status:503});}finally{await db.end().catch(()=>{});}
 }
-export default{fetch:stagingFetch};
+export default{fetch(req:Request,env:StagingEnv,_context:unknown){return stagingFetch(req,env);}};
