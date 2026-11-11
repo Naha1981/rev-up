@@ -78,15 +78,15 @@ function makeDb() {
     }
     // vault
     if (s.startsWith('insert into assistant_vault_link')) {
-      tables.assistant_vault_link.push({ token: params[0], workspace_id: params[1], used: false });
+      tables.assistant_vault_link.push({ token: params[0], workspace_id: params[1], used: false, created_at: Date.now() });
       return { rows: [] };
     }
     if (s.startsWith('select token, workspace_id, used from assistant_vault_link'))
       return { rows: tables.assistant_vault_link.filter((r) => r.token === params[0]).slice(0, 1) };
     if (s.startsWith('update assistant_vault_link')) {
-      const row = tables.assistant_vault_link.find((r) => r.token === params[0]);
-      if (row) row.used = true;
-      return { rows: [] };
+      const row = tables.assistant_vault_link.find((r) => r.token === params[0] && !r.used && r.created_at>Date.now()-15*60000);
+      if(row)row.used=true;
+      return{rows:row?[{workspace_id:row.workspace_id}]:[]};
     }
     if (s.startsWith('insert into assistant_vault_secret')) {
       const ex = tables.assistant_vault_secret.find((r) => r.workspace_id === params[0] && r.name === params[1]);
@@ -96,7 +96,7 @@ function makeDb() {
     }
     // receptionist_message
     if (s.startsWith('select direction, body from receptionist_message'))
-      return { rows: tables.receptionist_message.filter((r) => r.contact_id === params[0]).slice(-20) };
+      return { rows: tables.receptionist_message.filter((r) => r.contact_id === params[0] && r.workspace_id === params[1]).slice(-20) };
     if (s.startsWith('insert into receptionist_message')) {
       const dir = s.includes("'outbound'") ? 'outbound' : 'inbound';
       const st = s.includes("'assistant'") ? 'assistant' : s.includes("'ai'") ? 'ai' : 'user';
@@ -288,3 +288,6 @@ test('settings upsert normalises the phone', async () => {
   const s = await getSettings(db, WS);
   assert.equal(s.owner_phone, '27000000001');
 });
+
+test('assistant history cannot import another tenant row for supplied contact ID',async()=>{const db=makeDb(),prompts=[];db.tables.receptionist_message.push({contact_id:'c1',workspace_id:'other-tenant',direction:'inbound',body:'FOREIGN-TENANT-PRIVATE'}, {contact_id:'c1',workspace_id:WS,direction:'inbound',body:'OWN-HISTORY'});await handleAssistantMessage(db,env,WS,'Synthetic','c1','Tell me the opening hours',undefined,async(_url,init)=>{prompts.push(JSON.stringify(JSON.parse(init.body).messages));return new Response(JSON.stringify({choices:[{message:{content:'{}'}}]}),{status:200});});assert.ok(prompts.some(p=>p.includes('OWN-HISTORY')));assert.ok(prompts.every(p=>!p.includes('FOREIGN-TENANT-PRIVATE')));});
+test('assistant secret collection links expire and concurrent claims consume once',async()=>{const db=makeDb();db.tables.assistant_vault_link.push({token:'expired',workspace_id:WS,used:false,created_at:Date.now()-16*60000},{token:'fresh',workspace_id:WS,used:false,created_at:Date.now()});assert.equal(await consumeVaultLink(db,'expired'),null);const r=await Promise.all([consumeVaultLink(db,'fresh'),consumeVaultLink(db,'fresh')]);assert.equal(r.filter(x=>x===WS).length,1);});

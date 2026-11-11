@@ -119,6 +119,7 @@
  "test::policy revoked after reservation blocks consuming start",
  "test::preissued approval from old recovery generation cannot restart later failure",
  "test::purpose-specific approved template required outside service window",
+ "test::real DB atomic one-use secret collection link and expiry",
  "test::receipt event cannot change persisted channel on duplicate",
  "test::receipt final lease expiry rolls back message effects and unmatched inbox",
  "test::receipt processing wrong tenant and stale lease cannot settle or complete",
