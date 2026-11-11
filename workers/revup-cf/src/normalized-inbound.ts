@@ -25,7 +25,7 @@ export async function normalizeInboundJob(pool:Pool,workspaceId:string,jobId:str
   if(!identity)throw Error('sender_identity_unresolved');
   const now=(await c.query('SELECT clock_timestamp() AS now')).rows[0].now;
   if(b.valid_until<=now||identity.valid_until<=now)throw Error('inbound_evidence_expired');
-  const stop=typeof e.message.text==='string'&&/^(STOP|STOPALL|UNSUBSCRIBE|CANCEL|END|QUIT)$/i.test(e.message.text.trim());
+  const stop=typeof e.message.text==='string'&&/^(STOP|STOPALL|STOP ALL|UNSUBSCRIBE|CANCEL|END|QUIT)$/i.test(e.message.text.trim());
   const standby=e.metadata?.standby===true;
   if(stop||standby)await pauseConversationOnClient(c,{workspaceId,contactId:identity.contact_id,channelId:j.ingress_channel_id},stop?'authenticated_stop':'provider_standby',stop);
   // sentAt is only chronological provider data. Never set last_inbound_at to now.
