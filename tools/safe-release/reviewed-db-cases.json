@@ -79,6 +79,8 @@
  "test::mapped opt-out &quot;STOP ALL&quot; standby=false",
  "test::mapped opt-out &quot;STOP ALL&quot; standby=true",
  "test::missing control fails closed; authorized resume does not invent it",
+ "test::network ingress five synthetic HTTP journeys persist before ACK, deduplicate, reject forgery, hold mapping and STOP safely",
+ "test::network ingress synthetic 120 tenant inventory and 100 concurrent HTTP requests meet 4s ACK budget",
  "test::normalization persists registration channel and BSUID identity with no bot reply grant",
  "test::normalization wrong tenant or stale lease cannot write effects",
  "test::old redelivery sentAt cannot reopen service window",
