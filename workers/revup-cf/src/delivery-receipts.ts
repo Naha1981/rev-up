@@ -33,14 +33,18 @@ export async function settleProviderStart(pool:Pool,input:{workspaceId:string;me
 export async function reduceDeliveryReceipt(pool:Pool,input:Receipt):Promise<ReceiptResult>{
  if(!input.authenticated||!input.tenantMapped||![input.provider,input.accountId,input.eventId,input.providerMessageId].every(x=>typeof x==='string'&&x.length>0&&x.length<=512)||!['delivered','read','failed'].includes(input.kind))return 'invalid';
  const c=await pool.connect();try{
-  await c.query('BEGIN');await messageLock(c,input.workspaceId,input.provider,input.accountId,input.providerMessageId);
-  const inbox=await c.query(`INSERT INTO cf_unmatched_receipt(id,workspace_id,provider,account_id,event_id,provider_message_id,kind) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(workspace_id,provider,account_id,event_id) DO UPDATE SET attempts=cf_unmatched_receipt.attempts+1,updated_at=now() RETURNING *`,[crypto.randomUUID(),input.workspaceId,input.provider,input.accountId,input.eventId,input.providerMessageId,input.kind]);const row=inbox.rows[0];
-  if(row.provider_message_id!==input.providerMessageId||row.kind!==input.kind){await c.query('ROLLBACK');return 'invalid';}
-  if(row.state==='reconciled'){await c.query('COMMIT');return 'duplicate';}
-  const found=await c.query(`SELECT id,state FROM cf_outbound_message WHERE workspace_id=$1 AND provider=$2 AND account_id=$3 AND provider_message_id=$4 FOR UPDATE`,[input.workspaceId,input.provider,input.accountId,input.providerMessageId]);
-  if(!found.rows[0]){await c.query('COMMIT');return 'retryable_unmatched';}
-  await reconcile(c,row,found.rows[0]);await c.query('COMMIT');return 'reconciled';
+  await c.query('BEGIN');const result=await reduceReceiptOnClient(c,input);await c.query('COMMIT');return result;
  }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
+}
+export async function reduceReceiptOnClient(c:PoolClient,input:Receipt):Promise<ReceiptResult>{
+ if(!input.authenticated||!input.tenantMapped||![input.provider,input.accountId,input.eventId,input.providerMessageId].every(x=>typeof x==='string'&&x.length>0&&x.length<=512)||!['delivered','read','failed'].includes(input.kind))return 'invalid';
+ await messageLock(c,input.workspaceId,input.provider,input.accountId,input.providerMessageId);
+  const inbox=await c.query(`INSERT INTO cf_unmatched_receipt(id,workspace_id,provider,account_id,event_id,provider_message_id,kind) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(workspace_id,provider,account_id,event_id) DO UPDATE SET attempts=cf_unmatched_receipt.attempts+1,updated_at=now() RETURNING *`,[crypto.randomUUID(),input.workspaceId,input.provider,input.accountId,input.eventId,input.providerMessageId,input.kind]);const row=inbox.rows[0];
+  if(row.provider_message_id!==input.providerMessageId||row.kind!==input.kind){return 'invalid';}
+  if(row.state==='reconciled'){return 'duplicate';}
+  const found=await c.query(`SELECT id,state FROM cf_outbound_message WHERE workspace_id=$1 AND provider=$2 AND account_id=$3 AND provider_message_id=$4 FOR UPDATE`,[input.workspaceId,input.provider,input.accountId,input.providerMessageId]);
+  if(!found.rows[0]){return 'retryable_unmatched';}
+  await reconcile(c,row,found.rows[0]);return 'reconciled';
 }
 export async function holdUnmatchedReceipts(pool:Pool,workspaceId:string,ageSeconds=300):Promise<number>{
  if(!Number.isInteger(ageSeconds)||ageSeconds<60)throw Error('invalid_hold_age');
