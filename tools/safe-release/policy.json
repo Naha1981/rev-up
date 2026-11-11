@@ -27,5 +27,9 @@
   "pilot_mode": "allowlist-default-off",
   "auto_promote": false,
   "max_proof_age_hours": 24,
-  "require_hosted_verification": true
+  "require_hosted_verification": true,
+  "canonical_repository": {
+    "id": 1422402883,
+    "full_name": "Naha1981/rev-up"
+  }
 }

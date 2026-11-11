@@ -126,18 +126,20 @@ def verify(envelope, directory, policy, evidence_root=None):
     require(body["rollback"]["account"] == policy["account"] and body["rollback"]["service"] == policy["service"], "rollback target changed")
     return body
 
-def hosted_verification_check(result, commit, manifest_hash):
+def hosted_verification_check(result, commit, manifest_hash, repository=None):
     require(isinstance(result,dict), "mandatory hosted verifier result missing")
     require(result.get("verified") is True and result.get("repository_private") is False, "hosted verifier did not pass public repository")
     require(result.get("run_status")=="completed" and result.get("run_conclusion")=="success" and result.get("job_conclusion")=="success", "hosted verification skipped/neutral/absent/incomplete/failed")
     require(result.get("commit")==commit and result.get("manifest_sha256")==manifest_hash, "hosted verification identity mismatch")
+    require(isinstance(repository,dict) and result.get("repository")==repository,"hosted canonical repository mismatch")
+    require(result.get("authenticated_retrieval") is True and all(type(result.get(k)) is int and result[k]>0 for k in ("run_id","job_id","run_attempt")),"authenticated job/run/attempt identity missing")
     age=(dt.datetime.now(dt.timezone.utc)-parse_time(result.get("verified_at"))).total_seconds()
     require(-60<=age<=3600, "hosted verifier result stale")
 
 def promotion_plan(envelope, directory, policy, approval, evidence_root=None, hosted_verification=None):
     body = verify(envelope, directory, policy, evidence_root)
     if policy.get("require_hosted_verification") is True:
-        hosted_verification_check(hosted_verification,body["commit"],envelope["manifest_sha256"])
+        hosted_verification_check(hosted_verification,body["commit"],envelope["manifest_sha256"],policy.get("canonical_repository"))
     # This is a routing/evidence record, NOT independent authentication of a user.
     # The accountable release operator must inspect the original channel evidence.
     require(approval.get("decision") == "Go + Sure", "exact production approval missing")
