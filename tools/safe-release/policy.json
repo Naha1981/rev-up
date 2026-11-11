@@ -26,5 +26,6 @@
   "migration_strategy": "expand-contract",
   "pilot_mode": "allowlist-default-off",
   "auto_promote": false,
-  "max_proof_age_hours": 24
+  "max_proof_age_hours": 24,
+  "require_hosted_verification": true
 }

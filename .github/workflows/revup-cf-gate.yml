@@ -13,7 +13,7 @@ on:
     paths: ["workers/revup-cf/**", "tools/safe-release/**", ".github/workflows/revup-cf-gate.yml"]
   pull_request:
     branches: [main, "review/**"]
-    paths: ["workers/revup-cf/**", "tools/safe-release/**"]
+    paths: ["workers/revup-cf/**", "tools/safe-release/**", ".github/workflows/revup-cf-gate.yml"]
 
 permissions:
   contents: read
@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   gate:
-    name: Unit tests + manifest gate
+    name: ${{ github.event.repository.private && 'BLOCKED_PRIVATE_REQUIRES_COST_APPROVAL' || 'Unit tests + manifest gate' }}
     if: github.event.repository.private == false
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -104,12 +104,6 @@ jobs:
             --evidence-root "$G"
           jq -r '"manifest_sha256: \(.manifest_sha256)"' "$G/release.json"
 
-      - name: Preserve exact reports in free job logs (no artifact/cache storage)
-        run: |
-          G="$RUNNER_TEMP/gate"
-          for file in unit.xml db.xml worker-unit-check.json worker-db-check.json release.json; do
-            echo "BEGIN_EVIDENCE:$file"
-            cat "$G/$file"
-            echo "END_EVIDENCE:$file"
-          done
-          sha256sum "$G/unit.xml" "$G/db.xml" "$G/release.json"
+      - name: Preserve bounded byte-exact evidence even after failure
+        if: always()
+        run: python3 tools/safe-release/hosted_gate.py emit --root "$RUNNER_TEMP/gate"
