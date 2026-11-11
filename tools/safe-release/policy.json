@@ -8,7 +8,8 @@
   "config_revision": "wrangler-toml-5d54398",
   "coverage_reviewed": true,
   "required_checks": [
-    "worker-unit"
+    "worker-unit",
+    "worker-db"
   ],
   "production_resources": [
     "neon-postgres-shared",

@@ -9,10 +9,10 @@ name: RevUp CF release gate
 
 on:
   push:
-    branches: [main, review/design-home-only, review/role-hotfix, review/customer-safety, review/workflow-safety, review/campaign-safety, review/entitlement-safety, review/social-handoff-safety, review/opportunity-safety, review/social-writer-safety, review/numeric-safety, review/waitlist-safety, review/phone-table-safety, review/lead-money-safety]
+    branches: [main, review/design-home-only, review/role-hotfix, review/customer-safety, review/workflow-safety, review/campaign-safety, review/entitlement-safety, review/social-handoff-safety, review/opportunity-safety, review/social-writer-safety, review/numeric-safety, review/waitlist-safety, review/phone-table-safety, review/lead-money-safety, "review/p0-*"]
     paths: ["workers/revup-cf/**", "tools/safe-release/**", ".github/workflows/revup-cf-gate.yml"]
   pull_request:
-    branches: [main]
+    branches: [main, "review/**"]
     paths: ["workers/revup-cf/**", "tools/safe-release/**"]
 
 permissions:
@@ -25,8 +25,22 @@ concurrency:
 jobs:
   gate:
     name: Unit tests + manifest gate
+    if: github.event.repository.private == false
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        # Official postgres18.6 multi-platform digest, verified11Nov2026.
+        image: postgres:18.6@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42
+        env:
+          POSTGRES_USER: sandbox
+          POSTGRES_DB: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 55431:5432
+        options: >-
+          --health-cmd "pg_isready -U sandbox -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -37,8 +51,6 @@ jobs:
         uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: workers/revup-cf/package-lock.json
 
       - name: Install worker deps
         working-directory: workers/revup-cf
@@ -49,9 +61,16 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/gate"
           npm run build:test --silent
-          node --test --test-reporter=junit test/worker.test.mjs test/freeai.test.mjs test/priceguard.test.mjs test/factrules.test.mjs test/assistant.test.mjs test/socialteam.test.mjs test/chatapp.test.mjs test/menu.test.mjs test/connect-errors.test.mjs test/tenant-crypto.test.mjs test/permissions.test.mjs test/customer-safety.test.mjs test/workflow-safety.test.mjs test/campaign-safety.test.mjs test/entitlement-safety.test.mjs test/social-handoff-safety.test.mjs test/opportunity-safety.test.mjs test/social-writer-safety.test.mjs test/numeric-safety.test.mjs test/waitlist-safety.test.mjs test/phone-table-safety.test.mjs test/lead-money-safety.test.mjs test/industry-specialists.test.mjs > "$RUNNER_TEMP/gate/unit.xml"
-          node --test test/worker.test.mjs test/freeai.test.mjs test/priceguard.test.mjs test/factrules.test.mjs test/assistant.test.mjs test/socialteam.test.mjs test/chatapp.test.mjs test/menu.test.mjs test/connect-errors.test.mjs test/tenant-crypto.test.mjs test/permissions.test.mjs test/customer-safety.test.mjs test/workflow-safety.test.mjs test/campaign-safety.test.mjs test/entitlement-safety.test.mjs test/social-handoff-safety.test.mjs test/opportunity-safety.test.mjs test/social-writer-safety.test.mjs test/numeric-safety.test.mjs test/waitlist-safety.test.mjs test/phone-table-safety.test.mjs test/lead-money-safety.test.mjs test/industry-specialists.test.mjs | tee "$RUNNER_TEMP/gate/worker-unit.tap"
+          node --test --test-reporter=junit test/worker.test.mjs test/freeai.test.mjs test/priceguard.test.mjs test/factrules.test.mjs test/assistant.test.mjs test/socialteam.test.mjs test/chatapp.test.mjs test/menu.test.mjs test/connect-errors.test.mjs test/tenant-crypto.test.mjs test/permissions.test.mjs test/customer-safety.test.mjs test/workflow-safety.test.mjs test/campaign-safety.test.mjs test/entitlement-safety.test.mjs test/social-handoff-safety.test.mjs test/opportunity-safety.test.mjs test/social-writer-safety.test.mjs test/numeric-safety.test.mjs test/waitlist-safety.test.mjs test/phone-table-safety.test.mjs test/lead-money-safety.test.mjs test/industry-specialists.test.mjs test/messaging-safety.test.mjs > "$RUNNER_TEMP/gate/unit.xml"
+          node --test test/worker.test.mjs test/freeai.test.mjs test/priceguard.test.mjs test/factrules.test.mjs test/assistant.test.mjs test/socialteam.test.mjs test/chatapp.test.mjs test/menu.test.mjs test/connect-errors.test.mjs test/tenant-crypto.test.mjs test/permissions.test.mjs test/customer-safety.test.mjs test/workflow-safety.test.mjs test/campaign-safety.test.mjs test/entitlement-safety.test.mjs test/social-handoff-safety.test.mjs test/opportunity-safety.test.mjs test/social-writer-safety.test.mjs test/numeric-safety.test.mjs test/waitlist-safety.test.mjs test/phone-table-safety.test.mjs test/lead-money-safety.test.mjs test/industry-specialists.test.mjs test/messaging-safety.test.mjs | tee "$RUNNER_TEMP/gate/worker-unit.tap"
           grep -q "^# fail 0" "$RUNNER_TEMP/gate/worker-unit.tap"
+
+      - name: Synthetic PostgreSQL safety suite (no production credentials)
+        working-directory: workers/revup-cf
+        run: |
+          node --test --test-reporter=junit test/messaging-safety-db.test.mjs > "$RUNNER_TEMP/gate/db.xml"
+          node --test test/messaging-safety-db.test.mjs | tee "$RUNNER_TEMP/gate/db.tap"
+          grep -q "^# fail 0" "$RUNNER_TEMP/gate/db.tap"
 
       - name: Build deploy artifact (dry-run, no upload)
         working-directory: workers/revup-cf
@@ -68,7 +87,13 @@ jobs:
             --check worker-unit --commit "${{ github.sha }}" \
             --artifact-sha256 "$ART" --evidence-reference unit.xml \
             --output "$G/worker-unit-check.json"
-          jq -s '.' "$G/worker-unit-check.json" > "$G/checks.json"
+          python3 tools/safe-release/junit_collect.py \
+            --junit "$G/db.xml" \
+            --expected-cases tools/safe-release/reviewed-db-cases.json \
+            --check worker-db --commit "${{ github.sha }}" \
+            --artifact-sha256 "$ART" --evidence-reference db.xml \
+            --output "$G/worker-db-check.json"
+          jq -s '.' "$G/worker-unit-check.json" "$G/worker-db-check.json" > "$G/checks.json"
           python3 tools/safe-release/release_gate.py manifest \
             --policy tools/safe-release/policy.json --checks "$G/checks.json" \
             --artifact "$G/candidate" --commit "${{ github.sha }}" \
@@ -79,13 +104,12 @@ jobs:
             --evidence-root "$G"
           jq -r '"manifest_sha256: \(.manifest_sha256)"' "$G/release.json"
 
-      - name: Upload release manifest + test evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: release-manifest-${{ github.sha }}
-          path: |
-            ${{ runner.temp }}/gate/release.json
-            ${{ runner.temp }}/gate/unit.xml
-            ${{ runner.temp }}/gate/worker-unit-check.json
-            ${{ runner.temp }}/gate/worker-unit.tap
-          retention-days: 90
+      - name: Preserve exact reports in free job logs (no artifact/cache storage)
+        run: |
+          G="$RUNNER_TEMP/gate"
+          for file in unit.xml db.xml worker-unit-check.json worker-db-check.json release.json; do
+            echo "BEGIN_EVIDENCE:$file"
+            cat "$G/$file"
+            echo "END_EVIDENCE:$file"
+          done
+          sha256sum "$G/unit.xml" "$G/db.xml" "$G/release.json"
