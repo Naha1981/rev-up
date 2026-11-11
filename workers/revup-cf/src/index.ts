@@ -994,7 +994,7 @@ async function analyticsPage(db: Pool, user: any, mem: any): Promise<string> {
 <div class="card"><h2>Review-link clicks by day</h2>${clicksByDay.rows.length ? `<table><tr><th>Day</th><th>Clicks</th></tr>${clickRows}</table>` : `<p class="mut">No clicks yet.</p>`}</div>`, user);
 }
 
-async function postsPage(db: Pool, user: any, mem: any): Promise<string> {
+export async function postsPage(db: Pool, user: any, mem: any): Promise<string> {
   const r = await db.query(
     `SELECT p.id, p.title, p.caption, p.scheduled_at, p.published_at, p.created_at,
             string_agg(DISTINCT pp.status, ', ') AS statuses,
@@ -1005,18 +1005,32 @@ async function postsPage(db: Pool, user: any, mem: any): Promise<string> {
      WHERE p.workspace_id=$1
      GROUP BY p.id ORDER BY p.created_at DESC LIMIT 100`, [mem.workspace_id]);
   const rows = r.rows.map((x: any) => {
-    const sts = (x.statuses || "").split(", ").filter(Boolean);
-    const allDraft = sts.length > 0 && sts.every((st: string) => st === "draft");
+    const linkedStatuses = (x.statuses || "").split(", ").filter(Boolean);
+    // Match the shared composer model: a post without channel children is a draft.
+    const sts = linkedStatuses.length ? linkedStatuses : ["draft"];
+    const allDraft = linkedStatuses.length > 0 && sts.every((st: string) => st === "draft");
     return `<tr>
-<td><b>${esc(x.title || "(untitled)")}</b><br><span class="mut">${esc((x.caption || "").slice(0, 120))}</span></td>
-<td>${sts.map((st: string) => `<span class="pill ${st === "approved" || st === "published" ? "ok" : ""}">${esc(st)}</span> `).join("")}</td>
-<td class="mut">${esc(x.channels || "-")}</td>
-<td class="mut">${x.scheduled_at ? new Date(x.scheduled_at).toLocaleString("en-ZA") : new Date(x.created_at).toLocaleDateString("en-ZA")}</td>
-<td>${allDraft ? `<form class="inline" method="post" action="/posts/${x.id}/submit"><button>Submit for review</button></form>` : ""}</td></tr>`;
+<td data-label="Post"><b>${esc(x.title || "(untitled)")}</b><br><span class="mut">${esc((x.caption || "").slice(0, 120))}</span></td>
+<td data-label="Status">${sts.map((st: string) => `<span class="pill ${st === "approved" || st === "published" ? "ok" : ""}">${esc(st)}</span> `).join("")}</td>
+<td class="mut" data-label="Channels">${esc(x.channels || "No channel selected")}</td>
+<td class="mut" data-label="When">${x.scheduled_at ? new Date(x.scheduled_at).toLocaleString("en-ZA") : new Date(x.created_at).toLocaleDateString("en-ZA")}</td>
+<td data-label="Action">${allDraft ? `<form class="inline" method="post" action="/posts/${x.id}/submit"><button>Submit for review</button></form>` : ""}</td></tr>`;
   }).join("");
   return layout("Posts", `
 <p><a class="btn btn-primary" href="/posts/new">New post</a></p>
-<div class="card">${r.rows.length ? `<table><tr><th>Post</th><th>Status</th><th>Channels</th><th>When</th><th></th></tr>${rows}</table>` : `<p class="mut">No posts yet.</p>`}</div>`, user);
+<style>
+.posts-table{width:100%}.posts-table td:first-child{min-width:0;overflow-wrap:anywhere}.posts-table td[data-label="When"]{font-variant-numeric:tabular-nums}
+@media(max-width:640px){
+.posts-table,.posts-table tbody{display:block;width:100%}.posts-table thead{display:none}
+.posts-table tbody{display:grid;gap:16px}.posts-table tr{display:grid;gap:12px;padding:16px 0;border-bottom:1px solid var(--line)}.posts-table tr:last-child{border-bottom:0}
+.posts-table td{display:grid;grid-template-columns:88px minmax(0,1fr);gap:12px;border:0;padding:0;min-width:0;overflow-wrap:anywhere}
+.posts-table td::before{content:attr(data-label);color:var(--ink2);font-weight:500}
+.posts-table td:first-child{display:block}.posts-table td:first-child::before{content:none}
+.posts-table td[data-label="Action"]:empty{display:none}.posts-table td[data-label="Action"] button{min-height:44px}
+.posts-table .pill{justify-self:start}
+}
+</style>
+<div class="card">${r.rows.length ? `<table class="posts-table"><thead><tr><th scope="col">Post</th><th scope="col">Status</th><th scope="col">Channels</th><th scope="col">When</th><th scope="col">Action</th></tr></thead><tbody>${rows}</tbody></table>` : `<p class="mut">No posts yet.</p>`}</div>`, user);
 }
 
 const STATUS_LABELS: Record<string, string> = { approved: "approved", rejected: "rejected", changes_requested: "changes requested" };
