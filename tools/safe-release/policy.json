@@ -8,7 +8,8 @@
   "config_revision": "wrangler-toml-5d54398",
   "coverage_reviewed": true,
   "required_checks": [
-    "worker-unit"
+    "worker-unit",
+    "worker-db"
   ],
   "production_resources": [
     "neon-postgres-shared",
@@ -25,5 +26,10 @@
   "migration_strategy": "expand-contract",
   "pilot_mode": "allowlist-default-off",
   "auto_promote": false,
-  "max_proof_age_hours": 24
+  "max_proof_age_hours": 24,
+  "require_hosted_verification": true,
+  "canonical_repository": {
+    "id": 1422402883,
+    "full_name": "Naha1981/rev-up"
+  }
 }
