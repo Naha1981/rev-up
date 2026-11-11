@@ -12,3 +12,10 @@ export function boundedWhole(raw: unknown, min: number, fallback: number, max = 
 export function quoteWonTotal(rows: {status: string; amount_cents: string | number}[]): number {
   return rows.filter(q => q.status === "won").reduce((sum, q) => sum + Number(q.amount_cents), 0) / 100;
 }
+
+export function leadValueCents(raw: unknown): number | null {
+  const money = boundedMoney(raw);
+  if (money === null) return null;
+  const cents = Math.round(money * 100);
+  return cents <= 2147483647 ? cents : null;
+}

@@ -1,4 +1,4 @@
-import { boundedMoney, boundedWhole, quoteWonTotal } from "./numeric-inputs";
+import { boundedMoney, boundedWhole, quoteWonTotal, leadValueCents } from "./numeric-inputs";
 import {captureEnquiry} from "./enquiries";
 import {hasWorkspacePermission,requiredWorkspacePermission} from "./permissions";
 import { JOURNEY_CSS, THEME_SCRIPT, JOURNEY_SCRIPT, journeyNav, toolRow, disclosure, COMMAND_CSS, LEGIBILITY_CSS, SETUP_CSS, FINISH_CSS, commandPalette } from "./journey";
@@ -850,7 +850,7 @@ async function intakeBoards(db: Pool, mem: any): Promise<string> {
   return h;
 }
 
-export async function leadPipelinePage(db: Pool,user: any,mem: any): Promise<string> {
+export async function leadPipelinePage(db: Pool,user: any,mem: any,msg = ""): Promise<string> {
         const leads = await db.query(`SELECT * FROM frontdesk_lead WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 200`, [mem.workspace_id]);
         const drafts = await db.query(`SELECT * FROM frontdesk_followup_draft WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 100`, [mem.workspace_id]);
         const totals = await db.query(`SELECT stage, count(*) c, coalesce(sum(value_cents),0) v FROM frontdesk_lead WHERE workspace_id=$1 GROUP BY stage`, [mem.workspace_id]);
@@ -874,6 +874,7 @@ ${d.status === "draft" ? `<form method="post" action="/frontdesk/draft/${d.id}/a
 <td class="mut" data-label="Received">${new Date(l.created_at).toLocaleString("en-ZA")}</td></tr>`;
         }).join("");
         return layout("Leads", `
+${msg ? `<p role="status">${esc(msg)}</p>` : ""}
 <style>
 .lead-stage-form{display:flex;gap:6px;align-items:center}
 @media(max-width:640px){.lead-pipeline{table-layout:fixed}.lead-pipeline td{overflow-wrap:anywhere}.lead-pipeline td::before{content:attr(data-label);display:block;font-size:12px;font-weight:600;color:var(--ink3);margin-top:8px}.lead-stage-form{flex-wrap:wrap}.lead-stage-form select{width:100%;min-width:0}.lead-stage-form input{max-width:calc(100% - 95px)}.lead-pipeline form button{max-width:100%}}
@@ -1688,7 +1689,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
         if (mem.plan !== "business-pro" || mem.subscription_status !== "active") return html(layout("Leads", `
 <div class="card"><h2>Leads is a Business Pro feature</h2>
 <p>Capture website enquiries, work a shared lead pipeline, and send considered follow-ups. <a href="/billing">Upgrade to Business Pro - R1,999/month</a>.</p></div>`, user));
-        return html(await leadPipelinePage(db,user,mem));
+        return html(await leadPipelinePage(db,user,mem,url.searchParams.get("msg") || ""));
       }
 
       const fsave = /^\/frontdesk\/([0-9a-f-]{36})\/save$/.exec(path);
@@ -1696,7 +1697,8 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
         if (mem.plan !== "business-pro" || mem.subscription_status !== "active") return redirect("/frontdesk");
         const f = await formData(req);
         const stage = ["new", "contacted", "quoted", "won", "lost"].includes(f.stage) ? f.stage : "new";
-        const cents = Math.max(0, Math.round(parseFloat(f.value || "0") * 100) || 0);
+        const cents = leadValueCents(f.value);
+        if (cents === null) return redirect("/frontdesk?msg=" + encodeURIComponent("Not saved. Enter a lead value from R0 to R21474836.47. Stage and value have not changed."));
         await db.query(`UPDATE frontdesk_lead SET stage=$1, value_cents=$2, updated_at=now() WHERE id=$3 AND workspace_id=$4`, [stage, cents, fsave[1], mem.workspace_id]);
         return redirect("/frontdesk");
       }
@@ -2106,8 +2108,10 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
         if (req.method === "POST") {
           const f = await formData(req);
           if (!String(f.customer_name || "").trim()) return redirect("/quotes");
+          const amount = boundedMoney(f.amount);
+          if (amount === null || amount > 10000000) return redirect("/quotes?msg=" + encodeURIComponent("Quote not saved. Enter an amount from R0 to R10000000."));
           try {
-          await quoteCreate(db, mem.workspace_id, String(f.customer_name).trim(), /^[0-9a-f-]{36}$/.test(f.contact_id || "") ? f.contact_id : null, String(f.title || "").trim(), Number(f.amount) || 0, String(f.follow_up_on || ""));
+          await quoteCreate(db, mem.workspace_id, String(f.customer_name).trim(), /^[0-9a-f-]{36}$/.test(f.contact_id || "") ? f.contact_id : null, String(f.title || "").trim(), amount, String(f.follow_up_on || ""));
           } catch { return html(layout("Quote not saved",'<p>The customer or amount is not valid for this business.</p><a href="/quotes">Back to quotes</a>',user),400); }
           return redirect("/quotes?msg=" + encodeURIComponent("Quote saved."));
         }
