@@ -1,3 +1,5 @@
+import {securityResponse} from './security-headers';
+import {healthResponse,versionResponse,type RuntimeProofEnv} from './runtime-proof';
 import { boundedMoney, boundedWhole, quoteWonTotal, leadValueCents } from "./numeric-inputs";
 import {captureEnquiry} from "./enquiries";
 import {hasWorkspacePermission,requiredWorkspacePermission} from "./permissions";
@@ -20,7 +22,8 @@ import { startPipeline, cancelPending, runDueReviewEvents, resolveIssue, schedul
 import { ensurePageTables, fetchForMirror, mirrorStructure, generateSections, servePublic, makeSlug, pagesListBody, newPageBody, pageDetailBody, type PageRow, type PageSection } from "./pages";
 import { waitlistAdd, waitlistExpire, waitlistAction, loyaltySettings, loyaltyAccount, awardForBooking, issueVoucher, redeemVoucher, expireVouchers, quoteCreate, quoteAction, segmentContacts, campaignCreate, campaignApprove, campaignCancel, runDueCampaigns, attributeBookingToCampaign, campaignStats, competitorAdd, dishAdd, promoAdd, refreshOpportunities, opportunityAction, opportunityDraftCampaign, supportHandle, autoDraftOpportunities } from "./features";
 
-interface Env {
+interface Env extends RuntimeProofEnv {
+  VAULT_MASTER_KEY?: string;
   DATABASE_URL: string;
   GOOGLE_CALENDAR_CLIENT_ID?: string;
   GOOGLE_CALENDAR_CLIENT_SECRET?: string;
@@ -1063,15 +1066,6 @@ ${mem.activated_at ? `<p class="mut">Active since ${new Date(mem.activated_at).t
 }
 
 // ---------- router ----------
-function withSecurity(res: Response, path: string): Response {
-  const h = new Headers(res.headers);
-  h.set("X-Content-Type-Options", "nosniff");
-  h.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  h.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  // /f/<ws> is the public enquiry form customers embed on their own sites.
-  if (!path.startsWith("/f/")) h.set("X-Frame-Options", "SAMEORIGIN");
-  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
-}
 
 export async function bookingsPage(db:Pool,user:any,mem:any,env:any,url:URL):Promise<Response>{
         const bk = await db.query(
@@ -1103,7 +1097,7 @@ ${calendarPanel(calendar,calendarConfigured(env))}
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const res = await handle(req, env);
-    return withSecurity(res, new URL(req.url).pathname);
+    return securityResponse(res, new URL(req.url).pathname);
   },
   async scheduled(_event: any, env: Env, ctx: any): Promise<void> {
     const db = pool(env);
@@ -1169,16 +1163,8 @@ async function handle(req: Request, env: Env): Promise<Response> {
     const chatAppRes = await handleChatAppRoute(req, env, url, pool);
     if (chatAppRes) return chatAppRes;
 
-    if (path === "/health") {
-      try {
-        const db = pool(env);
-        const r = await db.query("SELECT 1 AS ok");
-        await db.end().catch(() => {});
-        return json({ ok: true, db: r.rows[0].ok === 1, ts: new Date().toISOString() });
-      } catch (e: any) {
-        return json({ ok: false, error: String(e) }, 500);
-      }
-    }
+    if(path==='/version')return versionResponse(req,env);
+    if(path==='/health'||path==='/api/healthz')return healthResponse(req,()=>new Pool({connectionString:env.DATABASE_URL,max:1,connectionTimeoutMillis:1500,idleTimeoutMillis:0}));
 
     // Public tracked review redirect
     const rm = /^\/r\/([A-Za-z0-9_-]{6,12})$/.exec(path);

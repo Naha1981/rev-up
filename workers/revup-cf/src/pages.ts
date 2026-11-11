@@ -11,6 +11,7 @@ import { getPreset, industryLabel } from "./presets";
 export interface PageSection { type: string; heading: string; body: string; items: string[]; }
 interface SkeletonSection { type: string; words: number; }
 export interface PageRow {
+  views: number; cta_clicks: number;
   id: string; workspace_id: string; title: string; slug: string; angle: string;
   industry: string; status: string; brand: any; sections: PageSection[];
   source_url: string; created_at: string; published_at: string | null;
