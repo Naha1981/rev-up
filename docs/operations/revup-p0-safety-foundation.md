@@ -29,3 +29,10 @@ No production deployment or production DB write occurred. For this unmerged bran
 
 ## Next isolated slice
 Review this foundation independently, then close multi-bucket reservation, global suppression and persisted eligibility/credentials/approval bindings; add raw-signature tenant adapter and outcome reducer with unknown-delivery handling. Build safe cutover/rollback tests before route activation. Frontend and billing/provider replacement remain blocked. Yoco unchanged; Paystack RevUp candidate paused.
+
+## Slice2 - global STOP and multi-bucket foundation
+002 adds tenant/contact suppression independent of channel, preserving prior channel STOPs. STOP in one channel blocks every channel's queued/unreserved dispatch and consuming provider-start claim. Normal resume cannot clear it. A separate contact identity merge/re-consent design is still required; this global key assumes the same canonical tenant contact ID across channels. No live backfill.
+
+All supplied hour/day/month buckets reserve in one transaction, lock sorted canonical identities, persist every tightening even when exhausted, and charge none if any bucket is exhausted. Reservations retain per-attempt bucket links, tenant-bound by composite foreign keys. Caller omission of a required bucket is not detected: the future persisted authoritative policy adapter must supply the complete required set. No production caller uses this API yet.
+
+Expanded PostgreSQL suite28/28 pass twice, including cross-channel suppression, reserved cross-channel start blocked, all-or-none exhausted bucket behavior,20competing reservations with reversed input order and canonical duplicate-period denial. Full Worker340/340 passes, focused types pass. No production imports or calls. All remaining next-slice blockers unchanged except these two foundations now implemented/tested, not production verified.
