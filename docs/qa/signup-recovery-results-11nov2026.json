@@ -1,0 +1,36 @@
+[
+  {
+    "step": "reset-form",
+    "status": 200,
+    "has_email_input": true
+  },
+  {
+    "step": "reset-request",
+    "status": 302,
+    "location": "/accounts/password/reset/done/",
+    "in_memory_mail_count": 1
+  },
+  {
+    "step": "token-link",
+    "status": 200,
+    "final_path": "/accounts/password/reset/key/<synthetic-user>-set-password/",
+    "password_form": true
+  },
+  {
+    "step": "reset-completion",
+    "status": 200,
+    "synthetic_password_changed": true,
+    "old_synthetic_password_rejected": true
+  },
+  {
+    "step": "used-token-replay",
+    "status": 200,
+    "password_form": false
+  },
+  {
+    "step": "unknown-account",
+    "status": 302,
+    "location": "/accounts/password/reset/done/",
+    "extra_mail": 1
+  }
+]
