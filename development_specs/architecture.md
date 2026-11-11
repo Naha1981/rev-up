@@ -1,5 +1,7 @@
 # Technical Architecture
 
+> **Scope notice (11 November 2026):** Historical Django architecture. The current live front door is the TypeScript Worker in `workers/revup-cf/`, not these templates/theme files. This document describes the retained Django implementation and background stack. See the [current product map](../docs/current-product.md).
+
 Companion to: Feature Specification v2
 
 ---

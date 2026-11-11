@@ -1,5 +1,7 @@
 # RevUp Agent API
 
+> **Scope notice (11 November 2026):** Retained Django API documentation. These routes/authentication rules are not a blanket contract for the current Worker host. Check the target deployment and route before using them; do not assume this API exists on the live front door. See the [current product map](current-product.md).
+
 Programmatic access for external apps and agents. Interactive OpenAPI docs
 live at `/api/v1/docs` on the deployment (Swagger UI, try-it-out enabled).
 

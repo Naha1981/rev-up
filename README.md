@@ -2,86 +2,83 @@
 
 ## Your WhatsApp employee
 
-RevUp by NahaLabs helps a business handle WhatsApp enquiries, keep customer details and booking requests together, and manage reviews and social content from one workspace.
+RevUp by NahaLabs brings customer messages, customer cards, enquiries, bookings, quotes, repeat visits, reviews and approved social content into one business workspace.
 
-This repository contains the implementation. A feature being present in code does not mean it is activated or accepted for a particular business. Messaging, payments, account connections and publishing need configuration and a verified end-to-end check before customer use.
+## Start with the current application
 
-## What is implemented
+**The live application at https://revup.nahalabs.co.za is the TypeScript Cloudflare Worker in [`workers/revup-cf/`](workers/revup-cf/), not the older Django templates.** Its production entry is `src/worker.ts`, which imports `src/index.ts`.
 
-### Enquiries and customer follow-up
-- Workspace-specific business information and reply drafts.
-- Incoming WhatsApp enquiry capture, customer records and structured intake.
-- Booking records and calendar connection code.
-- Human handoff and conversation history.
-- Reply-only sending rules and per-business usage limits.
-- Review check-ins, review requests, reminders, click tracking and unsubscribe handling.
+For the current interface, read `workers/revup-cf/src/index.ts`, `journey.ts`, `landing.ts` and the feature modules below. Do not use `templates/base.html` or `theme/static_src/src/styles.css` as a description of the live interface. Those belong to the older Django stack, retained for background jobs and rollback.
 
-Messaging and review automation are gated. Connecting a number does not by itself prove that replies, bookings or review requests are working end to end.
+The live navigation has five main destinations: Home, Customers, Bookings, Posts and Settings. Additional tools sit in expandable groups and the Search menu. A five-screen walkthrough is not a complete feature inventory.
 
-### Content and publishing
-- A content composer with per-platform captions and media, reusable templates, tags, version history and an idea board.
-- A publishing calendar, recurring slots and posting queues.
-- Internal and client approvals, comments and passwordless client review links.
-- Publishing adapters, retries, rate-limit handling, status confirmation and audit logs.
-- A media library with folders, image processing and video tools.
-- Generated content drafts placed into a human review queue.
+See [the current feature and route map](docs/current-product.md) for the full screen list, source files and activation limits. Checked against the live navigation on 11 November 2026. A screen opening is evidence of a screen, not proof that its external services are connected or working for every business.
 
-Actual publishing and performance data depend on each account's connection, permissions and platform support. No all-platform delivery guarantee is made here. Generated drafts need review before approval or scheduling.
+## Current feature map
 
-### Business workspaces
-- Organisations, separate workspaces, team invitations and role-based access.
-- Workspace branding and publishing defaults.
-- Customer-owned messaging connection flow, behind an activation flag.
-- Monthly subscription checkout and validated payment callbacks.
-- In-app and email notifications, API keys, a REST API and MCP endpoints.
-- Social inbox sync and analytics code, with unavailable data handled separately from real results.
+| Area | Screens and workflows |
+| --- | --- |
+| Home | Today, recent activity and next steps. |
+| Customers | WhatsApp messages and history; customer cards with name, birthday, preferences, spend, VIP flag and private notes. |
+| Lead pipeline | Public enquiry form, enquiry capture, stages and values, follow-up drafts and approval. Business Pro access applies. |
+| Bookings and quotes | Booking status, completion, Google Calendar connection, quotes and quote status. |
+| Repeat business | Waitlist, loyalty points, rewards and vouchers. |
+| Restaurant tools | Menu items, prices, specials, availability, sales and customer orders from a public menu. |
+| Posts and reviews | Post drafts, per-channel status, submission for review, approvals, scheduling and customer review links. Delivery depends on account connections and provider support. |
+| Content team and photos | Research/writing/review tools and the business media library. Generated words need factual review. |
+| Competitor watch | Competitor prices, promotions, opportunities and campaign drafts. Estimates are not collected revenue. |
+| Industry ideas | In-app Radar: industry selection, post ideas and sourced demand signals when available. This is not the separate owner operations dashboard. |
+| Customer campaigns | Approved messages to consenting customers, with sending and opt-out checks. Not a paid-ad buying platform. |
+| Results | Message counts, post status and review-link activity. Not guaranteed sales attribution. |
+| Customer tools | Printable guest WiFi/enquiry QR card and tracked links. |
+| Owner tools | Business Pro owner assistant and business-record help. Setup and approval rules still apply. |
+| Settings | Setup checklist, business details, WhatsApp and calendar connections, business switching, monthly plan and payment status. |
 
-## Monthly plans
+## Plans and payment status
 
-The current application defines these monthly plans in South African Rand:
-
-| Plan | Monthly price | Monthly receptionist replies | Connected channels |
+| Plan | Monthly price (ZAR) | Configured monthly reply allowance | Connected channels |
 | --- | ---: | ---: | ---: |
 | Starter | R499 | 500 | 1 |
 | Growth | R999 | 1,000 | 2 |
 | Business Pro | R1,999 | 2,500 | 3 |
 
-No setup fee. These are the configured application prices and allowances, not evidence that live billing or every feature is enabled. Confirm the applicable plan, activation and billing terms before customer onboarding. Do not treat this table as a promise of unlimited use.
+No setup fee. Plan access, usage limits and activation checks apply. A plan name in a database is not evidence of payment or successful activation.
 
-## What is not claimed
+The current live billing screen uses **one-off Yoco payment links for each month**, not automatic card charging. PayFast sandbox callback code remains in the repository; its presence does not make it the current checkout. Paystack work on a review branch is not a live release. Do not describe test receipts as sales or collected revenue. See [pricing notes](workers/revup-cf/PRICING.md).
 
-- A complete advertising campaign manager or full CRM deals pipeline.
-- Proven revenue attribution or guaranteed customer outcomes.
-- Every social platform supporting every inbox or analytics feature.
-- Unattended customer activation without connection and acceptance checks.
-- Production-ready two-factor authentication.
+## What availability does not mean
 
-Customer records, enquiries and opportunity boards are implemented. That is not the same as a full CRM or an advertising platform.
+- Messaging, calendar sync, reviews and publishing need the right business account, permissions and end-to-end checks.
+- Facebook/Instagram posting must not be described as proven live merely because its connection or post screen exists.
+- The lead pipeline is not a promise of every full-CRM feature. Customer campaigns are not a complete advertising campaign manager.
+- Activity, link clicks, opportunities and estimated impact are not proven revenue or guaranteed outcomes.
+- Inherited API, media-processing, reporting and team features in Django are not automatically available in the Worker interface.
+- No claim of unattended activation or production-ready two-factor authentication is made here.
 
-## Implementation map
+## Implementation and documentation
 
-| Area | Source |
+| Purpose | Start here |
 | --- | --- |
-| Receptionist, contacts, intake and bookings | `apps/receptionist/` |
-| Review requests and follow-up | `apps/receptionist/reviews.py` |
-| Customer-owned messaging onboarding | `apps/receptionist/tenant_connect.py` |
-| Subscription billing | `apps/workspaces/payfast.py`, `apps/workspaces/payfast_views.py` |
-| Plan prices and limits | `apps/organizations/models.py`, `apps/workspaces/views.py` |
-| Onboarding checklist | `apps/onboarding/` |
-| Composer and content drafts | `apps/composer/`, `apps/content_agent/` |
-| Scheduling and publishing | `apps/calendar/`, `apps/publisher/`, `providers/` |
-| Social inbox and analytics | `apps/inbox/`, `apps/analytics/` |
-| Approvals and client portal | `apps/approvals/`, `apps/client_portal/` |
-| Media, teams and workspace settings | `apps/media_library/`, `apps/members/`, `apps/settings_manager/` |
-| API and agent connections | `apps/api/`, `apps/api_keys/`, `apps/mcp/` |
+| Current routes, pages, billing and business workspaces | `workers/revup-cf/src/index.ts` |
+| Navigation, Search menu and current landing page | `workers/revup-cf/src/journey.ts`, `landing.ts` |
+| Receptionist, knowledge and owner assistant | `workers/revup-cf/src/receptionist.ts`, `assistant.ts` |
+| Lead pipeline and follow-up handling | `workers/revup-cf/src/enquiries.ts`, `index.ts` |
+| Waitlist, loyalty, vouchers, quotes and competitor opportunities | `workers/revup-cf/src/features.ts` |
+| Menu and customer orders | `workers/revup-cf/src/menu.ts` |
+| Content team, review follow-up, calendar and WiFi card | `workers/revup-cf/src/socialteam.ts`, `reviews.ts`, `calendar.ts`, `wificard.ts` |
+| Current feature inventory and architecture | [`docs/current-product.md`](docs/current-product.md) |
+| Worker release checks | `.github/workflows/revup-cf-gate.yml`, `tools/safe-release/` |
+| Older Django stack and background jobs | `apps/`, `providers/`, `templates/`, `theme/`, `config/` |
+| Historical Django architecture and original product spec | `development_specs/architecture.md`, `development_specs/feature-spec-social-media-management-v2.md` |
+| Older Django API contract | `docs/agent-api.md`; verify target host and route before use. |
 
 ## Development and operations
 
-The current application uses Python 3.12+, Django, PostgreSQL and a background worker. Node.js is used to build the theme. See `.env.example`, `requirements.txt`, `package.json`, the Docker configuration and `docs/` for implementation details. Existing technical documents may describe inherited components; check current code and settings before following them.
+The current front door uses a Cloudflare Worker with Node compatibility, PostgreSQL, server-rendered HTML and scheduled work. Its routing and cron configuration are in `workers/revup-cf/wrangler.toml`. Run the Worker unit suite from that directory with `npm test`; build a deployment candidate with `npx wrangler deploy --dry-run --outdir <candidate-directory>`. A dry-run does not publish.
 
-Never commit credentials. External messaging, publishing, calendar, search, model, email, storage and payment services require their own configuration. Uploaded media needs persistent storage in production.
+The older stack uses Python/Django, PostgreSQL and background jobs. Its Docker, environment and theme-build instructions apply to that stack, not the live Worker front door. Do not remove the older stack just because it is not the front door.
 
-The 6 November 2026 code audit ran 1,268 regression tests successfully using an isolated SQLite test configuration and mocked provider responses. That proves those tested code paths, not a live payment, message delivery, platform connection, production database behaviour or a customer acceptance result. The content-generation suite was not completed in that bounded run.
+Never commit credentials. Provider setup, persistent media storage and per-business connections require separate checks. Tests with mocked providers or fictional records prove only the tested paths. No whole-product readiness percentage or live delivery guarantee follows from a test count.
 
 ## Licence
 
