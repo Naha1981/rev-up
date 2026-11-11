@@ -1,3 +1,4 @@
+import {healthResponse,versionResponse,type RuntimeProofEnv} from './runtime-proof';
 import { boundedMoney, boundedWhole, quoteWonTotal, leadValueCents } from "./numeric-inputs";
 import {captureEnquiry} from "./enquiries";
 import {hasWorkspacePermission,requiredWorkspacePermission} from "./permissions";
@@ -20,7 +21,7 @@ import { startPipeline, cancelPending, runDueReviewEvents, resolveIssue, schedul
 import { ensurePageTables, fetchForMirror, mirrorStructure, generateSections, servePublic, makeSlug, pagesListBody, newPageBody, pageDetailBody, type PageRow, type PageSection } from "./pages";
 import { waitlistAdd, waitlistExpire, waitlistAction, loyaltySettings, loyaltyAccount, awardForBooking, issueVoucher, redeemVoucher, expireVouchers, quoteCreate, quoteAction, segmentContacts, campaignCreate, campaignApprove, campaignCancel, runDueCampaigns, attributeBookingToCampaign, campaignStats, competitorAdd, dishAdd, promoAdd, refreshOpportunities, opportunityAction, opportunityDraftCampaign, supportHandle, autoDraftOpportunities } from "./features";
 
-interface Env {
+interface Env extends RuntimeProofEnv {
   DATABASE_URL: string;
   GOOGLE_CALENDAR_CLIENT_ID?: string;
   GOOGLE_CALENDAR_CLIENT_SECRET?: string;
@@ -1169,16 +1170,8 @@ async function handle(req: Request, env: Env): Promise<Response> {
     const chatAppRes = await handleChatAppRoute(req, env, url, pool);
     if (chatAppRes) return chatAppRes;
 
-    if (path === "/health") {
-      try {
-        const db = pool(env);
-        const r = await db.query("SELECT 1 AS ok");
-        await db.end().catch(() => {});
-        return json({ ok: true, db: r.rows[0].ok === 1, ts: new Date().toISOString() });
-      } catch (e: any) {
-        return json({ ok: false, error: String(e) }, 500);
-      }
-    }
+    if(path==='/version')return versionResponse(req,env);
+    if(path==='/health'||path==='/api/healthz')return healthResponse(req,()=>new Pool({connectionString:env.DATABASE_URL,max:1,connectionTimeoutMillis:1500,idleTimeoutMillis:0}));
 
     // Public tracked review redirect
     const rm = /^\/r\/([A-Za-z0-9_-]{6,12})$/.exec(path);
