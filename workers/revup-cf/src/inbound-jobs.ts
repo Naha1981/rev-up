@@ -20,3 +20,18 @@ export async function failInbound(pool:Pool,workspaceId:string,id:string,lease:s
  if(!/^[a-z0-9_]{1,80}$/.test(errorCode))throw Error('invalid_error_code');
  const r=await pool.query(`UPDATE cf_inbound_job SET state=CASE WHEN attempts>=$5 THEN 'dead' ELSE 'retry_wait' END,available_at=now()+interval '30 seconds',last_error_code=$4,lease_token=NULL,lease_until=NULL WHERE id=$1 AND workspace_id=$2 AND state='processing' AND lease_token=$3 AND lease_until>now()`,[id,workspaceId,lease,errorCode,maxAttempts]);return !!r.rowCount;
 }
+
+// Database-only effect callback. Never run AI, HTTP, email or external services
+// inside this transaction. All effects use this exact client; never the pool.
+export async function applyInboundEffects(pool:Pool,workspaceId:string,id:string,lease:string,effects:(client:import('pg').PoolClient)=>Promise<void>):Promise<boolean>{
+ const c=await pool.connect();
+ try{
+  await c.query('BEGIN');
+  const owned=await c.query(`SELECT id FROM cf_inbound_job WHERE id=$1 AND workspace_id=$2 AND state='processing' AND lease_token=$3 AND lease_until>clock_timestamp() FOR UPDATE`,[id,workspaceId,lease]);
+  if(!owned.rowCount){await c.query('ROLLBACK');return false;}
+  await effects(c);
+  const done=await c.query(`UPDATE cf_inbound_job SET state='completed',lease_token=NULL,lease_until=NULL,completed_at=now() WHERE id=$1 AND workspace_id=$2 AND state='processing' AND lease_token=$3 AND lease_until>clock_timestamp()`,[id,workspaceId,lease]);
+  if(!done.rowCount){await c.query('ROLLBACK');return false;}
+  await c.query('COMMIT');return true;
+ }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
+}
