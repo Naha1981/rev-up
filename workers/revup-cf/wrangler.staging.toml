@@ -1,0 +1,10 @@
+# Separate opt-in build. Never pass production wrangler.toml or production DB.
+name = "revup-safety-staging"
+main = "src/staging-worker.ts"
+compatibility_date = "2026-11-03"
+compatibility_flags = ["nodejs_compat", "nodejs_compat_populate_process_env"]
+workers_dev = true
+preview_urls = false
+# No routes, custom domains, cron triggers or production vars/secrets.
+[vars]
+STAGING_ONLY = "true"
