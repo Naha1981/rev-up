@@ -23,6 +23,7 @@ import { waitlistAdd, waitlistExpire, waitlistAction, loyaltySettings, loyaltyAc
 interface Env {
   DATABASE_URL: string;
   PAYSTACK_ENABLED?: string;
+  PAYSTACK_SIGNATURE_MODE?: string;
   PAYSTACK_SECRET_KEY?: string;
   PAYSTACK_WEBHOOK_SECRET?: string;
   PAYSTACK_TEST_ORG_IDS?: string;

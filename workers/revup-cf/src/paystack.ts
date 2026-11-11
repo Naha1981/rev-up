@@ -1,6 +1,6 @@
 import type {Pool} from 'pg';
 
-export interface PaystackEnv { PAYSTACK_TEST_ORG_IDS?: string; PAYSTACK_ENABLED?: string; PAYSTACK_SECRET_KEY?: string; PAYSTACK_WEBHOOK_SECRET?: string; }
+export interface PaystackEnv { PAYSTACK_SIGNATURE_MODE?: string; PAYSTACK_TEST_ORG_IDS?: string; PAYSTACK_ENABLED?: string; PAYSTACK_SECRET_KEY?: string; PAYSTACK_WEBHOOK_SECRET?: string; }
 export const PAYSTACK_PRICES: Record<string,number> = {starter:49900,growth:99900,'business-pro':199900};
 export function paystackReady(env:PaystackEnv):boolean {
   // Candidate deliberately supports test keys only. Live activation is a separate approved release.
@@ -54,6 +54,9 @@ async function mac(secret:string,body:Uint8Array):Promise<string>{const key=awai
 export async function validPaystackSignature(raw:Uint8Array,headers:Headers,env:PaystackEnv,now=Math.floor(Date.now()/1000)):Promise<boolean>{
  if(!paystackReady(env))return false;
  const modern=headers.get('paystack-signature');
+ if(env.PAYSTACK_SIGNATURE_MODE==='legacy' && !env.PAYSTACK_WEBHOOK_SECRET){
+  const legacy=headers.get('x-paystack-signature')||'';return /^[a-f0-9]{128}$/.test(legacy)&&equal(legacy,await mac(env.PAYSTACK_SECRET_KEY!,raw));
+ }
  if(modern!==null){
   if(!env.PAYSTACK_WEBHOOK_SECRET?.startsWith('whsec_'))return false;
   let t:string|null=null;const sigs:string[]=[];

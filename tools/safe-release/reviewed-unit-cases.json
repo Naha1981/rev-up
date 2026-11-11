@@ -59,6 +59,8 @@
  "test::enquiry transaction uses upsert returned customer and commits",
  "test::enquiry-data callers: backup is skipped unless consent flags are set",
  "test::every provider call carries a timeout AbortSignal",
+ "test::explicit legacy mode cannot override a configured modern secret",
+ "test::explicit legacy mode still authenticates full raw body even when modern header also exists",
  "test::extractAmounts: percentages and bare numbers are not prices",
  "test::extractAmounts: symbols, ZAR, rand, commas, decimals",
  "test::failed enquiry message rolls back all data",
