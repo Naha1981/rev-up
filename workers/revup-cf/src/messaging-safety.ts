@@ -24,11 +24,12 @@ async function tx<T>(pool:Pool,f:(c:PoolClient)=>Promise<T>):Promise<T>{
 }
 const scopeValues=(s:Scope)=>[s.workspaceId,s.contactId,s.channelId];
 export async function pauseConversation(pool:Pool,s:Scope,reason:string,suppress=false):Promise<void>{
- await tx(pool,async c=>{
+ await tx(pool,c=>pauseConversationOnClient(c,s,reason,suppress));
+}
+export async function pauseConversationOnClient(c:PoolClient,s:Scope,reason:string,suppress=false):Promise<void>{
   if(suppress)await c.query(`INSERT INTO cf_contact_suppression(workspace_id,contact_id,suppressed,reason) VALUES($1,$2,true,$3) ON CONFLICT(workspace_id,contact_id) DO UPDATE SET suppressed=true,version=cf_contact_suppression.version+1,reason=EXCLUDED.reason,updated_at=now()`,[s.workspaceId,s.contactId,reason]);
   const r=await c.query(`INSERT INTO cf_conversation_control(workspace_id,contact_id,channel_id,state,suppressed,reason) VALUES($1,$2,$3,'paused',$4,$5) ON CONFLICT(workspace_id,contact_id,channel_id) DO UPDATE SET state='paused',suppressed=cf_conversation_control.suppressed OR EXCLUDED.suppressed,reason=EXCLUDED.reason,version=cf_conversation_control.version+1,updated_at=now() RETURNING version`,[...scopeValues(s),suppress,reason]);
   await c.query(`INSERT INTO cf_control_audit(id,workspace_id,contact_id,channel_id,action,reason,version) VALUES($1,$2,$3,$4,$5,$6,$7)`,[crypto.randomUUID(),...scopeValues(s),suppress?'stop':'pause',reason,r.rows[0].version]);
- });
 }
 // Callers must authenticate owner/manager authority before invoking. STOP cannot
 // be undone by resume; a future separately evidenced re-consent flow is required.
