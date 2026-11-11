@@ -62,7 +62,8 @@ for(let i=0;i<cases.length;i++){
  }
  const reset=await context.request.get('http://127.0.0.1:8765/forgot-password',{maxRedirects:0});
  row.steps.push({step:'password-recovery',status:reset.status(),location:reset.headers().location});
- row.blockers.push('Signup reached onboarding without an email-verification step; password recovery still redirects to the sleep-prone production Render origin. Redirect was not followed.');
+ row.steps.push({step:'frictionless-signup-policy',note:'No email gate, matching owner4Nov explicit preference. Not a defect.'});
+ row.blockers.push('Password recovery still redirects to the sleep-prone production Render origin. Redirect was not followed.');
  const verify=new Pool({connectionString:dburl,max:1});
  try{
  const state=await verify.query(`select o.plan,o.subscription_status,w.industry, (select count(*)::int from composer_post p where p.workspace_id=w.id) draft_count,(select count(*)::int from account_emailaddress e where e.user_id=u.id and e.verified) verified_email_count from accounts_user u join members_org_membership m on m.user_id=u.id join organizations_organization o on o.id=m.organization_id join workspaces_workspace w on w.organization_id=o.id where u.email=$1`,[email]);

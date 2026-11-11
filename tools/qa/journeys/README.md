@@ -44,9 +44,11 @@ For each: discovery page, real signup form, onboarding form/save/reload,
 plan/payment page, manually entered fictional draft/save, read-only persisted
 state, password-recovery redirect inspection. No invented AI or provider result.
 
-## What does not pass yet
+## Product rule and what does not pass yet
 
-- Email verification: signup reaches onboarding with zero verified email rows.
+- Email verification is intentionally absent under the owner's specific4Nov rule.
+  Zero verified-email rows are not a product defect. The generic Blueprint
+  verification wording must not silently reintroduce a signup gate.
 - Payment and plan activation: the source presents static external Yoco links and
   describes manual confirmation. This harness does not assert settlement,
   self-service activation, Growth/Business Pro rights or payment recovery.
