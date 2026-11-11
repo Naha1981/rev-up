@@ -11,9 +11,9 @@ test('registry: 50 members across 10 departments', () => {
   assert.equal(TEAM_AGENTS.length, 50);
   assert.equal(TEAM_DEPARTMENTS.length, 10);
 });
-test('registry: phase 1 live members are Researcher, Writer, Reviewer', () => {
-  assert.deepEqual(LIVE_AGENTS.map(a => a.slug).sort(), ['researcher', 'reviewer', 'writer']);
-  assert.equal(LIVE_AGENTS.length, 3);
+test('registry: all 50 members have bounded usable workflows', () => {
+  assert.equal(LIVE_AGENTS.length, 50);
+  assert.ok(LIVE_AGENTS.every(a => a.does.length > 30));
 });
 test('registry: every department has exactly 5 members', () => {
   for (const d of TEAM_DEPARTMENTS)
@@ -73,7 +73,8 @@ test('page: compact chips, one primary button, tap-to-expand, no vendor names', 
   assert.ok(html.includes('<details class="tpiece">'));
   assert.ok(html.includes('/team/piece/22222222-2222-2222-2222-222222222222/send'));
   // wider team collapsed to one line
-  assert.ok(html.includes('47 more teammates switch on as you grow'));
+  assert.ok(html.includes('/team/specialists'));
+  assert.ok(!html.includes('switch on as you grow'));
   assert.ok(html.includes('You approve every post'));
   // no long explainer paragraphs / forbidden wording
   assert.ok(!html.includes('50-member team'));

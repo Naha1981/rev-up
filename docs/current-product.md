@@ -68,3 +68,12 @@ This document does not activate services, alter prices/limits or grant permissio
 3. Historical Django specs/API docs for the retained implementation only, after checking that host and route exist.
 
 The original social-platform specification includes old free/unlimited positioning and broad platform plans. It is historical, not the current RevUp offer or a list of verified live integrations. A walkthrough should use real current screenshots and label plan-locked, empty, disconnected or in-progress states honestly.
+
+
+## Industry and specialist workflow completion (11 November 2026)
+
+- `/industries` links to all 27 public `/industries/:id` pages. Each page includes its current qualifying questions, content pack, shared owner-controlled journey, FAQ controls, plan/provider limits and industry-aware signup link. Unknown IDs return 404.
+- `auto-workshop` now has a dedicated service/repair preset. The retained `auto` Car Dealers preset is no longer the workshop alias.
+- `/team/specialists` offers all 50 named roles across 10 departments, each with a distinct job and output contract. A brief uses supplied evidence, relevant saved business/competitor/feed records and aggregate statuses. It is saved with source references, missing-input notes and an independent review. A checked brief can become a post idea, which still uses the writer/reviewer and owner approval flow.
+- Specialist outputs are briefs and plans, not evidence that a platform was monitored, a video watched, a sound licensed, a message sent, a date scheduled or a post published. Roles needing source material or figures reject missing input instead of inventing it. The existing primary generation service is used; this change does not widen backup-data permissions or add a paid provider.
+- Request keys prevent duplicate runs, each workspace has a 50-brief/24-hour budget, stale interrupted requests become retryable failures, and failed review never becomes ready. Cross-workspace reads and post-idea writes are scoped and checked under existing post-creation permissions.

@@ -1,8 +1,7 @@
 // Social media team: a per-business team of specialist members that researches,
 // writes and reviews social posts. The owner makes the final call on every post
-// through the existing approvals queue. Phase 1 ships three members
-// (Researcher, Writer, Reviewer); the registry below already names the full
-// 50-member, 10-department team so the rest can switch on without a rebuild.
+// through the existing approvals queue. All named specialists have a bounded,
+// evidence-driven workflow. They never claim external action from a draft.
 // Customer copy: "your social media team". Never vendor names, never lead with
 // "AI" - these are team members working for the business.
 
@@ -11,7 +10,7 @@ import { freeAiGenerate, rejectInventedPrices, FACT_RULES } from "./freeai";
 
 export interface TeamAgentDef { slug: string; name: string; dept: string; live: boolean; does: string; }
 
-const A = (slug: string, name: string, dept: string, does = ""): TeamAgentDef => ({ slug, name, dept, live: false, does });
+const A = (slug: string, name: string, dept: string, does = ""): TeamAgentDef => ({ slug, name, dept, live: true, does });
 
 export const TEAM_AGENTS: TeamAgentDef[] = [
   // 1 Niche Research
@@ -75,6 +74,260 @@ export const TEAM_AGENTS: TeamAgentDef[] = [
   A("asset-organizer", "Asset Organizer", "Content Operations"),
   A("publishing-checker", "Publishing Checker", "Content Operations"),
 ];
+
+export const SPECIALIST_JOBS: Record<string, {task:string; output:string; needs:string}> = {
+  "researcher": {
+    "task": "Find three distinct post ideas from the business facts and supplied customer questions.",
+    "output": "Three titled ideas, an angle and a reason for each.",
+    "needs": "business"
+  },
+  "audience-mapper": {
+    "task": "Map likely customer needs only from the supplied enquiries or audience notes. Do not invent demographics.",
+    "output": "Customer groups, their stated needs and a useful message for each.",
+    "needs": "brief"
+  },
+  "offer-analyst": {
+    "task": "Assess the supplied offer against business facts and identify unclear terms or unsupported claims.",
+    "output": "Offer strengths, missing terms and a safer offer draft.",
+    "needs": "brief"
+  },
+  "local-scout": {
+    "task": "Summarise supplied local evidence and link each opportunity to its source. No claim of live research.",
+    "output": "Local opportunities with source references, or a missing-evidence checklist.",
+    "needs": "external"
+  },
+  "question-collector": {
+    "task": "Group the supplied customer questions, remove duplicates and propose plain answers using only the business facts.",
+    "output": "Grouped FAQ questions and grounded answer drafts.",
+    "needs": "brief"
+  },
+  "competitor-tracker": {
+    "task": "Compare supplied competitor records with the business information. Do not claim you visited or monitored a site.",
+    "output": "Evidence-linked competitor differences and actions to consider.",
+    "needs": "external"
+  },
+  "ad-watcher": {
+    "task": "Analyse supplied advert text or observations. Do not claim access to an ad library or targeting data.",
+    "output": "Advert message breakdown, claims needing evidence and a distinct draft angle.",
+    "needs": "external"
+  },
+  "price-spotter": {
+    "task": "Compare only the explicitly supplied prices and explain differences. Never invent a price or margin.",
+    "output": "Comparable price table in words, source references and missing comparison terms.",
+    "needs": "external"
+  },
+  "review-reader": {
+    "task": "Summarise the supplied review excerpts without inventing review counts or ratings.",
+    "output": "Repeated strengths, complaints and response themes with evidence references.",
+    "needs": "external"
+  },
+  "move-reporter": {
+    "task": "Describe changes only where dated before-and-after evidence is supplied.",
+    "output": "A dated change brief and its possible implication, or the exact missing comparison.",
+    "needs": "external"
+  },
+  "video-scout": {
+    "task": "Assess supplied video transcripts or notes for useful content ideas. Do not claim to have watched a video from its URL alone.",
+    "output": "Video ideas tied to the supplied transcript or observations.",
+    "needs": "external"
+  },
+  "format-analyst": {
+    "task": "Break the supplied content example into its hook, structure, pacing and call to action.",
+    "output": "A reusable format outline without copied wording.",
+    "needs": "brief"
+  },
+  "sound-tracker": {
+    "task": "Assess supplied audio notes or trend evidence. No claim of current sound popularity, licensing or platform access.",
+    "output": "Sound-fit brief, rights questions and alternatives needing no licensed sound.",
+    "needs": "external"
+  },
+  "watchtime-analyst": {
+    "task": "Analyse only supplied watch-time or retention figures, never assume missing metrics.",
+    "output": "Observed drop-off points, cautious hypotheses and a test plan.",
+    "needs": "metrics"
+  },
+  "trend-catcher": {
+    "task": "Distinguish supplied dated trend evidence from guesses and adapt only relevant facts.",
+    "output": "Dated trend shortlist, source references and a safe adaptation.",
+    "needs": "external"
+  },
+  "creator-scout": {
+    "task": "Assess creators only from supplied profiles or evidence, not imagined followers or contact details.",
+    "output": "Evidence-based creator shortlist and missing checks.",
+    "needs": "external"
+  },
+  "collab-finder": {
+    "task": "Match supplied collaboration candidates to the stated business goals. Do not contact anyone.",
+    "output": "Fit comparison, collaboration concepts and checks before outreach.",
+    "needs": "external"
+  },
+  "style-analyst": {
+    "task": "Describe the supplied creator or brand sample without copying distinctive wording or inventing its performance.",
+    "output": "Voice and structure notes plus an original business-specific adaptation.",
+    "needs": "brief"
+  },
+  "growth-tracker": {
+    "task": "Compare supplied dated audience/content measurements without making up growth.",
+    "output": "Period comparison, limits and one measurable experiment.",
+    "needs": "metrics"
+  },
+  "outreach-planner": {
+    "task": "Plan a collaboration approach from supplied recipient facts. Do not invent contacts or send anything.",
+    "output": "A personalised draft approach and permission/contact checks.",
+    "needs": "brief"
+  },
+  "hook-writer": {
+    "task": "Write five distinct opening lines for the supplied topic using only supported claims.",
+    "output": "Five short hooks with the angle for each.",
+    "needs": "brief"
+  },
+  "first-line-tester": {
+    "task": "Compare supplied opening lines for clarity and fit. This is an editorial comparison, not a measured A/B test.",
+    "output": "Ranked lines with reasons and a fair experiment plan.",
+    "needs": "brief"
+  },
+  "curiosity-builder": {
+    "task": "Create curiosity from a real customer question without clickbait or hidden essential terms.",
+    "output": "Three honest curiosity-led openings and the fact each promises to answer.",
+    "needs": "brief"
+  },
+  "painpoint-finder": {
+    "task": "Identify customer problems only from supplied notes or evidence. No invented customer quotations.",
+    "output": "Problems, evidence references and a helpful content response.",
+    "needs": "brief"
+  },
+  "headline-polisher": {
+    "task": "Improve supplied headlines without exaggerating claims or inventing urgency.",
+    "output": "Before/after headlines and concise edit reasons.",
+    "needs": "brief"
+  },
+  "trend-watcher": {
+    "task": "Review supplied dated feed signals for relevance. Never represent old evidence as current.",
+    "output": "Relevant signals, dates, sources and a content plan.",
+    "needs": "external"
+  },
+  "format-librarian": {
+    "task": "Organise the supplied content examples or topics into reusable format templates.",
+    "output": "A small format library with when to use each format.",
+    "needs": "brief"
+  },
+  "platform-specialist": {
+    "task": "Adapt supplied content to the requested platform without inventing current platform rules, dimensions or limits.",
+    "output": "Platform-ready copy variants and any current rules needing checking.",
+    "needs": "brief"
+  },
+  "calendar-planner": {
+    "task": "Plan content dates only from the requested date range, business hours and supplied events. Do not invent holidays.",
+    "output": "An editorial calendar proposal, not a saved posting schedule.",
+    "needs": "brief"
+  },
+  "seasonal-scout": {
+    "task": "Use only the supplied dates, season and business context to plan timely content.",
+    "output": "Seasonal ideas with the supplied date anchors and fact checks.",
+    "needs": "brief"
+  },
+  "writer": {
+    "task": "Write a plain social caption for the supplied topic, grounded in business facts.",
+    "output": "One caption and optional hashtags, clearly a draft.",
+    "needs": "brief"
+  },
+  "caption-writer": {
+    "task": "Write two caption lengths for the supplied topic with no unsupported claims.",
+    "output": "Short caption, longer caption and optional relevant hashtags.",
+    "needs": "brief"
+  },
+  "story-builder": {
+    "task": "Build a short story only from supplied events. Do not invent customers, quotations or outcomes.",
+    "output": "Beginning, turning point and close, with missing facts marked.",
+    "needs": "brief"
+  },
+  "cta-writer": {
+    "task": "Write calls to action using only the real contact/action details supplied. Do not invent links.",
+    "output": "Five direct calls to action appropriate to the stated goal.",
+    "needs": "brief"
+  },
+  "editor": {
+    "task": "Edit supplied copy for simple language and remove unsupported factual claims.",
+    "output": "Edited copy and a list of facts needing confirmation.",
+    "needs": "brief"
+  },
+  "repurpose-specialist": {
+    "task": "Turn supplied original content into different useful pieces while preserving its facts.",
+    "output": "Three distinct repurposed drafts with formats labelled.",
+    "needs": "brief"
+  },
+  "series-planner": {
+    "task": "Plan a coherent content series from the supplied topic and business facts.",
+    "output": "Episode topics, purpose and next-step links between episodes.",
+    "needs": "brief"
+  },
+  "format-adapter": {
+    "task": "Adapt the supplied draft to the requested format without inventing new facts.",
+    "output": "A format-specific draft plus any production inputs still needed.",
+    "needs": "brief"
+  },
+  "distribution-planner": {
+    "task": "Plan distribution to the supplied owned channels and permitted audiences. Never send or post.",
+    "output": "Channel plan, owner checks and a practical order of work.",
+    "needs": "brief"
+  },
+  "booster": {
+    "task": "Suggest organic improvements to supplied content and results. No paid ad spend, guaranteed reach or fake engagement.",
+    "output": "A bounded organic improvement plan and measurement checks.",
+    "needs": "brief"
+  },
+  "performance-reporter": {
+    "task": "Report only supplied actual counts and statuses. Drafts or clicks are not sales.",
+    "output": "A plain performance report with source labels, period and limits.",
+    "needs": "metrics"
+  },
+  "number-cruncher": {
+    "task": "Calculate comparisons only from supplied figures, show arithmetic and avoid invented denominators.",
+    "output": "Calculations, inputs used and missing measurements.",
+    "needs": "metrics"
+  },
+  "insight-writer": {
+    "task": "Explain the supplied figures cautiously, separating observations from hypotheses.",
+    "output": "What happened, what it may mean and a testable next step.",
+    "needs": "metrics"
+  },
+  "digest-builder": {
+    "task": "Build a concise weekly digest from supplied dated records. Do not claim a week when no period is provided.",
+    "output": "Wins, work awaiting approval, failures and next actions with period limits.",
+    "needs": "metrics"
+  },
+  "wins-tracker": {
+    "task": "Identify verified progress from supplied statuses, never count estimated revenue or test activity as sales.",
+    "output": "Evidence-backed wins and the exact proof still needed for uncertain outcomes.",
+    "needs": "metrics"
+  },
+  "reviewer": {
+    "task": "Review the supplied draft for unsupported facts, tone, simple language, consent and business rules.",
+    "output": "Pass/change recommendation with specific corrections.",
+    "needs": "brief"
+  },
+  "scheduler": {
+    "task": "Prepare a posting schedule from supplied dates and approved content only. Do not claim anything was scheduled.",
+    "output": "A proposed schedule and the exact approval/scheduling steps for the owner.",
+    "needs": "brief"
+  },
+  "approval-chaser": {
+    "task": "Summarise supplied pending-review records and draft one polite reminder. Do not send it.",
+    "output": "Pending items, owner decisions and a reminder draft.",
+    "needs": "operations"
+  },
+  "asset-organizer": {
+    "task": "Organise supplied asset descriptions by campaign/use and identify missing assets. Do not claim to inspect an image from its name.",
+    "output": "A naming/tagging plan and a production checklist.",
+    "needs": "brief"
+  },
+  "publishing-checker": {
+    "task": "Check supplied post statuses and failure records. A scheduled/approved status is not published.",
+    "output": "Published/awaiting/failed checklist and safe next steps without retrying a post.",
+    "needs": "operations"
+  }
+};
+for(const agent of TEAM_AGENTS) agent.does=SPECIALIST_JOBS[agent.slug].task;
 
 export const LIVE_AGENTS = TEAM_AGENTS.filter((a) => a.live);
 export const TEAM_DEPARTMENTS = [...new Set(TEAM_AGENTS.map((a) => a.dept))];
@@ -241,7 +494,7 @@ function firstLine(caption: string): string {
 }
 
 export function teamPageBody(ideas: any[], pieces: any[], msg = ""): string {
-  const chips = LIVE_AGENTS.map((a) =>
+  const chips = LIVE_AGENTS.filter(a=>["researcher","writer","reviewer"].includes(a.slug)).map((a) =>
     `<span class="tchip"><span class="tav">${esc(a.name[0])}</span>${esc(a.name)}</span>`).join("");
   const ideaRows = ideas.slice(0, 3).map((i: any) => `
 <details class="tidea"><summary><span class="tidea-t">${esc(i.title)}</span><span class="tchev">&#9656;</span></summary>
@@ -260,10 +513,10 @@ ${p.status === "ready" || p.status === "returned" ? `<form class="inline" method
   return `${PAGE_CSS}
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <div class="tchips">${chips}</div>
-<form method="post" action="/team/research"><button>Get fresh ideas</button></form>
+<form method="post" action="/team/research"><button>Get fresh ideas</button></form><p><a href="/team/specialists">Work with a specialist</a></p>
 ${ideaRows ? `<p class="tlbl">Fresh ideas</p>${ideaRows}` : ""}
 ${pieceRows ? `<p class="tlbl">Posts</p>${pieceRows}` : ""}
-<p class="tfoot">${TEAM_AGENTS.length - LIVE_AGENTS.length} more teammates switch on as you grow. You approve every post.</p>`;
+<p class="tfoot">All 50 specialists are available for evidence-based briefs. You approve every post.</p>`;
 }
 
 export async function teamPage(db: Pool, ws: string, msg = ""): Promise<string> {

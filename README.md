@@ -83,3 +83,8 @@ Never commit credentials. Provider setup, persistent media storage and per-busin
 ## Licence
 
 This repository retains the AGPL-3.0 licence. See [LICENSE](LICENSE) and the existing source notices. RevUp's branding does not remove the obligations attached to inherited code.
+
+
+### Industry and specialist pages
+
+The Worker serves all 27 public industry pages at `/industries/:id`, linked from `/industries` and the homepage. Auto workshop has dedicated service/repair intake. The content team includes `/team/specialists`: all 50 roles can produce grounded, saved and reviewed briefs from supplied evidence. Checked briefs can become post ideas; no specialist brief itself sends, schedules or publishes. See [the current product map](docs/current-product.md) for limits and the owner approval path.

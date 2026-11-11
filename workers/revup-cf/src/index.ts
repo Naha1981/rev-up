@@ -13,6 +13,7 @@ import { connectFailure, saveTenantKey } from "./connect-errors";
 import { Client, Pool } from "pg";
 import { APPLE_TOUCH_B64, FAVICON_16_B64, FAVICON_32_B64, FAVICON_ICO_B64, LOGO_B64, OG_B64, landingPage } from "./landing";
 export { landingPage } from "./landing";
+import {industriesIndexBody,industryPageBody} from "./industries";
 import { INDUSTRIES, getPreset, industryLabel } from "./presets";
 import { handleZernioWebhook, verifyZernioSignature, validateTenantKey, tenantConnectUrl, tenantConfirmAndBind, tenantWebhookSecret } from "./receptionist";
 import { startPipeline, cancelPending, runDueReviewEvents, resolveIssue, scheduleServiceReminder, runDueServiceReminders } from "./reviews";
@@ -60,6 +61,8 @@ import { wifiCardPage } from "./wificard";
 import { menuManagePage, ordersPage, publicMenuHtml, createOrder, loadMenu } from "./menu";
 import { handleChatAppRoute } from "./chatapp";
 import { freeAiGenerate, rejectInventedPrices, FACT_RULES } from "./freeai";
+import {ensureSpecialists,specialistSources,requiredEvidence,runSpecialist,specialistsPageBody} from "./specialists";
+import {TEAM_AGENTS} from "./socialteam";
 import { ensureSocialTeamSchema, teamPage, runResearcher, producePiece } from "./socialteam";
 import { QRCODE_LIB } from "./qrcodejs";
 export function md5(input: string): string { return SparkMD5.hash(input); }
@@ -393,9 +396,10 @@ ${err ? `<p class="bad">${esc(err)}</p>` : ""}
 <button>Send enquiry</button></form></div>`);
 
 // ---------- pages ----------
-export const signupPage = (err = "") => layout("Create your RevUp account", `
+export const signupPage = (err = "", industry = "") => layout("Create your RevUp account", `
 ${err ? `<p class="bad">${esc(err)}</p>` : ""}
 <div class="card"><form method="post" action="/signup">
+<input type="hidden" name="industry" value="${esc(INDUSTRIES.some(([id])=>id===industry)?industry:'')}">
 <label>Your name<input name="name" required maxlength="150"></label>
 <label>Email<input name="email" type="email" required maxlength="254"></label>
 <label>Password<input name="password" type="password" autocomplete="new-password" required minlength="8" aria-describedby="password-help"></label>
@@ -1228,13 +1232,14 @@ async function handle(req: Request, env: Env): Promise<Response> {
     }
 
     if (path === "/signup") {
-      if (req.method === "GET") return html(signupPage());
+      if (req.method === "GET") return html(signupPage("",url.searchParams.get("industry")||""));
       {
         const rl = pool(env);
         try { if (await rateLimited(rl, "signup", req, 10)) { await rl.end().catch(() => {}); return html(signupPage("Too many signups from this network today - please try again tomorrow."), 429); } await rl.end().catch(() => {}); }
         catch { await rl.end().catch(() => {}); }
       }
       const f = await formData(req);
+      const selectedIndustry=INDUSTRIES.some(([id])=>id===f.industry)?f.industry:"";
       const db = pool(env);
       try {
         if (!f.email || !f.password || !f.name || !f.business) return html(signupPage("All fields are required."), 400);
@@ -1256,7 +1261,7 @@ async function handle(req: Request, env: Env): Promise<Response> {
              VALUES($1,$2,'','Africa/Johannesburg','starter','pending_activation',$3,'','',NULL,$4,now(),now())`, [orgId, f.business.trim(), ref, email]);
           await client.query(
             `INSERT INTO workspaces_workspace(id,name,description,organization_id,timezone,primary_color,secondary_color,default_hashtags,default_first_comment,approval_workflow_mode,is_archived,icon,industry,publish_test_mode,website_url,facebook_url,web_presence_gate_exempt,created_at,updated_at)
-             VALUES($1,$2,'',$3,'Africa/Johannesburg','#0ea5e9','#0b1120','[]'::jsonb,'','required',false,'','',false,'','',false,now(),now())`, [wsId, f.business.trim(), orgId]);
+             VALUES($1,$2,'',$3,'Africa/Johannesburg','#0ea5e9','#0b1120','[]'::jsonb,'','required',false,'',$4,false,'','',false,now(),now())`, [wsId, f.business.trim(), orgId,selectedIndustry]);
           await client.query(
             `INSERT INTO members_org_membership(id,org_role,organization_id,user_id,accepted_at,invited_at) VALUES($1,'owner',$2,$3,now(),now())`,
             [crypto.randomUUID(), orgId, userId]);
@@ -1359,6 +1364,12 @@ async function handle(req: Request, env: Env): Promise<Response> {
     // Dental QA workspace form so the full scan loop can be tried live.
     if (path === "/wifi-card/sample") {
       return html(layout("Sample WiFi Card", wifiCardPage({ businessName: "Sample Dental Studio", enquiryUrl: `${base}/f/c72ce206-854d-48bc-bd56-726f53f23293`, prefill: { ssid: "SampleDental-Guest", pass: "Smile2026Guest" }, sample: true })));
+    }
+
+    if(req.method === "GET" && (path === "/industries" || path.startsWith("/industries/"))){
+      if(path === "/industries") return html(layout("Industries",industriesIndexBody()).replace("<h1>Industries</h1>",""));
+      const body=industryPageBody(path.slice("/industries/".length));
+      return body ? html(layout("Your industry",body).replace("<h1>Your industry</h1>","")) : html(layout("Industry not found",'<p>That industry is not in the current list.</p><a href="/industries">Choose an industry</a>'),404);
     }
 
     // everything below needs auth
@@ -1819,6 +1830,40 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
       if (path === "/team") {
         await ensureSocialTeamSchema(db);
         return html(layout("Your social media team", await teamPage(db, mem.workspace_id, url.searchParams.get("msg") || ""), user));
+      }
+
+      if(path === "/team/specialists"){
+        await ensureSpecialists(db);
+        if(req.method === "POST"){
+          if(req.headers.get("origin") && req.headers.get("origin")!==url.origin)return html(layout("Request not allowed","<p>Open your content team and try again.</p>",user),403);
+          const f=await formData(req),slug=f.agent_slug||"",brief=(f.brief||"").trim();
+          if(!TEAM_AGENTS.some(a=>a.slug===slug)||brief.length<12||brief.length>4000||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(f.request_key||""))return redirect("/team/specialists?msg="+encodeURIComponent("Choose a specialist and add a topic between 12 and 4,000 characters."));
+          const budget=await db.query(`SELECT count(*)::int AS count FROM socialteam_specialist_run WHERE workspace_id=$1 AND created_at >= now() - interval '1 day'`,[mem.workspace_id]);
+          if(Number(budget.rows[0]?.count)>=50)return redirect("/team/specialists?msg="+encodeURIComponent("You have reached 50 specialist briefs in the last 24 hours. Try again tomorrow."));
+          const sources=await specialistSources(db,mem.workspace_id),issue=requiredEvidence(slug,brief,sources);
+          if(issue)return redirect("/team/specialists?msg="+encodeURIComponent(issue));
+          const id=crypto.randomUUID(),insert=await db.query(`INSERT INTO socialteam_specialist_run(id,workspace_id,request_key,agent_slug,brief) VALUES($1,$2,$3,$4,$5) ON CONFLICT(workspace_id,request_key) DO NOTHING RETURNING id`,[id,mem.workspace_id,f.request_key,slug,brief]);
+          if(!insert.rows.length)return redirect("/team/specialists?msg="+encodeURIComponent("This request is already saved. Check Saved work below."));
+          try{
+            const result=await runSpecialist(env,slug,mem.org_name||"local business",brief,sources);
+            await db.query(`UPDATE socialteam_specialist_run SET status=$1,output=$2::jsonb,review_note=$3 WHERE id=$4 AND workspace_id=$5`,[result.pass?"ready":"needs_review",JSON.stringify(result.output),result.reviewNote,id,mem.workspace_id]);
+          }catch{
+            await db.query(`UPDATE socialteam_specialist_run SET status='failed',review_note='The specialist could not finish. Nothing was sent or published. Try again with the required facts.' WHERE id=$1 AND workspace_id=$2`,[id,mem.workspace_id]);
+          }
+          return redirect("/team/specialists#run-"+id);
+        }
+        await db.query(`UPDATE socialteam_specialist_run SET status='failed',review_note='This request stopped before it could finish. Nothing was sent or published. Create a new brief to try again.' WHERE workspace_id=$1 AND status='running' AND created_at < now() - interval '2 minutes'`,[mem.workspace_id]);
+        const runs=await db.query(`SELECT * FROM socialteam_specialist_run WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 20`,[mem.workspace_id]);
+        return html(layout("Work with a specialist",specialistsPageBody(runs.rows,url.searchParams.get("msg")||"",url.searchParams.get("role")||""),user));
+      }
+      const specialistIdea=/^\/team\/specialists\/([0-9a-f-]{36})\/idea$/.exec(path);
+      if(specialistIdea && req.method === "POST"){
+        if(req.headers.get("origin") && req.headers.get("origin")!==url.origin)return html(layout("Request not allowed","<p>Open your content team and try again.</p>",user),403);
+        await ensureSpecialists(db);await ensureSocialTeamSchema(db);const client=await db.connect();
+        try{await client.query("BEGIN");const run=(await client.query(`SELECT * FROM socialteam_specialist_run WHERE id=$1 AND workspace_id=$2 FOR UPDATE`,[specialistIdea[1],mem.workspace_id])).rows[0];
+          if(run?.status === "ready" && !run.idea_id && run.output){const id=crypto.randomUUID();await client.query(`INSERT INTO socialteam_idea(id,workspace_id,title,angle,rationale) VALUES($1,$2,$3,$4,$5)`,[id,mem.workspace_id,run.output.summary.slice(0,160),run.output.deliverable.slice(0,400),"From a checked specialist brief. Review the facts before writing."]);await client.query(`UPDATE socialteam_specialist_run SET idea_id=$1 WHERE id=$2 AND workspace_id=$3`,[id,run.id,mem.workspace_id]);}
+          await client.query("COMMIT");return redirect("/team?msg="+encodeURIComponent("Your checked specialist brief is saved as a post idea. Review and write it when ready."));
+        }catch{await client.query("ROLLBACK");throw new Error("Could not save the post idea");}finally{client.release();}
       }
 
       if (path === "/team/research" && req.method === "POST") {
