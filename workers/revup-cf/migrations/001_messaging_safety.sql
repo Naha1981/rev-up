@@ -29,7 +29,7 @@ CREATE TABLE cf_outbound_message (
  business_key text NOT NULL,purpose text NOT NULL,body text NOT NULL,
  state text NOT NULL DEFAULT 'held' CHECK(state IN ('held','approved','queued','dispatching','provider_accepted','delivered','read','failed','unknown','cancelled')),
  approved_by uuid,approved_at timestamptz,attempt_id uuid,reserved_at timestamptz,lease_until timestamptz,
- control_version bigint,provider_message_id text,hold_reason text NOT NULL DEFAULT '',
+ provider_started_at timestamptz,start_token uuid,control_version bigint,provider_message_id text,hold_reason text NOT NULL DEFAULT '',
  created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),
  UNIQUE(workspace_id,business_key),UNIQUE(workspace_id,provider_message_id),UNIQUE(workspace_id,id),
  FOREIGN KEY(workspace_id,contact_id,channel_id) REFERENCES cf_conversation_control(workspace_id,contact_id,channel_id)
@@ -37,7 +37,7 @@ CREATE TABLE cf_outbound_message (
 CREATE TABLE cf_send_budget (
  workspace_id uuid NOT NULL,bucket text NOT NULL,period_start timestamptz NOT NULL,
  reserved integer NOT NULL DEFAULT 0 CHECK(reserved>=0),limit_count integer NOT NULL CHECK(limit_count>=0),
- PRIMARY KEY(workspace_id,bucket,period_start),CHECK(reserved<=limit_count)
+ PRIMARY KEY(workspace_id,bucket,period_start)
 );
 CREATE TABLE cf_outbound_attempt (
  id uuid PRIMARY KEY,workspace_id uuid NOT NULL,message_id uuid NOT NULL,

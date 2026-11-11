@@ -46,9 +46,9 @@ export async function reserveDispatch(pool:Pool,s:Scope,messageId:string,e:Eligi
   if(!ctrl||ctrl.state!=='active'||ctrl.suppressed)return{ok:false,reason:'paused_or_suppressed'};
   const m=await c.query(`SELECT * FROM cf_outbound_message WHERE id=$1 AND workspace_id=$2 AND contact_id=$3 AND channel_id=$4 FOR UPDATE`,[messageId,...scopeValues(s)]);const message=m.rows[0];
   if(!message||!['approved','queued'].includes(message.state)||!message.approved_by||!message.approved_at)return{ok:false,reason:'not_dispatchable'};
-  await c.query(`INSERT INTO cf_send_budget(workspace_id,bucket,period_start,limit_count) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,[s.workspaceId,budget.bucket,budget.periodStart,budget.limit]);
+  await c.query(`INSERT INTO cf_send_budget(workspace_id,bucket,period_start,limit_count) VALUES($1,$2,$3,$4) ON CONFLICT(workspace_id,bucket,period_start) DO UPDATE SET limit_count=LEAST(cf_send_budget.limit_count,EXCLUDED.limit_count)`,[s.workspaceId,budget.bucket,budget.periodStart,budget.limit]);
   // Existing lower limit wins; limits cannot be widened by a competing caller.
-  const b=await c.query(`UPDATE cf_send_budget SET reserved=reserved+1,limit_count=LEAST(limit_count,$4) WHERE workspace_id=$1 AND bucket=$2 AND period_start=$3 AND reserved<LEAST(limit_count,$4) RETURNING reserved`,[s.workspaceId,budget.bucket,budget.periodStart,budget.limit]);
+  const b=await c.query(`UPDATE cf_send_budget SET reserved=reserved+1 WHERE workspace_id=$1 AND bucket=$2 AND period_start=$3 AND reserved<limit_count RETURNING reserved`,[s.workspaceId,budget.bucket,budget.periodStart]);
   if(!b.rowCount)return{ok:false,reason:'budget_exhausted'};
   const attemptId=crypto.randomUUID();
   await c.query(`UPDATE cf_outbound_message SET state='dispatching',attempt_id=$1,reserved_at=now(),lease_until=now()+interval '5 seconds',control_version=$2,updated_at=now() WHERE id=$3`,[attemptId,ctrl.version,messageId]);
@@ -57,8 +57,20 @@ export async function reserveDispatch(pool:Pool,s:Scope,messageId:string,e:Eligi
  });
 }
 export async function canBeginReservedAttempt(pool:Pool,s:Scope,messageId:string,attemptId:string):Promise<boolean>{
- const r=await pool.query(`SELECT 1 FROM cf_outbound_message m JOIN cf_conversation_control c USING(workspace_id,contact_id,channel_id) WHERE m.id=$1 AND m.workspace_id=$2 AND m.contact_id=$3 AND m.channel_id=$4 AND m.attempt_id=$5 AND m.state='dispatching' AND m.lease_until>now() AND c.state='active' AND NOT c.suppressed AND c.version=m.control_version`,[messageId,...scopeValues(s),attemptId]);
- return !!r.rowCount; // Reduces race, not an atomic network boundary.
+ const r=await pool.query(`SELECT 1 FROM cf_outbound_message m JOIN cf_conversation_control c USING(workspace_id,contact_id,channel_id) WHERE m.id=$1 AND m.workspace_id=$2 AND m.contact_id=$3 AND m.channel_id=$4 AND m.attempt_id=$5 AND m.state='dispatching' AND m.provider_started_at IS NULL AND m.lease_until>now() AND c.state='active' AND NOT c.suppressed AND c.version=m.control_version`,[messageId,...scopeValues(s),attemptId]);
+ return !!r.rowCount; // Diagnostic only, never grants a provider-start right.
+}
+// Consuming start fence: exactly one caller can obtain a start token. The
+// caller must not send if this returns null. A lost response is UNKNOWN, not
+// permission to retry. The token is needed by the future outcome reducer.
+export async function claimProviderStart(pool:Pool,s:Scope,messageId:string,attemptId:string):Promise<string|null>{
+ return tx(pool,async c=>{
+  const ctrl=await c.query(`SELECT state,suppressed,version FROM cf_conversation_control WHERE workspace_id=$1 AND contact_id=$2 AND channel_id=$3 FOR UPDATE`,scopeValues(s));
+  if(!ctrl.rows[0]||ctrl.rows[0].state!=='active'||ctrl.rows[0].suppressed)return null;
+  const token=crypto.randomUUID();
+  const r=await c.query(`UPDATE cf_outbound_message SET provider_started_at=now(),start_token=$6,updated_at=now() WHERE id=$1 AND workspace_id=$2 AND contact_id=$3 AND channel_id=$4 AND attempt_id=$5 AND state='dispatching' AND provider_started_at IS NULL AND lease_until>now() AND control_version=$7 RETURNING id`,[messageId,...scopeValues(s),attemptId,token,ctrl.rows[0].version]);
+  return r.rowCount?token:null;
+ });
 }
 export async function expireDispatches(pool:Pool,workspaceId:string):Promise<number>{
  return tx(pool,async c=>{
