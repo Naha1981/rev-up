@@ -17,6 +17,7 @@ function makeDb() {
   const n = (t) => t.replace(/\s+/g, ' ').trim().toLowerCase();
   const query = async (text, params = []) => {
     const s = n(text);
+    if (['begin','commit','rollback'].includes(s)||s.startsWith('set local')||s.startsWith('select token from assistant_vault_link'))return{rows:[]};
     if (s.startsWith('create')) return { rows: [] };
     // settings
     if (s.startsWith('select owner_phone, enabled from assistant_setting'))
@@ -117,7 +118,7 @@ function makeDb() {
       return { rows: [{ c: tables.assistant_task.filter((r) => r.workspace_id === params[0] && r.status === 'running').length }] };
     throw new Error('shim: unhandled SQL: ' + s);
   };
-  return { query, tables };
+  return { query, tables, connect:async()=>({query,release:()=>{}}) };
 }
 makeDb.plan = 'business-pro';
 

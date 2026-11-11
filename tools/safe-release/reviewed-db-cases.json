@@ -19,6 +19,7 @@
  "test::caller booleans cannot bypass a persisted workspace policy",
  "test::cancelled message does not resurrect from a valid receipt",
  "test::cap changed without version bump still invalidates persisted reservation",
+ "test::collection token expiring during true row lock wait cannot be claimed",
  "test::concurrent low-limit calls cannot be widened by stale high limits",
  "test::concurrent mapping confirmations cannot duplicate or remap",
  "test::concurrent multi-bucket reservations obey tightest cap despite input order",

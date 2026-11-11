@@ -159,8 +159,12 @@ export async function storeSecret(db: Pool, env: { VAULT_MASTER_KEY?: string }, 
     [ws, name, ciphertext, iv]);
 }
 export async function consumeVaultLink(db: Pool, token: string): Promise<string | null> {
-  const r=await db.query(`UPDATE assistant_vault_link SET used=true WHERE token=$1 AND NOT used AND created_at>clock_timestamp()-interval '15 minutes' RETURNING workspace_id`,[token]);
-  return r.rows[0]?String(r.rows[0].workspace_id):null;
+  const c=await db.connect();try{
+    await c.query('BEGIN');await c.query("SET LOCAL lock_timeout='1000ms'");await c.query("SET LOCAL statement_timeout='2500ms'");
+    await c.query('SELECT token FROM assistant_vault_link WHERE token=$1 FOR UPDATE',[token]);
+    const r=await c.query(`UPDATE assistant_vault_link SET used=true WHERE token=$1 AND NOT used AND created_at>clock_timestamp()-interval '15 minutes' RETURNING workspace_id`,[token]);
+    await c.query('COMMIT');return r.rows[0]?String(r.rows[0].workspace_id):null;
+  }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
 }
 export function collectPage(token: string): string {
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>RevUp Vault</title>
