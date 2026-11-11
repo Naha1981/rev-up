@@ -1,3 +1,4 @@
+import {securityResponse} from './security-headers';
 import {healthResponse,versionResponse,type RuntimeProofEnv} from './runtime-proof';
 import { boundedMoney, boundedWhole, quoteWonTotal, leadValueCents } from "./numeric-inputs";
 import {captureEnquiry} from "./enquiries";
@@ -1065,15 +1066,6 @@ ${mem.activated_at ? `<p class="mut">Active since ${new Date(mem.activated_at).t
 }
 
 // ---------- router ----------
-function withSecurity(res: Response, path: string): Response {
-  const h = new Headers(res.headers);
-  h.set("X-Content-Type-Options", "nosniff");
-  h.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  h.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  // /f/<ws> is the public enquiry form customers embed on their own sites.
-  if (!path.startsWith("/f/")) h.set("X-Frame-Options", "SAMEORIGIN");
-  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
-}
 
 export async function bookingsPage(db:Pool,user:any,mem:any,env:any,url:URL):Promise<Response>{
         const bk = await db.query(
@@ -1105,7 +1097,7 @@ ${calendarPanel(calendar,calendarConfigured(env))}
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const res = await handle(req, env);
-    return withSecurity(res, new URL(req.url).pathname);
+    return securityResponse(res, new URL(req.url).pathname);
   },
   async scheduled(_event: any, env: Env, ctx: any): Promise<void> {
     const db = pool(env);
