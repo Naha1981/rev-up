@@ -1,3 +1,4 @@
+import {paystackReady,initializePaystack,reconcilePaystack,paystackWebhook,expirePaystackEntitlements} from './paystack';
 import { boundedMoney, boundedWhole, quoteWonTotal, leadValueCents } from "./numeric-inputs";
 import {captureEnquiry} from "./enquiries";
 import {hasWorkspacePermission,requiredWorkspacePermission} from "./permissions";
@@ -21,6 +22,10 @@ import { waitlistAdd, waitlistExpire, waitlistAction, loyaltySettings, loyaltyAc
 
 interface Env {
   DATABASE_URL: string;
+  PAYSTACK_ENABLED?: string;
+  PAYSTACK_SECRET_KEY?: string;
+  PAYSTACK_WEBHOOK_SECRET?: string;
+  PAYSTACK_TEST_ORG_IDS?: string;
   GOOGLE_CALENDAR_CLIENT_ID?: string;
   GOOGLE_CALENDAR_CLIENT_SECRET?: string;
   TENANT_FIELD_KEY?: string;
@@ -1030,6 +1035,12 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 }
 
 export async function billingPage(db: Pool, user: any, mem: any, base: string, env: Env): Promise<string> {
+  if(paystackReady(env)){
+    const plans=[['starter','Starter',499],['growth','Growth',999],['business-pro','Business Pro',1999]] as const;
+    const permitted=hasWorkspacePermission(mem,'manage_workspace_settings');
+    const cards=plans.map(([slug,name,price])=>`<div class="card"><h2>${name}</h2><p style="font-size:26px;margin:0">R${price.toLocaleString('en-ZA')}<span class="mut">/month</span></p>${permitted?`<form method="post" action="/billing/paystack/start"><input type="hidden" name="plan" value="${slug}"><button class="btn btn-primary">Test payment - R${price.toLocaleString('en-ZA')}</button></form>`:'<p class="mut">Your business owner manages payments.</p>'}</div>`).join('');
+    return layout('Billing',`<p class="warn">Payment testing only. No real money is charged.</p><p>Plan <b>${esc(mem.plan)}</b> · status ${esc(statusLabel(mem.subscription_status))}</p><div class="grid">${cards}</div><p class="mut">Each payment buys one month. No automatic card charges. Activation follows secure payment confirmation. An incomplete payment does not change your plan.</p>`,user);
+  }
   // One payment link per plan. Each tap is a single card payment for one
   // month - no stored card, no automatic charge. Activation happens when
   // the payment lands (confirmed against the payment dashboard).
@@ -1213,6 +1224,10 @@ async function handle(req: Request, env: Env): Promise<Response> {
       } finally { await db.end().catch(() => {}); }
     }
 
+    if(path === '/billing/paystack/webhook' && req.method==='POST'){
+      const db=pool(env);try{return await paystackWebhook(db,env,req);}finally{await db.end().catch(()=>{});}
+    }
+
     // ITN receiver (PayFast server-to-server): triple-verified, activates the plan.
     if (path === "/billing/payfast-itn" && req.method === "POST") {
       const db = pool(env);
@@ -1374,6 +1389,7 @@ async function handle(req: Request, env: Env): Promise<Response> {
       const user = await getUser(req, db);
       if (!user && path === "/") return html(landingPage());
       if (!user) return redirect("/login");
+      await expirePaystackEntitlements(db,env);
       const mem = await membership(db, user.id, req);
       if (!mem) return html(layout("No workspace", `<p>Your account has no workspace yet. <a href="/signup">Create one</a>.</p>`, user), 403);
       const permission=requiredWorkspacePermission(path,req.method);
@@ -2306,6 +2322,18 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
         } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }
       }
 
+      if(path==='/billing/paystack/start' && req.method==='POST'){
+        if(req.headers.get('origin')!==base)return html('Payment request did not come from this site.',403);
+        if(await rateLimited(db,'paystack-checkout',req,30))return html('Too many payment attempts. Try again tomorrow.',429);
+        try{const f=await formData(req);return redirect(await initializePaystack(db,env,mem.org_id,user.email,String(f.plan||''),base));}
+        catch(e:any){return html(layout('Payment not started',`<p class="bad">${esc(e.message||'Payment service is not available.')}</p><a href="/billing">Back to billing</a>`,user),400);}
+      }
+      if(path==='/billing/paystack/callback' && req.method==='GET'){
+        if(!hasWorkspacePermission(mem,'manage_workspace_settings'))return html('Ask your business owner to check this payment.',403);
+        try{const state=await reconcilePaystack(db,env,url.searchParams.get('reference')||'',mem.org_id);
+          return html(layout('Payment status',`<p>${state==='paid'?'Test payment confirmed. Your test plan is active.':state==='failed'?'Payment did not complete. No plan was activated.':'Payment is still pending. No plan was activated.'}</p><a href="/billing">Back to billing</a>`,user));
+        }catch{return html(layout('Payment status','<p>Payment could not be confirmed. No new activation was made. Return to billing to check again.</p><a href="/billing">Back to billing</a>',user),400);}
+      }
       if (path === "/billing") return html(await billingPage(db, user, mem, base, env));
 
       return html(layout("Not found", `<p class="bad">Nothing here yet.</p>`, user), 404);

@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, review/design-home-only, review/role-hotfix, review/customer-safety, review/workflow-safety, review/campaign-safety, review/entitlement-safety, review/social-handoff-safety, review/opportunity-safety, review/social-writer-safety, review/numeric-safety, review/waitlist-safety, review/phone-table-safety, review/lead-money-safety]
+    branches: [main, review/design-home-only, review/role-hotfix, review/customer-safety, review/workflow-safety, review/campaign-safety, review/entitlement-safety, review/social-handoff-safety, review/opportunity-safety, review/social-writer-safety, review/numeric-safety, review/waitlist-safety, review/phone-table-safety, review/lead-money-safety, review/paystack-candidate]
   pull_request:
     branches: [main]
 
