@@ -153,8 +153,15 @@ export async function getUser(req: Request, db: Pool): Promise<any | null> {
     `UPDATE cf_sessions SET last_seen_at=now() WHERE token_hash=$1 AND expires_at>now()
      RETURNING user_id`, [th]);
   if (!r.rows[0]) return null;
-  const u = await db.query(`SELECT id,email,name,is_superuser FROM accounts_user WHERE id=$1 AND is_active`, [r.rows[0].user_id]);
+  // Worker sessions have no recorded second-factor verification. Never let
+  // an existing password-only session bypass a user's enabled authenticator.
+  const u = await db.query(`SELECT id,email,name,is_superuser FROM accounts_user WHERE id=$1 AND is_active AND totp_enabled=false`, [r.rows[0].user_id]);
   return u.rows[0] || null;
+}
+// Until a verified second-factor ceremony exists on this entry, MFA accounts
+// must not receive password-only Worker sessions. Fail closed for absent flags.
+export function workerPasswordLoginAllowed(row: any): boolean {
+  return !!row && row.totp_enabled === false;
 }
 export async function newSession(db: Pool, userId: string, req: Request): Promise<string> {
   const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
@@ -1271,10 +1278,10 @@ async function handle(req: Request, env: Env): Promise<Response> {
         // Block networks already over the failed-attempt budget BEFORE running
         // bcrypt (cheap check first), then count only failures.
         if (await rateLimitExceeded(db, "login", req, 20)) return html(loginPage("Too many failed attempts from this network today - please try again tomorrow."), 429);
-        const r = await db.query(`SELECT id,password FROM accounts_user WHERE lower(email)=lower($1) AND is_active`, [(f.email || "").trim()]);
+        const r = await db.query(`SELECT id,password,totp_enabled FROM accounts_user WHERE lower(email)=lower($1) AND is_active`, [(f.email || "").trim()]);
         const row = r.rows[0];
         let ok = false;
-        if (row && typeof row.password === "string" && row.password.startsWith("bcrypt_sha256$")) {
+        if (workerPasswordLoginAllowed(row) && typeof row.password === "string" && row.password.startsWith("bcrypt_sha256$")) {
           const v = await db.query(VERIFY_SQL, [f.password || "", row.password.slice("bcrypt_sha256$".length)]);
           ok = v.rows[0]?.ok === true;
         }
