@@ -60,6 +60,14 @@ jobs:
         working-directory: workers/revup-cf
         run: npm ci
 
+      - name: Worker whole-source TypeScript check
+        working-directory: workers/revup-cf
+        run: npm run typecheck
+
+      - name: Production dependency advisory scan
+        working-directory: workers/revup-cf
+        run: npm run audit:prod
+
       - name: "Run worker unit suite (evidence: JUnit XML + raw TAP)"
         working-directory: workers/revup-cf
         run: |
