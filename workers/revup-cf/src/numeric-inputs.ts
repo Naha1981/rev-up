@@ -8,3 +8,7 @@ export function boundedWhole(raw: unknown, min: number, fallback: number, max = 
   const value = raw === undefined || String(raw).trim() === "" ? fallback : Number(raw);
   return Number.isSafeInteger(value) && value >= min && value <= max ? value : null;
 }
+
+export function quoteWonTotal(rows: {status: string; amount_cents: string | number}[]): number {
+  return rows.filter(q => q.status === "won").reduce((sum, q) => sum + Number(q.amount_cents), 0) / 100;
+}

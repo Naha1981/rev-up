@@ -1,4 +1,4 @@
-import { boundedMoney, boundedWhole } from "./numeric-inputs";
+import { boundedMoney, boundedWhole, quoteWonTotal } from "./numeric-inputs";
 import {captureEnquiry} from "./enquiries";
 import {hasWorkspacePermission,requiredWorkspacePermission} from "./permissions";
 import { JOURNEY_CSS, THEME_SCRIPT, JOURNEY_SCRIPT, journeyNav, toolRow, disclosure, COMMAND_CSS, LEGIBILITY_CSS, SETUP_CSS, FINISH_CSS, commandPalette } from "./journey";
@@ -566,13 +566,15 @@ async function loyaltyPage(db: Pool, user: any, mem: any, msg = ""): Promise<str
   const vouchers = await db.query(
     `SELECT v.*, c.name AS contact_name FROM receptionist_voucher v
      JOIN receptionist_contact c ON c.id=v.contact_id WHERE v.workspace_id=$1 ORDER BY v.created_at DESC LIMIT 30`, [mem.workspace_id]);
-  const aRows = accounts.rows.map((a: any) => `<tr><td><b>${esc(a.contact_name || a.wa_id)}</b></td><td>${a.balance} pts</td><td class="mut">${a.lifetime_points} lifetime</td>
-<td>${a.balance >= s.points_for_voucher ? `<form class="inline" method="post" action="/loyalty/vouchers/new"><input type="hidden" name="contact_id" value="${a.contact_id}"><button>Issue R${s.voucher_value_rand} voucher</button></form>` : `<span class="mut">${s.points_for_voucher - a.balance} to go</span>`}</td></tr>`).join("");
-  const vRows = vouchers.rows.map((v: any) => `<tr><td><b>${esc(v.code)}</b></td><td>${esc(v.contact_name)}</td><td>R${v.amount_rand}</td>
-<td>${v.status === "active" ? '<span class="ok">active</span>' : esc(v.status)}</td>
-<td class="mut">to ${new Date(v.expires_at).toLocaleDateString("en-ZA")}</td>
-<td>${v.status === "active" ? `<form class="inline" method="post" action="/loyalty/vouchers/${v.id}/redeem"><button class="link">Redeem</button></form>` : ""}</td></tr>`).join("");
-  return layout("Loyalty", `
+  const aRows = accounts.rows.map((a: any) => `<tr><td data-label="Customer"><b>${esc(a.contact_name || a.wa_id)}</b></td><td data-label="Balance">${a.balance} pts</td><td class="mut" data-label="Lifetime">${a.lifetime_points} lifetime</td>
+<td data-label="Actions">${a.balance >= s.points_for_voucher ? `<form class="inline" method="post" action="/loyalty/vouchers/new"><input type="hidden" name="contact_id" value="${a.contact_id}"><button>Issue R${s.voucher_value_rand} voucher</button></form>` : `<span class="mut">${s.points_for_voucher - a.balance} to go</span>`}</td></tr>`).join("");
+  const vRows = vouchers.rows.map((v: any) => `<tr><td data-label="Code"><b>${esc(v.code)}</b></td><td data-label="Customer">${esc(v.contact_name)}</td><td data-label="Value">R${v.amount_rand}</td>
+<td data-label="Status">${v.status === "active" ? '<span class="ok">active</span>' : esc(v.status)}</td>
+<td class="mut" data-label="Valid">to ${new Date(v.expires_at).toLocaleDateString("en-ZA")}</td>
+<td data-label="Actions">${v.status === "active" ? `<form class="inline" method="post" action="/loyalty/vouchers/${v.id}/redeem"><button class="link">Redeem</button></form>` : ""}</td></tr>`).join("");
+  return layout("Loyalty", `<style>.action-table td{overflow-wrap:anywhere}
+@media(max-width:600px){.action-table,.action-table tbody,.action-table tr,.action-table td{display:block;width:100%;box-sizing:border-box}.action-table tr:first-child{display:none}.action-table tr{padding:10px 0 18px;border-bottom:1px solid var(--line)}.action-table td{padding:8px 0;border:0}.action-table td:before{content:attr(data-label);display:block;font-size:12px;font-weight:700;color:var(--ink3);margin-bottom:4px}.action-table form.inline{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0;width:100%}.action-table button{max-width:100%}.quote-total{overflow-wrap:anywhere}}
+</style>
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">Rules</h2>
 <form method="post" action="/loyalty/settings">
@@ -585,9 +587,9 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <button>Save rules</button></form>
 <p class="mut">Customers earn points automatically when you mark a booking done. First visit earns the welcome bonus.</p></div>
 <h2>Customers</h2>
-<div class="card">${accounts.rows.length ? `<table><tr><th>Customer</th><th>Balance</th><th>Lifetime</th><th></th></tr>${aRows}</table>` : `<p class="mut">No points yet. Mark a booking done and the customer starts earning.</p>`}</div>
+<div class="card">${accounts.rows.length ? `<table class="action-table"><tr><th>Customer</th><th>Balance</th><th>Lifetime</th><th></th></tr>${aRows}</table>` : `<p class="mut">No points yet. Mark a booking done and the customer starts earning.</p>`}</div>
 <h2>Vouchers</h2>
-<div class="card">${vouchers.rows.length ? `<table><tr><th>Code</th><th>Customer</th><th>Value</th><th>Status</th><th>Valid</th><th></th></tr>${vRows}</table>` : `<p class="mut">No vouchers issued yet.</p>`}</div>`, user);
+<div class="card">${vouchers.rows.length ? `<table class="action-table"><tr><th>Code</th><th>Customer</th><th>Value</th><th>Status</th><th>Valid</th><th></th></tr>${vRows}</table>` : `<p class="mut">No vouchers issued yet.</p>`}</div>`, user);
 }
 
 
@@ -648,17 +650,19 @@ ${promos.rows.length ? `<ul>${promoRows}</ul>` : ""}
   const oppRows = opps.rows.map((o: any) => {
     const ev = Array.isArray(o.evidence) ? o.evidence : [];
     return `<tr>
-<td><b>${esc(o.title)}</b><br><span class="mut">${kindLabel[o.kind] || esc(o.kind)}${o.competitor_name ? " · " + esc(o.competitor_name) : ""} · confidence ${o.confidence}%${o.impact_rand !== null ? ` · about R${Number(o.impact_rand).toLocaleString("en-ZA")}/month` : ""}</span><br>
+<td data-label="Opportunity"><b>${esc(o.title)}</b><br><span class="mut">${kindLabel[o.kind] || esc(o.kind)}${o.competitor_name ? " · " + esc(o.competitor_name) : ""} · confidence ${o.confidence}%${o.impact_rand !== null ? ` · about R${Number(o.impact_rand).toLocaleString("en-ZA")}/month` : ""}</span><br>
 ${esc(o.detail)}${ev.length ? `<br><span class="mut">${ev.map((e: string) => esc(e)).join("<br>")}</span>` : ""}</td>
-<td>${o.status === "new" ? "<b>new</b>" : o.status === "acted" ? '<span class="ok">acted on</span>' : '<span class="mut">dismissed</span>'}</td>
-<td>${o.status === "new" ? `<form class="inline" method="post" action="/opportunities/${o.id}/draft"><button>Draft a campaign</button></form>
+<td data-label="Status">${o.status === "new" ? "<b>new</b>" : o.status === "acted" ? '<span class="ok">acted on</span>' : '<span class="mut">dismissed</span>'}</td>
+<td data-label="Actions">${o.status === "new" ? `<form class="inline" method="post" action="/opportunities/${o.id}/draft"><button>Draft a campaign</button></form>
 <form class="inline" method="post" action="/opportunities/${o.id}/acted"><button class="link">Acted on</button></form>
 <form class="inline" method="post" action="/opportunities/${o.id}/dismissed"><button class="link">Dismiss</button></form>` : o.campaign_id ? `<a href="/campaigns">campaign</a>` : ""}</td></tr>`;
   }).join("");
-  return layout("Competitors", `
+  return layout("Competitors", `<style>.action-table td{overflow-wrap:anywhere}
+@media(max-width:600px){.action-table,.action-table tbody,.action-table tr,.action-table td{display:block;width:100%;box-sizing:border-box}.action-table tr:first-child{display:none}.action-table tr{padding:10px 0 18px;border-bottom:1px solid var(--line)}.action-table td{padding:8px 0;border:0}.action-table td:before{content:attr(data-label);display:block;font-size:12px;font-weight:700;color:var(--ink3);margin-bottom:4px}.action-table form.inline{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0;width:100%}.action-table button{max-width:100%}.quote-total{overflow-wrap:anywhere}}
+</style>
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <h2>Opportunities</h2>
-<div class="card">${opps.rows.length ? `<table><tr><th>Opportunity</th><th>Status</th><th></th></tr>${oppRows}</table>` : `<p class="mut">No opportunities right now. Log competitors, their dishes and their promos below and the board fills itself.</p>`}</div>
+<div class="card">${opps.rows.length ? `<table class="action-table"><tr><th>Opportunity</th><th>Status</th><th></th></tr>${oppRows}</table>` : `<p class="mut">No opportunities right now. Log competitors, their dishes and their promos below and the board fills itself.</p>`}</div>
 <h2>Competitors</h2>
 <div class="card"><form method="post" action="/competitors">
 <input name="name" required maxlength="120" placeholder="Competitor name" style="width:180px">
@@ -724,15 +728,17 @@ async function quotesPage(db: Pool, user: any, mem: any, msg = ""): Promise<stri
   const rows = r.rows.map((q: any) => {
     const chase = q.status === "sent" && q.follow_up_on && new Date(q.follow_up_on) <= new Date(today + "T00:00:00");
     return `<tr${chase ? ' style="background:#fff7ed"' : ""}>
-<td><b>${esc(q.customer_name)}</b><br><span class="mut">${esc(q.title || "Quote")}</span></td>
-<td>R${(q.amount_cents / 100).toLocaleString("en-ZA", { minimumFractionDigits: 2 })}</td>
-<td>${q.status === "sent" ? '<span class="pill warn">sent</span>' : q.status === "won" ? '<span class="ok">won</span>' : q.status === "lost" ? '<span class="mut">lost</span>' : "<b>draft</b>"}
+<td data-label="Customer"><b>${esc(q.customer_name)}</b><br><span class="mut">${esc(q.title || "Quote")}</span></td>
+<td data-label="Amount">R${(q.amount_cents / 100).toLocaleString("en-ZA", { minimumFractionDigits: 2 })}</td>
+<td data-label="Status">${q.status === "sent" ? '<span class="pill warn">sent</span>' : q.status === "won" ? '<span class="ok">won</span>' : q.status === "lost" ? '<span class="mut">lost</span>' : "<b>draft</b>"}
 ${chase ? `<br><span class="bad">chase today</span>` : q.follow_up_on ? `<br><span class="mut">chase ${new Date(q.follow_up_on).toLocaleDateString("en-ZA")}</span>` : ""}</td>
-<td>${q.status === "draft" ? `<form class="inline" method="post" action="/quotes/${q.id}/sent"><button>Mark sent</button></form>` : ""}
+<td data-label="Actions">${q.status === "draft" ? `<form class="inline" method="post" action="/quotes/${q.id}/sent"><button>Mark sent</button></form>` : ""}
 ${["draft", "sent"].includes(q.status) ? `<form class="inline" method="post" action="/quotes/${q.id}/won"><button class="link">Won</button></form> <form class="inline" method="post" action="/quotes/${q.id}/lost"><button class="link">Lost</button></form>` : ""}</td></tr>`;
   }).join("");
-  const won = r.rows.filter((q: any) => q.status === "won").reduce((t: number, q: any) => t + q.amount_cents, 0) / 100;
-  return layout("Quotes", `
+  const won = quoteWonTotal(r.rows);
+  return layout("Quotes", `<style>.action-table td{overflow-wrap:anywhere}
+@media(max-width:600px){.action-table,.action-table tbody,.action-table tr,.action-table td{display:block;width:100%;box-sizing:border-box}.action-table tr:first-child{display:none}.action-table tr{padding:10px 0 18px;border-bottom:1px solid var(--line)}.action-table td{padding:8px 0;border:0}.action-table td:before{content:attr(data-label);display:block;font-size:12px;font-weight:700;color:var(--ink3);margin-bottom:4px}.action-table form.inline{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0;width:100%}.action-table button{max-width:100%}.quote-total{overflow-wrap:anywhere}}
+</style>
 ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <div class="card"><h2 style="margin-top:0">New quote</h2>
 <form method="post" action="/quotes">
@@ -743,8 +749,8 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <label>Chase on<input name="follow_up_on" type="date"></label>
 <button>Save quote</button></form>
 <p class="mut">Mark it sent when it goes out - a linked customer gets it on WhatsApp too. Chase rows highlight when the follow-up day arrives.</p></div>
-<p class="mut">Won so far: <b>R${won.toLocaleString("en-ZA", { minimumFractionDigits: 2 })}</b></p>
-<div class="card">${r.rows.length ? `<table><tr><th>Customer</th><th>Amount</th><th>Status</th><th></th></tr>${rows}</table>` : `<p class="mut">No quotes yet.</p>`}</div>`, user);
+<p class="mut quote-total">Won so far: <b>R${won.toLocaleString("en-ZA", { minimumFractionDigits: 2 })}</b></p>
+<div class="card">${r.rows.length ? `<table class="action-table"><tr><th>Customer</th><th>Amount</th><th>Status</th><th></th></tr>${rows}</table>` : `<p class="mut">No quotes yet.</p>`}</div>`, user);
 }
 
 async function reviewsPage(db: Pool, user: any, mem: any, base: string, msg = ""): Promise<string> {
