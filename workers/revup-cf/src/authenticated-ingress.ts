@@ -25,9 +25,10 @@ export async function receiveSignedIngress(pool:Pool,input:{endpointId:string;ra
   let secret:string;try{secret=await decryptTenantKey(binding.encrypted_secret,env);}catch{await c.query('ROLLBACK');return null;}
   if(!await authenticRawBody(input.raw,input.signature,secret)){await c.query('ROLLBACK');return null;}
   let e:any;try{e=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(input.raw));}catch{await c.query('ROLLBACK');return null;}
-  const events=['message.received','message.delivered','message.read','message.failed'];
+  const events=['message.received','message.delivered','message.read','message.failed','conversation.control_changed'];
   // No payload flags may establish authentication, routing, user approval or consent.
-  if(!e||typeof e!=='object'||Array.isArray(e)||e.test!==undefined||!identifier(e.id)||e.id!==input.eventIdHeader||e.event!==input.eventHeader||!events.includes(e.event)||!identifier(e.account?.accountId)||e.account.accountId!==binding.account_id||e.account.profileId!==binding.profile_id||(e.account.id!==undefined&&e.account.id!==binding.account_id)||!identifier(e.message?.id)) {await c.query('ROLLBACK');return null;}
+  if(!e||typeof e!=='object'||Array.isArray(e)||e.test!==undefined||!identifier(e.id)||e.id!==input.eventIdHeader||e.event!==input.eventHeader||!events.includes(e.event)||!identifier(e.account?.accountId)||e.account.accountId!==binding.account_id||e.account.profileId!==binding.profile_id||(e.account.id!==undefined&&e.account.id!==binding.account_id)) {await c.query('ROLLBACK');return null;}
+  if(e.event==='conversation.control_changed'){if(!identifier(e.conversation?.id)||!['app','ai_agent','other'].includes(e.control?.owner)){await c.query('ROLLBACK');return null;}}else if(!identifier(e.message?.id)){await c.query('ROLLBACK');return null;}
   if(e.event==='message.received'&&(e.message.direction!=='incoming'||!identifier(e.message.conversationId))){await c.query('ROLLBACK');return null;}
   // A provider timestamp is retained as a claim only, not a permission/window.
   // Wall-clock expiry after signature work and row-lock wait, immediately at insert.
