@@ -965,9 +965,21 @@ ${(p.hashtags || []).length ? `<p class="mut">Default hashtags: ${esc(p.hashtags
 ${feed.rows.length ? `<table><tr><th>Signal</th><th>Source</th><th>When</th></tr>${items}</table>` : `<p class="mut">No signals yet for this business. The radar collects South African news and demand signals for your industry; they appear here as they arrive.</p>`}</div>`, user);
 }
 
-async function analyticsPage(db: Pool, user: any, mem: any): Promise<string> {
+export function receptionistConnectionState(profile: any, channels: any[]) {
+  const live = channels.filter(c => !c.is_sandbox && c.phone_number && c.connected_at);
+  if (!channels.length) return "not connected";
+  if (!live.length) return "test line only";
+  if (!profile?.is_active) return "paused";
+  const verified = live.some(c => c.messaging_status === "connected" && c.webhook_id && !c.messaging_error && c.connection_account_id === c.zernio_account_id);
+  return verified ? "ready for replies" : "connection needs verification";
+}
+
+export async function analyticsPage(db: Pool, user: any, mem: any): Promise<string> {
   const [byStatus, links, clicks, contacts, msgsIn, msgsOut, clicksByDay] = await Promise.all([
-    db.query(`SELECT pp.status, count(*) c FROM composer_platform_post pp JOIN composer_post p ON p.id=pp.post_id WHERE p.workspace_id=$1 GROUP BY pp.status ORDER BY c DESC`, [mem.workspace_id]),
+    db.query(`WITH saved_posts AS (
+      SELECT p.id, COALESCE((SELECT string_agg(DISTINCT pp.status, ', ' ORDER BY pp.status) FROM composer_platform_post pp WHERE pp.post_id=p.id), 'draft (no channel selected)') AS status
+      FROM composer_post p WHERE p.workspace_id=$1
+    ) SELECT status, count(*) c FROM saved_posts GROUP BY status ORDER BY c DESC, status`, [mem.workspace_id]),
     db.query(`SELECT count(*) c FROM receptionist_reviewlink WHERE workspace_id=$1`, [mem.workspace_id]),
     db.query(`SELECT count(*) c FROM receptionist_reviewlink WHERE workspace_id=$1 AND clicked_at IS NOT NULL`, [mem.workspace_id]),
     db.query(`SELECT count(*) c FROM receptionist_contact WHERE workspace_id=$1`, [mem.workspace_id]),
@@ -983,7 +995,7 @@ async function analyticsPage(db: Pool, user: any, mem: any): Promise<string> {
 <div class="card"><h2>Customers</h2><p class="stat">${contacts.rows[0].c}</p><p class="mut">in inbox</p></div>
 <div class="card"><h2>WhatsApp messages</h2><p class="stat">${msgsIn.rows[0].c} in · ${msgsOut.rows[0].c} out</p></div>
 </div>
-<div class="card"><h2>Posts by status</h2>${byStatus.rows.length ? `<table><tr><th>Status</th><th>Count</th></tr>${statusRows}</table>` : `<p class="mut">No posts yet.</p>`}</div>
+<div class="card"><h2>Saved posts by status</h2><p class="mut">Each saved post is counted once. Posts with different channel states show all those states.</p>${byStatus.rows.length ? `<table><tr><th>Status</th><th>Count</th></tr>${statusRows}</table>` : `<p class="mut">No posts yet.</p>`}</div>
 <div class="card"><h2>Review-link clicks by day</h2>${clicksByDay.rows.length ? `<table><tr><th>Day</th><th>Clicks</th></tr>${clickRows}</table>` : `<p class="mut">No clicks yet.</p>`}</div>`, user);
 }
 
@@ -1584,7 +1596,11 @@ ${conn && conn.status === "connected" && conn.last_error ? `<p class="warn">${es
       }
       if (path === "/receptionist") {
         const [ch, prof, usedM, planRow] = await Promise.all([
-          db.query(`SELECT phone_number, label, is_sandbox, connected_at FROM receptionist_zerniochannel WHERE workspace_id=$1`, [mem.workspace_id]),
+          db.query(`SELECT c.phone_number, c.label, c.is_sandbox, c.connected_at, c.zernio_account_id,
+            mc.status AS messaging_status, mc.account_id AS connection_account_id, mc.webhook_id, mc.last_error AS messaging_error
+            FROM receptionist_zerniochannel c
+            LEFT JOIN receptionist_tenantmessagingconnection mc ON mc.workspace_id=c.workspace_id
+            WHERE c.workspace_id=$1`, [mem.workspace_id]),
           db.query(`SELECT business_name, industry, is_active FROM receptionist_businessprofile WHERE workspace_id=$1 LIMIT 1`, [mem.workspace_id]),
           db.query(`SELECT count(*) c FROM receptionist_message m JOIN workspaces_workspace w ON w.id=m.workspace_id WHERE w.organization_id=$1 AND m.direction='outbound' AND m.sender_type='ai' AND m.is_draft=false AND m.created_at >= date_trunc('month', now())`, [mem.org_id]),
           db.query(`SELECT plan FROM organizations_organization WHERE id=$1`, [mem.org_id]),
@@ -1594,10 +1610,11 @@ ${conn && conn.status === "connected" && conn.last_error ? `<p class="warn">${es
         const lim = allowance[pl] ?? 500;
         const chan = ch.rows.map((c: any) => `<tr><td>+${esc(c.phone_number || "")}</td><td>${esc(c.label || "")}</td><td>${c.is_sandbox ? "demo line" : "live"}</td></tr>`).join("");
         const p = prof.rows[0];
+        const connectionState = receptionistConnectionState(p, ch.rows);
         return html(layout("Receptionist", `
 ${!ch.rows.length ? `<div class="card" style="border-color:var(--brand)"><h2 style="margin-top:0">Connect your WhatsApp</h2><p>Your receptionist answers customers on your own business WhatsApp number. <a href="/receptionist/connect">Connect it yourself in three steps</a> - it takes a few minutes.</p></div>` : ""}
 <div class="card"><h2 style="margin-top:0">Your receptionist</h2>
-<p>${p ? `${esc(p.business_name || mem.org_name)} · ${esc(p.industry || "general")} · ${p.is_active ? '<span class="ok">answering</span>' : '<span class="warn">paused</span>'}` : "Tell RevUp about your business in onboarding so the receptionist knows what to say."}</p>
+<p>${p ? `${esc(p.business_name || mem.org_name)} · ${esc(p.industry || "general")} · ${`<span class="${connectionState === "ready for replies" ? "ok" : "warn"}">${esc(connectionState)}</span>`}` : "Tell RevUp about your business in onboarding so the receptionist knows what to say."}</p>
 <p class="mut">Business details, hours and prices come from <a href="/onboarding">onboarding</a>. Conversations live in your <a href="/inbox">inbox</a> - step in any time.</p></div>
 <div class="grid">
 <div class="card"><h2>WhatsApp replies this month</h2><p class="stat">${usedM.rows[0].c} / ${lim}</p><p class="mut">on the ${esc(pl)} plan</p></div>
@@ -1917,8 +1934,8 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
           const postId = crypto.randomUUID();
           await client.query(
             `INSERT INTO composer_post(id,title,caption,first_comment,internal_notes,tags,workspace_id,author_id,media_id,created_at,updated_at)
-             VALUES($1,$2,$3,'','','{}'::jsonb,$4,$5,NULL,now(),now())`,
-            [postId, "From your social media team", caption, mem.workspace_id, user.id]);
+             VALUES($1,$2,$3,'',$6,'{}'::jsonb,$4,$5,NULL,now(),now())`,
+            [postId, "From your social media team", caption, mem.workspace_id, user.id, "socialteam_piece:" + piece.id]);
           const accs = await client.query(
             `SELECT id, provider FROM social_accounts_social_account WHERE workspace_id=$1 AND connection_status='connected'`, [mem.workspace_id]);
           let moved = 0;
@@ -1931,8 +1948,8 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
           }
           await client.query(
             `INSERT INTO approvals_approval_action(id,post_id,platform_post_id,user_id,action,comment,created_at)
-             VALUES($1,$2,NULL,$3,'submitted','from the social media team',now())`, [crypto.randomUUID(), postId, user.id]);
-          await client.query(`UPDATE socialteam_piece SET status='sent_for_approval', updated_at=now() WHERE id=$1`, [piece.id]);
+             VALUES($1,$2,NULL,$3,$4,'from the social media team',now())`, [crypto.randomUUID(), postId, user.id, moved ? 'submitted' : 'draft_saved']);
+          await client.query(`UPDATE socialteam_piece SET status=$2, updated_at=now() WHERE id=$1 AND workspace_id=$3`, [piece.id, moved ? 'sent_for_approval' : 'draft_saved', mem.workspace_id]);
           await client.query("COMMIT");
           return redirect(moved ? "/approvals" : "/team?msg=" + encodeURIComponent("Saved as a post draft - connect a social account to send it for approval."));
         } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }

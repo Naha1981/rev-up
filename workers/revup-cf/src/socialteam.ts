@@ -488,6 +488,25 @@ const PIECE_LABEL: Record<string, string> = {
   ready: "ready", returned: "your call", sent_for_approval: "in approvals", in_review: "writing",
 };
 
+export function pieceReviewState(p: any): { label: string; note: string; href: string } {
+  if (p.status !== "sent_for_approval" && p.status !== "draft_saved")
+    return { label: PIECE_LABEL[p.status] || p.status, note: "", href: "" };
+  if (!p.linked_post_id) return {
+    label: "handoff recorded", href: "/posts",
+    note: "This earlier handoff has no linked approval state. Check saved posts; it is not confirmed to be waiting for review.",
+  };
+  const statuses: string[] = Array.isArray(p.platform_statuses) ? [...new Set<string>(p.platform_statuses)] : [];
+  if (!statuses.length) return {
+    label: "saved draft", href: "/posts",
+    note: "Saved as a draft with no channel selected. Connect a social account, then submit the saved post for review.",
+  };
+  return {
+    label: statuses.map(s => s === "pending_review" ? "in approvals" : s.replaceAll("_", " ")).join(", "),
+    href: statuses.includes("pending_review") ? "/approvals" : "/posts",
+    note: "Current status of the linked saved post. Nothing is published by this page.",
+  };
+}
+
 function firstLine(caption: string): string {
   const t = String(caption || "").trim();
   return t.length > 150 ? t.slice(0, 150).trimEnd() + "…" : t;
@@ -503,11 +522,13 @@ export function teamPageBody(ideas: any[], pieces: any[], msg = ""): string {
 <form class="inline" method="post" action="/team/idea/${i.id}/park"><button class="link">Park</button></form></div></details>`).join("");
   const pieceRows = pieces.map((p: any) => {
     const tags = Array.isArray(p.hashtags) ? p.hashtags.join(" ") : "";
-    const cls = p.status === "ready" || p.status === "sent_for_approval" ? "ok" : p.status === "returned" ? "warn" : "";
+    const state = pieceReviewState(p);
+    const cls = p.status === "ready" || state.label === "in approvals" ? "ok" : p.status === "returned" || state.label === "handoff recorded" ? "warn" : "";
     return `
-<details class="tpiece"><summary><span class="pill ${cls}">${esc(PIECE_LABEL[p.status] || p.status)}</span><span class="tpiece-t">${esc(firstLine(p.caption))}</span><span class="tchev">&#9656;</span></summary>
+<details class="tpiece"><summary><span class="pill ${cls}">${esc(state.label)}</span><span class="tpiece-t">${esc(firstLine(p.caption))}</span><span class="tchev">&#9656;</span></summary>
 <div class="tpiece-b"><p style="white-space:pre-wrap">${esc(p.caption)}</p>${tags ? `<p class="mut">${esc(tags)}</p>` : ""}
 <p class="mut">${esc(p.review_note)}</p>
+${state.note ? `<p class="mut">${esc(state.note)}</p><p><a href="${state.href}">${state.href === "/approvals" ? "Review linked post" : "Open saved posts"}</a></p>` : ""}
 ${p.status === "ready" || p.status === "returned" ? `<form class="inline" method="post" action="/team/piece/${p.id}/send"><button>Send to approvals</button></form>` : ""}</div></details>`;
   }).join("");
   return `${PAGE_CSS}
@@ -522,7 +543,12 @@ ${pieceRows ? `<p class="tlbl">Posts</p>${pieceRows}` : ""}
 export async function teamPage(db: Pool, ws: string, msg = ""): Promise<string> {
   const [ideas, pieces] = await Promise.all([
     db.query(`SELECT id, title, angle, rationale FROM socialteam_idea WHERE workspace_id=$1 AND status='fresh' ORDER BY created_at DESC LIMIT 3`, [ws]),
-    db.query(`SELECT id, caption, hashtags, review_note, status FROM socialteam_piece WHERE workspace_id=$1 AND status <> 'archived' ORDER BY created_at DESC LIMIT 4`, [ws]),
+    db.query(`SELECT s.id, s.caption, s.hashtags, s.review_note, s.status,
+      p.id AS linked_post_id,
+      (SELECT array_agg(DISTINCT pp.status ORDER BY pp.status) FROM composer_platform_post pp WHERE pp.post_id=p.id) AS platform_statuses
+      FROM socialteam_piece s
+      LEFT JOIN LATERAL (SELECT id FROM composer_post WHERE workspace_id=s.workspace_id AND internal_notes='socialteam_piece:' || s.id::text ORDER BY created_at DESC LIMIT 1) p ON true
+      WHERE s.workspace_id=$1 AND s.status <> 'archived' ORDER BY s.created_at DESC LIMIT 4`, [ws]),
   ]);
   return teamPageBody(ideas.rows, pieces.rows, msg);
 }
