@@ -153,8 +153,15 @@ export async function getUser(req: Request, db: Pool): Promise<any | null> {
     `UPDATE cf_sessions SET last_seen_at=now() WHERE token_hash=$1 AND expires_at>now()
      RETURNING user_id`, [th]);
   if (!r.rows[0]) return null;
-  const u = await db.query(`SELECT id,email,name,is_superuser FROM accounts_user WHERE id=$1 AND is_active`, [r.rows[0].user_id]);
+  // Worker sessions have no recorded second-factor verification. Never let
+  // an existing password-only session bypass a user's enabled authenticator.
+  const u = await db.query(`SELECT id,email,name,is_superuser FROM accounts_user WHERE id=$1 AND is_active AND totp_enabled=false`, [r.rows[0].user_id]);
   return u.rows[0] || null;
+}
+// Until a verified second-factor ceremony exists on this entry, MFA accounts
+// must not receive password-only Worker sessions. Fail closed for absent flags.
+export function workerPasswordLoginAllowed(row: any): boolean {
+  return !!row && row.totp_enabled === false;
 }
 export async function newSession(db: Pool, userId: string, req: Request): Promise<string> {
   const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
@@ -999,7 +1006,7 @@ export async function analyticsPage(db: Pool, user: any, mem: any): Promise<stri
 <div class="card"><h2>Review-link clicks by day</h2>${clicksByDay.rows.length ? `<table><tr><th>Day</th><th>Clicks</th></tr>${clickRows}</table>` : `<p class="mut">No clicks yet.</p>`}</div>`, user);
 }
 
-async function postsPage(db: Pool, user: any, mem: any): Promise<string> {
+export async function postsPage(db: Pool, user: any, mem: any): Promise<string> {
   const r = await db.query(
     `SELECT p.id, p.title, p.caption, p.scheduled_at, p.published_at, p.created_at,
             string_agg(DISTINCT pp.status, ', ') AS statuses,
@@ -1010,18 +1017,32 @@ async function postsPage(db: Pool, user: any, mem: any): Promise<string> {
      WHERE p.workspace_id=$1
      GROUP BY p.id ORDER BY p.created_at DESC LIMIT 100`, [mem.workspace_id]);
   const rows = r.rows.map((x: any) => {
-    const sts = (x.statuses || "").split(", ").filter(Boolean);
-    const allDraft = sts.length > 0 && sts.every((st: string) => st === "draft");
+    const linkedStatuses = (x.statuses || "").split(", ").filter(Boolean);
+    // Match the shared composer model: a post without channel children is a draft.
+    const sts = linkedStatuses.length ? linkedStatuses : ["draft"];
+    const allDraft = linkedStatuses.length > 0 && sts.every((st: string) => st === "draft");
     return `<tr>
-<td><b>${esc(x.title || "(untitled)")}</b><br><span class="mut">${esc((x.caption || "").slice(0, 120))}</span></td>
-<td>${sts.map((st: string) => `<span class="pill ${st === "approved" || st === "published" ? "ok" : ""}">${esc(st)}</span> `).join("")}</td>
-<td class="mut">${esc(x.channels || "-")}</td>
-<td class="mut">${x.scheduled_at ? new Date(x.scheduled_at).toLocaleString("en-ZA") : new Date(x.created_at).toLocaleDateString("en-ZA")}</td>
-<td>${allDraft ? `<form class="inline" method="post" action="/posts/${x.id}/submit"><button>Submit for review</button></form>` : ""}</td></tr>`;
+<td data-label="Post"><b>${esc(x.title || "(untitled)")}</b><br><span class="mut">${esc((x.caption || "").slice(0, 120))}</span></td>
+<td data-label="Status">${sts.map((st: string) => `<span class="pill ${st === "approved" || st === "published" ? "ok" : ""}">${esc(st)}</span> `).join("")}</td>
+<td class="mut" data-label="Channels">${esc(x.channels || "No channel selected")}</td>
+<td class="mut" data-label="When">${x.scheduled_at ? new Date(x.scheduled_at).toLocaleString("en-ZA") : new Date(x.created_at).toLocaleDateString("en-ZA")}</td>
+<td data-label="Action">${allDraft ? `<form class="inline" method="post" action="/posts/${x.id}/submit"><button>Submit for review</button></form>` : ""}</td></tr>`;
   }).join("");
   return layout("Posts", `
 <p><a class="btn btn-primary" href="/posts/new">New post</a></p>
-<div class="card">${r.rows.length ? `<table><tr><th>Post</th><th>Status</th><th>Channels</th><th>When</th><th></th></tr>${rows}</table>` : `<p class="mut">No posts yet.</p>`}</div>`, user);
+<style>
+.posts-table{width:100%}.posts-table td:first-child{min-width:0;overflow-wrap:anywhere}.posts-table td[data-label="When"]{font-variant-numeric:tabular-nums}
+@media(max-width:640px){
+.posts-table,.posts-table tbody{display:block;width:100%}.posts-table thead{display:none}
+.posts-table tbody{display:grid;gap:16px}.posts-table tr{display:grid;gap:12px;padding:16px 0;border-bottom:1px solid var(--line)}.posts-table tr:last-child{border-bottom:0}
+.posts-table td{display:grid;grid-template-columns:88px minmax(0,1fr);gap:12px;border:0;padding:0;min-width:0;overflow-wrap:anywhere}
+.posts-table td::before{content:attr(data-label);color:var(--ink2);font-weight:500}
+.posts-table td:first-child{display:block}.posts-table td:first-child::before{content:none}
+.posts-table td[data-label="Action"]:empty{display:none}.posts-table td[data-label="Action"] button{min-height:44px}
+.posts-table .pill{justify-self:start}
+}
+</style>
+<div class="card">${r.rows.length ? `<table class="posts-table"><thead><tr><th scope="col">Post</th><th scope="col">Status</th><th scope="col">Channels</th><th scope="col">When</th><th scope="col">Action</th></tr></thead><tbody>${rows}</tbody></table>` : `<p class="mut">No posts yet.</p>`}</div>`, user);
 }
 
 const STATUS_LABELS: Record<string, string> = { approved: "approved", rejected: "rejected", changes_requested: "changes requested" };
@@ -1253,7 +1274,7 @@ async function handle(req: Request, env: Env): Promise<Response> {
           await client.query("BEGIN");
           await client.query(
             `INSERT INTO accounts_user(id,password,email,name,is_superuser,is_active,is_staff,totp_enabled,totp_recovery_codes,created_at,updated_at,avatar,tos_accepted_at)
-             VALUES($1,$2,$3,$4,false,true,false,false,'[]'::jsonb,now(),now(),'',now())`, [userId, h.rows[0].hash, email, f.name.trim()]);
+             VALUES($1,$2,$3,$4,false,true,false,false,NULL,now(),now(),'',now())`, [userId, h.rows[0].hash, email, f.name.trim()]);
           await client.query(
             `INSERT INTO organizations_organization(id,name,logo_url,default_timezone,plan,subscription_status,payment_reference,payfast_token,access_suspension_reason,trial_started_at,billing_email,created_at,updated_at)
              VALUES($1,$2,'','Africa/Johannesburg','starter','pending_activation',$3,'','',NULL,$4,now(),now())`, [orgId, f.business.trim(), ref, email]);
@@ -1283,10 +1304,10 @@ async function handle(req: Request, env: Env): Promise<Response> {
         // Block networks already over the failed-attempt budget BEFORE running
         // bcrypt (cheap check first), then count only failures.
         if (await rateLimitExceeded(db, "login", req, 20)) return html(loginPage("Too many failed attempts from this network today - please try again tomorrow."), 429);
-        const r = await db.query(`SELECT id,password FROM accounts_user WHERE lower(email)=lower($1) AND is_active`, [(f.email || "").trim()]);
+        const r = await db.query(`SELECT id,password,totp_enabled FROM accounts_user WHERE lower(email)=lower($1) AND is_active`, [(f.email || "").trim()]);
         const row = r.rows[0];
         let ok = false;
-        if (row && typeof row.password === "string" && row.password.startsWith("bcrypt_sha256$")) {
+        if (workerPasswordLoginAllowed(row) && typeof row.password === "string" && row.password.startsWith("bcrypt_sha256$")) {
           const v = await db.query(VERIFY_SQL, [f.password || "", row.password.slice("bcrypt_sha256$".length)]);
           ok = v.rows[0]?.ok === true;
         }
