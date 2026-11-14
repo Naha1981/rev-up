@@ -1,0 +1,11 @@
+# 14 November synthetic customer-route candidate
+
+Base main612d061. Production untouched. Tests default to skipping inherited production HTTP cases (including tracked-link mutation and webhook probes). No billing/provider/entitlement change, send, charge, deployment, shared schema or real password reset.
+
+Two source fixes: signup fails closed if its abuse-check DB fails and rejects non-GET/POST; quote Won/Lost are tenant-scoped compare-and-set terminal transitions, so concurrent decisions cannot overwrite each other. Actual app signup with refused-loopback database returns503, unsupported method405. Real PostgreSQL concurrent Won/Lost produced one winner and one no-change, later overwrite refused, amount125050c retained.
+
+Fresh whole suite387pass/4explicit live skips, strict TS clean. Fresh dedicated disposable PostgreSQL14 full Django migrations + repository worker-only schema, no copy of user data. Five actual browser signup/onboarding/save-draft journeys (plumber/restaurant/dental/property/transport), at390/820/1280, retained correct industry and one draft each, pending_activation. Browser and server external HTTP blocked; no provider call attempted. This is Node app transport, not hosted edge parity, live delivery or payment proof.
+
+Independent QA can create its own blank revup_finish_synthetic on loopback PostgreSQL14+, load supplied schema-only SQL, insert the supplied one-row boundary marker, build npm test and run included harness. No hosted DB credential or previous session needed. Empty schema is generated only from repo migrations plus tools/qa/worker-test-schema.sql, no account/customer rows exported.
+
+Remaining first-value gates: forgot-password currently still redirects to suspended Render503; generic staging success elsewhere does not repair this dependency. Current one-off Yoco payment matching/manual activation is not a tested self-service lifecycle; payment/provider/entitlement changes stay held. No approved real WhatsApp/FB/IG delivery or safe production outbox cutover, full customer privacy/recovery/load evidence. A release or sellability verdict cannot follow from these synthetic journeys alone.

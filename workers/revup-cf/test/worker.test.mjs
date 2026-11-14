@@ -82,16 +82,17 @@ test('landing: ZAR pricing, all three monthly plans', () => {
 
 // --- live HTTP ---
 const BASE = 'https://revup.nahalabs.co.za';
-test('live: /health ok with db', async () => {
+const liveTest=(name,fn)=>test(name,{skip:process.env.REVUP_ENABLE_APPROVED_LIVE_TESTS!=='1'},fn);
+liveTest('live: /health ok with db', async () => {
   const r = await fetch(BASE + '/health');
   const j = await r.json();
   assert.ok(j.ok && j.db);
 });
-test('live: webhook rejects bad signature with 403', async () => {
+liveTest('live: webhook rejects bad signature with 403', async () => {
   const r = await fetch(BASE + '/webhooks/zernio', { method: 'POST', headers: { 'content-type': 'application/json', 'x-zernio-signature': 'deadbeef' }, body: '{}' });
   assert.equal(r.status, 403);
 });
-test('live: webhook dedupes a replayed event id', async () => {
+liveTest('live: webhook dedupes a replayed event id', async () => {
   const id = 'cf-test-dedupe-fixed-1';
   const body = JSON.stringify({ id, event: 'message.received', message: { account: { accountId: 'unknown-acct' } } });
   const s = crypto.createHmac('sha256', process.env.ZS || '').update(body).digest('hex');
@@ -101,7 +102,7 @@ test('live: webhook dedupes a replayed event id', async () => {
   assert.equal((await r1.json()).ok, true);
   assert.equal((await r2.json()).deduped, true);
 });
-test('live: tracked link redirects and counts', async () => {
+liveTest('live: tracked link redirects and counts', async () => {
   const r = await fetch(BASE + '/t/demolink01', { redirect: 'manual' });
   assert.equal(r.status, 302);
   assert.ok(r.headers.get('location').includes('ref=demolink01'));

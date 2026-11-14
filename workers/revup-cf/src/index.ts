@@ -1252,10 +1252,15 @@ async function handle(req: Request, env: Env): Promise<Response> {
 
     if (path === "/signup") {
       if (req.method === "GET") return html(signupPage("",url.searchParams.get("industry")||""));
+      if (req.method !== "POST") return new Response("Method not allowed", {status:405,headers:{Allow:"GET, POST"}});
       {
         const rl = pool(env);
-        try { if (await rateLimited(rl, "signup", req, 10)) { await rl.end().catch(() => {}); return html(signupPage("Too many signups from this network today - please try again tomorrow."), 429); } await rl.end().catch(() => {}); }
-        catch { await rl.end().catch(() => {}); }
+        try {
+          if (await rateLimited(rl, "signup", req, 10)) return html(signupPage("Too many signups from this network today - please try again tomorrow."), 429);
+        } catch {
+          // An unavailable abuse gate is not permission to create an account.
+          return html(signupPage("Account creation is temporarily unavailable. Please try again later."), 503);
+        } finally { await rl.end().catch(() => {}); }
       }
       const f = await formData(req);
       const selectedIndustry=INDUSTRIES.some(([id])=>id===f.industry)?f.industry:"";

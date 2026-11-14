@@ -153,12 +153,12 @@ export async function quoteAction(db: Pool, env: any, ws: string, id: string, ac
     return "marked sent";
   }
   if (action === "won" && ["draft", "sent"].includes(quote.status)) {
-    await db.query(`UPDATE receptionist_quote SET status='won' WHERE id=$1`, [id]);
-    return "won";
+    const changed = await db.query(`UPDATE receptionist_quote SET status='won' WHERE id=$1 AND workspace_id=$2 AND status IN ('draft','sent') RETURNING id`, [id, ws]);
+    return changed.rowCount ? "won" : "no change";
   }
   if (action === "lost" && ["draft", "sent"].includes(quote.status)) {
-    await db.query(`UPDATE receptionist_quote SET status='lost' WHERE id=$1`, [id]);
-    return "lost";
+    const changed = await db.query(`UPDATE receptionist_quote SET status='lost' WHERE id=$1 AND workspace_id=$2 AND status IN ('draft','sent') RETURNING id`, [id, ws]);
+    return changed.rowCount ? "lost" : "no change";
   }
   return "no change";
 }
