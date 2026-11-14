@@ -1,3 +1,4 @@
+import {isRecoveryPath,recoveryResponse,type RecoveryService} from "./recovery-route";
 import {securityResponse} from './security-headers';
 import {healthResponse,versionResponse,type RuntimeProofEnv} from './runtime-proof';
 import { boundedMoney, boundedWhole, quoteWonTotal, leadValueCents } from "./numeric-inputs";
@@ -23,6 +24,7 @@ import { ensurePageTables, fetchForMirror, mirrorStructure, generateSections, se
 import { waitlistAdd, waitlistExpire, waitlistAction, loyaltySettings, loyaltyAccount, awardForBooking, issueVoucher, redeemVoucher, expireVouchers, quoteCreate, quoteAction, segmentContacts, campaignCreate, campaignApprove, campaignCancel, runDueCampaigns, attributeBookingToCampaign, campaignStats, competitorAdd, dishAdd, promoAdd, refreshOpportunities, opportunityAction, opportunityDraftCampaign, supportHandle, autoDraftOpportunities } from "./features";
 
 interface Env extends RuntimeProofEnv {
+  RECOVERY_SERVICE?: RecoveryService;
   VAULT_MASTER_KEY?: string;
   DATABASE_URL: string;
   GOOGLE_CALENDAR_CLIENT_ID?: string;
@@ -1242,9 +1244,10 @@ async function handle(req: Request, env: Env): Promise<Response> {
       try { return await handlePayfastItn(db, env, req); } finally { await db.end().catch(() => {}); }
     }
 
-    // Reuse the existing shared-database recovery flow, including its email,
-    // expiring tokens and single-use checks. Do not invent a second reset system.
-    if (path === "/forgot-password" && req.method === "GET") return redirect("https://revup-8g3m.onrender.com/accounts/password/reset/");
+    // Same-origin service binding reuses existing allauth tokens and mail flow.
+    // Missing recovery service fails closed, never redirects to a sleeping host.
+    if (isRecoveryPath(path)) return recoveryResponse(req,env.RECOVERY_SERVICE);
+    if(path === "/accounts/login/" && req.method === "GET") return redirect("/login");
     if ((path === "/legal/terms/" || path === "/legal/privacy/") && req.method === "GET") {
       const kind = path.includes("terms") ? "terms" : "privacy";
       return html(layout(kind === "terms" ? "Terms of Service" : "Privacy Policy", legalPage(kind)));

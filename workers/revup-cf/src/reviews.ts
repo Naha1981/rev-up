@@ -122,6 +122,9 @@ export async function deliver(db: Pool, env: any, workspaceId: string, contact: 
   if (!conn || conn.status !== "connected" || !conn.api_key || !conn.account_id || conn.account_id !== channel.zernio_account_id || !conn.profile_id || conn.profile_id !== channel.zernio_profile_id) throw new Error("Messaging account needs verified reconnection.");
   const sendKey = await decryptTenantKey(conn.api_key, env);
   if (!sendKey.trim()) throw new Error("Messaging key is unavailable.");
+  // A pending/unknown legacy attempt must be reconciled, not blindly repeated.
+  const unresolved=await db.query(`SELECT id FROM receptionist_message WHERE workspace_id=$1 AND contact_id=$2 AND direction='outbound' AND (zernio_message_id LIKE 'pending:%' OR zernio_message_id LIKE 'unknown:%') LIMIT 1`,[workspaceId,contact.id]);
+  if(unresolved.rows.length) throw new Error("Previous message outcome needs reconciliation; retry is held.");
   const outId = crypto.randomUUID();
   await db.query(
     `INSERT INTO receptionist_message(id,direction,sender_type,body,zernio_message_id,is_draft,created_at,contact_id,workspace_id,media_urls)
@@ -137,7 +140,9 @@ export async function deliver(db: Pool, env: any, workspaceId: string, contact: 
   if (Number(budget.rows[0].h) >= 20 || Number(budget.rows[0].d) >= 100) throw new Error("send budget reached");
   if (!contact.zernio_conversation_id) throw new Error("customer has no active WhatsApp conversation yet");
 
+  await db.query(`UPDATE receptionist_message SET zernio_message_id=$1 WHERE id=$2 AND workspace_id=$3`,['pending:'+outId,outId,workspaceId]);
   const base = env.ZERNIO_BASE_URL || "https://zernio.com/api/v1";
+  try {
   const resp = await fetch(`${base}/inbox/conversations/${contact.zernio_conversation_id}/messages`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${sendKey}` },
@@ -145,9 +150,16 @@ export async function deliver(db: Pool, env: any, workspaceId: string, contact: 
   });
   if (!resp.ok) throw new Error(`messaging send failed (${resp.status})`);
   const data: any = await resp.json().catch(() => ({}));
-  const sentId = String(data?.message?.id || data?.messageId || data?.id || "");
-  await db.query(`UPDATE receptionist_message SET is_draft=false, zernio_message_id=$1 WHERE id=$2`, [sentId, outId]);
+  const sentId = data?.message?.id ?? data?.messageId ?? data?.id;
+  if(typeof sentId!=="string" || !sentId.trim() || sentId.length>64 || /\s/.test(sentId) || /^(?:pending|unknown):/.test(sentId))throw new Error("Provider acceptance is unverified.");
+  await db.query(`UPDATE receptionist_message SET is_draft=false, zernio_message_id=$1 WHERE id=$2 AND workspace_id=$3`, [sentId, outId,workspaceId]);
   return outId;
+  }catch{
+    // Conservative for malformed ack, timeout, error, or uncertain DB commit.
+    // Leave draft=true and a durable no-retry marker. Never represent as sent.
+    await db.query(`UPDATE receptionist_message SET zernio_message_id=$1 WHERE id=$2 AND workspace_id=$3 AND is_draft=true`,['unknown:'+outId,outId,workspaceId]);
+    throw new Error("Message outcome unknown; held for reconciliation. Do not retry.");
+  }
 }
 
 export async function sendEvent(db: Pool, env: any, appUrl: string, event: any): Promise<string> {
