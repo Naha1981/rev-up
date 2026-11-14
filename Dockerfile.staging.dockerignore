@@ -1,0 +1,12 @@
+.git
+.env
+**/.env
+**/.env.*
+!**/.env.example
+**/node_modules
+**/dist-test
+**/__pycache__
+staticfiles
+media
+test_media
+*.sqlite3
