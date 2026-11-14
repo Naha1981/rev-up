@@ -5,6 +5,7 @@
 // check-in reply flags the customer for personal follow-up but does NOT
 // suppress the review request. Only STOP stops it.
 import type { Pool } from "pg";
+import {decryptTenantKey} from "./tenant-crypto";
 
 export const CHECK_IN_DELAY_MIN = 15;
 export const REVIEW_REQUEST_DELAY_H = 2;
@@ -109,9 +110,18 @@ async function reviewGate(db: Pool, workspaceId: string): Promise<string> {
 // Same guarded send path as receptionist replies: draft row first, then the
 // send attempt; failure leaves the draft in the inbox.
 export async function deliver(db: Pool, env: any, workspaceId: string, contact: any, body: string): Promise<string> {
-  const ch = await db.query(`SELECT * FROM receptionist_zerniochannel WHERE workspace_id=$1 LIMIT 1`, [workspaceId]);
+  // Never trust a stale/caller-supplied contact for an outbound decision.
+  const current = await db.query(`SELECT * FROM receptionist_contact WHERE id=$1 AND workspace_id=$2`, [contact?.id, workspaceId]);
+  contact = current.rows[0];
+  if (!contact || contact.workspace_id !== workspaceId || contact.opted_out !== false || contact.needs_human !== false) throw new Error("Customer messaging is held.");
+  const ch = await db.query(`SELECT * FROM receptionist_zerniochannel WHERE workspace_id=$1 ORDER BY id LIMIT 2`, [workspaceId]);
   const channel = ch.rows[0];
-  if (!channel) throw new Error("No connected WhatsApp number.");
+  if (ch.rows.length !== 1 || channel.workspace_id !== workspaceId) throw new Error("One connected WhatsApp number is required.");
+  const connQ = await db.query(`SELECT api_key, status, account_id, profile_id FROM receptionist_tenantmessagingconnection WHERE workspace_id=$1`, [workspaceId]);
+  const conn = connQ.rows[0];
+  if (!conn || conn.status !== "connected" || !conn.api_key || !conn.account_id || conn.account_id !== channel.zernio_account_id || !conn.profile_id || conn.profile_id !== channel.zernio_profile_id) throw new Error("Messaging account needs verified reconnection.");
+  const sendKey = await decryptTenantKey(conn.api_key, env);
+  if (!sendKey.trim()) throw new Error("Messaging key is unavailable.");
   const outId = crypto.randomUUID();
   await db.query(
     `INSERT INTO receptionist_message(id,direction,sender_type,body,zernio_message_id,is_draft,created_at,contact_id,workspace_id,media_urls)
@@ -127,10 +137,6 @@ export async function deliver(db: Pool, env: any, workspaceId: string, contact: 
   if (Number(budget.rows[0].h) >= 20 || Number(budget.rows[0].d) >= 100) throw new Error("send budget reached");
   if (!contact.zernio_conversation_id) throw new Error("customer has no active WhatsApp conversation yet");
 
-  const connQ = await db.query(`SELECT api_key, status FROM receptionist_tenantmessagingconnection WHERE workspace_id=$1 LIMIT 1`, [workspaceId]);
-  const conn = connQ.rows[0];
-  if (conn && conn.status === "needs_attention") throw new Error("messaging account needs reconnection");
-  const sendKey = conn && conn.status === "connected" && conn.api_key ? conn.api_key : env.ZERNIO_API_KEY;
   const base = env.ZERNIO_BASE_URL || "https://zernio.com/api/v1";
   const resp = await fetch(`${base}/inbox/conversations/${contact.zernio_conversation_id}/messages`, {
     method: "POST",
