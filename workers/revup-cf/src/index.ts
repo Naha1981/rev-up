@@ -461,11 +461,14 @@ export async function setupPage(db:Pool,user:any,mem:any):Promise<string>{
 }
 export async function dashboardPage(db:Pool,user:any,mem:any,msg=''):Promise<string>{
   const s=await journeyStatus(db,mem);
+  const signupAlerts=user.is_superuser?await ownerSignupAlerts(db,user):[];
+  const signupSection=signupAlerts.length?`<section class="journey-section" aria-label="New business signups"><h2>New business signups</h2><p>Check Yoco before activating any account. Signup is not proof of payment.</p>${signupAlerts.slice(0,5).map((a:any)=>`<article class="card"><h3>${esc(a.title)}</h3><p>${esc(a.body)}</p><p>Reference: <strong>${esc(a.data?.payment_reference||'not recorded')}</strong></p></article>`).join('')}</section>`:'';
   const needs=Number(s.approvals)+Number(s.handovers)+Number(s.bookings);
   const business=esc(mem.workspace_name||mem.org_name||'Your business');
   const first=esc(String(user.name||'').split(' ')[0]||'there');
   const attention=(label:string,title:string,count:number,detail:string,href:string,action:string,primary=false)=>`<article class="attention-item"><p class="attention-status">${label}</p><h3>${title}</h3><p class="attention-detail">${count} ${detail}</p><a class="attention-action ${primary?'attention-primary':''}" href="${href}">${action}</a></article>`;
   return layout('',`<div class="action-home"><div class="journey-hero"><p class="greeting">${business}</p><h1>Hello, ${first}.</h1></div>${msg?`<p class="ok" role="status">${esc(msg)}</p>`:''}
+  ${signupSection}
   <h2 class="action-title">Your next actions</h2>
   ${s.complete<5?`<div class="setup-compact"><span>Setup: ${s.complete} of 5 complete</span><a href="/setup">Continue<span aria-hidden="true"> ›</span></a></div>`:''}
   <section class="journey-section attention-section" aria-labelledby="attention-title"><h2 id="attention-title">Needs your attention</h2>
@@ -1096,6 +1099,7 @@ ${p.slug === mem.plan
 <p>Plan <b>${esc(mem.plan)}</b> · status <span class="pill ${mem.subscription_status === "active" ? "ok" : "warn"}">${esc(statusLabel(mem.subscription_status))}</span>
 ${mem.payment_reference ? ` · ref <span class="mut">${esc(mem.payment_reference)}</span>` : ""}</p>
 ${mem.activated_at ? `<p class="mut">Active since ${new Date(mem.activated_at).toLocaleDateString("en-ZA")}</p>` : ""}
+<div class="card"><h2>Match your payment to your business</h2><p>Your RevUp reference: <strong>${esc(mem.payment_reference||'Contact support before paying')}</strong></p><p>Use the same email as your RevUp account on the Yoco payment form. Keep your payment receipt and RevUp reference together. Payment is checked by a person before your account is activated.</p><p class="mut">Opening a payment link does not mark your account as paid.</p></div>
 <div class="grid">${cards}</div>
 <p class="mut">Tap your plan to pay securely by card, in rand. Each month is a fresh payment - we never charge your card automatically. Your plan activates when your payment lands, usually within a few hours on business days. You can cancel any time.</p>`, user);
 }
