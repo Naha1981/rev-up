@@ -1,3 +1,4 @@
+import {queueReceptionistWebhook,type ContinuationContext} from './receptionist-continuation';
 import {securityResponse} from './security-headers';
 import {healthResponse,versionResponse,type RuntimeProofEnv} from './runtime-proof';
 import { boundedMoney, boundedWhole, quoteWonTotal, leadValueCents } from "./numeric-inputs";
@@ -1128,8 +1129,8 @@ ${calendarPanel(calendar,calendarConfigured(env))}
 }
 
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
-    const res = await handle(req, env);
+  async fetch(req: Request, env: Env, ctx?:ContinuationContext): Promise<Response> {
+    const res = await handle(req, env,ctx);
     return securityResponse(res, new URL(req.url).pathname);
   },
   async scheduled(_event: any, env: Env, ctx: any): Promise<void> {
@@ -1147,7 +1148,7 @@ export default {
   },
 };
 
-async function handle(req: Request, env: Env): Promise<Response> {
+async function handle(req: Request, env: Env,ctx?:ContinuationContext): Promise<Response> {
     const url = new URL(req.url);
     const base = url.origin;
     const path = url.pathname;
@@ -1175,6 +1176,12 @@ async function handle(req: Request, env: Env): Promise<Response> {
         try { tenantSecret = await tenantWebhookSecret(tdb, payload); } finally { await tdb.end().catch(() => {}); }
         if (!tenantSecret || !(await verifyZernioSignature(tenantSecret, raw, sig.toLowerCase())))
           return json({ ok: false }, 403);
+      }
+      if(payload.event==='message.received'){
+        if(!ctx?.waitUntil)return json({ok:false,status:'background_context_required'},503);
+        const db=pool(env);
+        const queued=await queueReceptionistWebhook(db,payload,ctx,(db,event)=>handleZernioWebhook(db,env,event));
+        return json({ok:queued.status===200,status:queued.code},queued.status);
       }
       const eventId = String(payload.id || req.headers.get("x-zernio-event-id") || "");
       const db = pool(env);
