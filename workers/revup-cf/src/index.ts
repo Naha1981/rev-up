@@ -1,3 +1,4 @@
+import {recordSignupAlert,ownerSignupAlerts} from './signup-alerts';
 import {queueReceptionistWebhook,type ContinuationContext} from './receptionist-continuation';
 import {securityResponse} from './security-headers';
 import {healthResponse,versionResponse,type RuntimeProofEnv} from './runtime-proof';
@@ -1294,6 +1295,7 @@ async function handle(req: Request, env: Env,ctx?:ContinuationContext): Promise<
           await client.query(
             `INSERT INTO members_workspace_membership(id,workspace_role,user_id,workspace_id,added_at) VALUES($1,'owner',$2,$3,now())`,
             [crypto.randomUUID(), userId, wsId]);
+          await recordSignupAlert(client,{userId,orgId,workspaceId:wsId,email,business:f.business.trim(),paymentReference:ref});
           await client.query("COMMIT");
         } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }
         const token = await newSession(db, userId, req);
@@ -1411,6 +1413,11 @@ async function handle(req: Request, env: Env,ctx?:ContinuationContext): Promise<
       const user = await getUser(req, db);
       if (!user && path === "/") return html(landingPage());
       if (!user) return redirect("/login");
+      if(path==='/operator/signup-alerts'){
+        if(!user.is_superuser)return json({ok:false},403);
+        if(req.method!=='GET')return json({ok:false},405);
+        return json({alerts:await ownerSignupAlerts(db,user),delivery:'in_app_only'});
+      }
       const mem = await membership(db, user.id, req);
       if (!mem) return html(layout("No workspace", `<p>Your account has no workspace yet. <a href="/signup">Create one</a>.</p>`, user), 403);
       const permission=requiredWorkspacePermission(path,req.method);
