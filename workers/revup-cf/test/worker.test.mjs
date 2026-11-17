@@ -370,7 +370,7 @@ test('login offers password recovery', async () => {
 });
 test('recovery uses the established shared-database flow, no caller-controlled redirect', async () => {
   const r=await worker.fetch(new Request('https://revup.nahalabs.co.za/forgot-password?next=https://evil.invalid'),{},{});
-  assert.equal(r.status,303);assert.equal(r.headers.get('location'),'https://revup-8g3m.onrender.com/accounts/password/reset/');
+  assert.equal(r.status,503);assert.equal(r.headers.get('location'),null);assert.equal(r.headers.get('cache-control'),'no-store');
 });
 for (const [path,title] of [['terms','Terms of Service'],['privacy','Privacy Policy']]) {
  test(`public ${path} accessible signed out`,async()=>{

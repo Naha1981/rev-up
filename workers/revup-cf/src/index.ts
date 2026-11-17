@@ -1,3 +1,4 @@
+import {isRecoveryPath,isRecoveryAsset,recoveryResponse,hostedRecoveryService,type RecoveryService} from "./recovery-route";
 import {recordSignupAlert,ownerSignupAlerts} from './signup-alerts';
 import {queueReceptionistWebhook,type ContinuationContext} from './receptionist-continuation';
 import {securityResponse} from './security-headers';
@@ -25,6 +26,8 @@ import { ensurePageTables, fetchForMirror, mirrorStructure, generateSections, se
 import { waitlistAdd, waitlistExpire, waitlistAction, loyaltySettings, loyaltyAccount, awardForBooking, issueVoucher, redeemVoucher, expireVouchers, quoteCreate, quoteAction, segmentContacts, campaignCreate, campaignApprove, campaignCancel, runDueCampaigns, attributeBookingToCampaign, campaignStats, competitorAdd, dishAdd, promoAdd, refreshOpportunities, opportunityAction, opportunityDraftCampaign, supportHandle, autoDraftOpportunities } from "./features";
 
 interface Env extends RuntimeProofEnv {
+  RECOVERY_SERVICE?: RecoveryService;
+  RECOVERY_BACKEND_ORIGIN?: string;
   VAULT_MASTER_KEY?: string;
   DATABASE_URL: string;
   GOOGLE_CALENDAR_CLIENT_ID?: string;
@@ -1256,7 +1259,8 @@ async function handle(req: Request, env: Env,ctx?:ContinuationContext): Promise<
 
     // Reuse the existing shared-database recovery flow, including its email,
     // expiring tokens and single-use checks. Do not invent a second reset system.
-    if (path === "/forgot-password" && req.method === "GET") return redirect("https://revup-8g3m.onrender.com/accounts/password/reset/");
+    if (isRecoveryPath(path)||isRecoveryAsset(path)) return recoveryResponse(req,env.RECOVERY_SERVICE||hostedRecoveryService(env.RECOVERY_BACKEND_ORIGIN));
+    if(path === "/accounts/login/" && req.method === "GET") return redirect("/login");
     if ((path === "/legal/terms/" || path === "/legal/privacy/") && req.method === "GET") {
       const kind = path.includes("terms") ? "terms" : "privacy";
       return html(layout(kind === "terms" ? "Terms of Service" : "Privacy Policy", legalPage(kind)));
