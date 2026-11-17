@@ -1209,7 +1209,7 @@ async function handle(req: Request, env: Env,ctx?:ContinuationContext): Promise<
     if (chatAppRes) return chatAppRes;
 
     if(path==='/version')return versionResponse(req,env);
-    if(path==='/health'||path==='/api/healthz')return healthResponse(req,()=>new Pool({connectionString:env.DATABASE_URL,max:1,connectionTimeoutMillis:1500,idleTimeoutMillis:0}));
+    if(path==='/health'||path==='/api/healthz')return healthResponse(req,()=>new Pool({connectionString:env.DATABASE_URL,max:1,connectionTimeoutMillis:5000,idleTimeoutMillis:0}));
 
     // Public tracked review redirect
     const rm = /^\/r\/([A-Za-z0-9_-]{6,12})$/.exec(path);
