@@ -12,3 +12,6 @@ test('custom role overrides built-in role without inheriting power',()=>{assert.
 test('unknown role fails closed',()=>assert.equal(can('unknown','/onboarding'),false));
 test('owner positive business and customer actions',()=>{for(const p of ['/onboarding','/menu/items','/posts/new','/approvals/x/approve','/media/x/delete','/assistant','/reviews/links'])assert.equal(can('owner',p),true,p)});
 test('switch workspace permission is handled by membership check',()=>assert.equal(requiredWorkspacePermission('/switch','POST'),null));
+
+for(const role of ['contributor','client','viewer'])for(const path of ['/customers','/work'])test(role+' cannot read protected customer and booking hubs '+path,()=>assert.equal(can(role,path,'GET'),false));
+for(const role of ['owner','manager','editor'])for(const path of ['/customers','/work'])test(role+' can read customer and booking hubs '+path,()=>assert.equal(can(role,path,'GET'),true));

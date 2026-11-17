@@ -10,6 +10,7 @@ export function requiredWorkspacePermission(path:string,method:string):string|nu
  if(path==='/switch')return null;
  if(/^\/(onboarding|business-type|assistant|radar|revenue-mode)(\/|$)/.test(path))return write?'manage_workspace_settings':null;
  if(path.startsWith('/receptionist/connect')||path.startsWith('/receptionist/calendar')||path.startsWith('/receptionist/google-calendar')||path.startsWith('/settings/connections'))return 'manage_social_accounts';
+ if(['/customers','/work'].includes(path))return 'use_inbox';
  if(path==='/receptionist')return 'use_inbox';
  if(path.startsWith('/billing'))return write?'manage_workspace_settings':null;
  if(/^\/approvals(\/|$)/.test(path))return 'approve_posts';
