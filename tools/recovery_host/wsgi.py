@@ -21,9 +21,7 @@ def _synthetic_connect(self, address):
 
 socket.socket.connect = _synthetic_connect
 os.environ["DJANGO_SETTINGS_MODULE"] = "tools.recovery_host.settings"
-from django.core.wsgi import (
-    get_wsgi_application,  # noqa: E402 - initialize guarded Django environment before app imports
-)
+from django.core.wsgi import get_wsgi_application  # noqa: E402
 
 app = get_wsgi_application()
 from django.db import connection  # noqa: E402 - initialize guarded Django environment before app imports

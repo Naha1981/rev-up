@@ -4,7 +4,7 @@ import os
 from urllib.parse import urlsplit
 
 from config.settings.base import *  # noqa: F403 - standard Django settings inheritance
-from config.settings.base import BASE_DIR, EMAIL_BACKEND_TYPE, EMAIL_DAILY_SEND_LIMIT, RESEND_API_KEY
+from config.settings.base import BASE_DIR, EMAIL_BACKEND_TYPE, EMAIL_DAILY_SEND_LIMIT
 
 _synthetic = os.environ.get("REVUP_RECOVERY_SYNTHETIC") == "1"
 if not _synthetic and os.environ.get("REVUP_RECOVERY_ONLY") != "1":
@@ -21,7 +21,7 @@ else:
         raise RuntimeError("Wrong recovery origin")
     if _database.hostname != "ep-sweet-mode-baxh02a8.c-8.eu-central-1.aws.neon.tech" or _database.path != "/revup":
         raise RuntimeError("Wrong shared authentication database")
-    if EMAIL_BACKEND_TYPE != "resend" or not RESEND_API_KEY:
+    if EMAIL_BACKEND_TYPE != "resend" or not os.environ.get("RESEND_API_KEY"):
         raise RuntimeError("Existing HTTPS transactional mail configuration required")
 DEBUG = False
 ALLOWED_HOSTS = [_origin.hostname, "localhost", "127.0.0.1"]

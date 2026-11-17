@@ -94,7 +94,11 @@ class Handler(BaseHTTPRequestHandler):
             r = client.generic(q["method"], q["path"], data=base64.b64decode(q.get("body", "")), **kw)
             headers = list(r.headers.items())
             headers.extend([("set-cookie", x.OutputString()) for x in r.cookies.values()])
-            out = {"status": r.status_code, "headers": headers, "body": base64.b64encode(r.content).decode()}
+            out = {
+                "status": r.status_code,
+                "headers": headers,
+                "body": base64.b64encode(b"".join(r.streaming_content) if r.streaming else r.content).decode(),
+            }
         b = json.dumps(out).encode()
         self.send_response(200)
         self.send_header("Content-Length", len(b))
