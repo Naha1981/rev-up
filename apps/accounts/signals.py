@@ -1,6 +1,6 @@
 import re
 
-from allauth.account.signals import user_signed_up
+from allauth.account.signals import password_reset, user_signed_up
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
@@ -211,9 +211,9 @@ def apply_web_presence_on_signup(sender, request, user, **kwargs):
         updates.append("updated_at")
         workspace.save(update_fields=updates)
 
+
 # Worker auth shares this user table but not Django's session hash invalidation.
 # A successful allauth password reset must revoke its existing sessions too.
-from allauth.account.signals import password_reset
 
 
 @receiver(password_reset, dispatch_uid="accounts.revoke_worker_sessions_after_reset")
