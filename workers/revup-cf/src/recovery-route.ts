@@ -17,7 +17,7 @@ export async function recoveryResponse(req:Request,service?:RecoveryService):Pro
  const headers=new Headers(req.headers);headers.delete('authorization');
  const cookie=(headers.get('cookie')||'').split(';').map(x=>x.trim()).filter(x=>/^(csrftoken|sessionid)=/.test(x)).join('; ');
  if(cookie)headers.set('cookie',cookie);else headers.delete('cookie');
- const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),75000);
  try{
   const upstream=await service.fetch(new Request(url,{method:req.method,headers,body:req.method==='POST'?await req.arrayBuffer():undefined,redirect:'manual',signal:controller.signal}));
   if(upstream.status>=500)return unavailable();
