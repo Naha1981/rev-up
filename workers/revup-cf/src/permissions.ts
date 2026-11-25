@@ -13,6 +13,7 @@ export function requiredWorkspacePermission(path:string,method:string):string|nu
  if(['/customers','/work'].includes(path))return 'use_inbox';
  if(path==='/receptionist')return 'use_inbox';
  if(path.startsWith('/billing'))return write?'manage_workspace_settings':null;
+ if(/^\/posts\/[0-9a-f-]{36}\/schedule$/.test(path))return 'publish_directly';
  if(/^\/approvals(\/|$)/.test(path))return 'approve_posts';
  if(/^\/media(\/|$)/.test(path))return write?(path.endsWith('/delete')?'delete_media':'upload_media'):'create_posts';
  if(/^\/(posts|team|pages)(\/|$)/.test(path))return 'create_posts';

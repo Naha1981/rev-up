@@ -20,3 +20,10 @@ test('only exact recovery assets proxy, never traversal or static POST',async()=
  const{isRecoveryAsset}=await import('../dist-test/recovery-route.mjs');assert.equal(isRecoveryAsset('/static/css/dist/styles.css'),true);for(const path of ['/static/../secret','/static/secrets.json','/static/css/dist/styles.css/'])assert.equal(isRecoveryAsset(path),false);
  let called=false;const r=await recoveryResponse(new Request(origin+'/static/css/dist/styles.css',{method:'POST',headers:{origin}}),{fetch:async()=>{called=true;return new Response('bad')}});assert.equal(r.status,405);assert.equal(called,false);
 });
+
+test('embedded brand image works without recovery service or database',async()=>{
+ const{default:worker}=await import('../dist-test/index.mjs');
+ const r=await worker.fetch(new Request(origin+'/static/brand/revup-light.png'),{},{});
+ assert.equal(r.status,200);assert.equal(r.headers.get('content-type'),'image/png');
+ const bytes=new Uint8Array(await r.arrayBuffer());assert.deepEqual([...bytes.slice(0,8)],[137,80,78,71,13,10,26,10]);assert.ok(bytes.length>1000);
+});

@@ -15,3 +15,7 @@ test('switch workspace permission is handled by membership check',()=>assert.equ
 
 for(const role of ['contributor','client','viewer'])for(const path of ['/customers','/work'])test(role+' cannot read protected customer and booking hubs '+path,()=>assert.equal(can(role,path,'GET'),false));
 for(const role of ['owner','manager','editor'])for(const path of ['/customers','/work'])test(role+' can read customer and booking hubs '+path,()=>assert.equal(can(role,path,'GET'),true));
+
+test('social scheduling requires publishing authority, not drafting or client approval',()=>{
+ const p='/posts/00000000-0000-4000-8000-000000000001/schedule';for(const r of ['owner','manager'])assert.equal(can(r,p),true);for(const r of ['editor','contributor','client','viewer','unknown'])assert.equal(can(r,p),false);
+});

@@ -1014,6 +1014,13 @@ export async function analyticsPage(db: Pool, user: any, mem: any): Promise<stri
 <div class="card"><h2>Review-link clicks by day</h2>${clicksByDay.rows.length ? `<table><tr><th>Day</th><th>Clicks</th></tr>${clickRows}</table>` : `<p class="mut">No clicks yet.</p>`}</div>`, user);
 }
 
+export function socialScheduleTime(input:string,now=Date.now()):string|null{
+ if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(input))return null;
+ const d=new Date(input+':00+02:00'),time=d.getTime();
+ if(!Number.isFinite(time)||new Date(time+7200000).toISOString().slice(0,16)!==input||time<=now||time>now+366*86400000)return null;
+ return d.toISOString();
+}
+
 export async function postsPage(db: Pool, user: any, mem: any): Promise<string> {
   const r = await db.query(
     `SELECT p.id, p.title, p.caption, p.scheduled_at, p.published_at, p.created_at,
@@ -1029,12 +1036,13 @@ export async function postsPage(db: Pool, user: any, mem: any): Promise<string> 
     // Match the shared composer model: a post without channel children is a draft.
     const sts = linkedStatuses.length ? linkedStatuses : ["draft"];
     const allDraft = linkedStatuses.length > 0 && sts.every((st: string) => st === "draft");
+    const canSchedule=linkedStatuses.length>0&&sts.every((st:string)=>st==="approved")&&hasWorkspacePermission(mem,"publish_directly")&&mem.plan==="business-pro"&&mem.subscription_status==="active";
     return `<tr>
 <td data-label="Post"><b>${esc(x.title || "(untitled)")}</b><br><span class="mut">${esc((x.caption || "").slice(0, 120))}</span></td>
 <td data-label="Status">${sts.map((st: string) => `<span class="pill ${st === "approved" || st === "published" ? "ok" : ""}">${esc(st)}</span> `).join("")}</td>
 <td class="mut" data-label="Channels">${esc(x.channels || "No channel selected")}</td>
 <td class="mut" data-label="When">${x.scheduled_at ? new Date(x.scheduled_at).toLocaleString("en-ZA") : new Date(x.created_at).toLocaleDateString("en-ZA")}</td>
-<td data-label="Action">${allDraft ? `<form class="inline" method="post" action="/posts/${x.id}/submit"><button>Submit for review</button></form>` : ""}</td></tr>`;
+<td data-label="Action">${allDraft ? `<form class="inline" method="post" action="/posts/${x.id}/submit"><button>Submit for review</button></form>` : ""}${canSchedule ? `<form method="post" action="/posts/${x.id}/schedule"><label>Publish time (South Africa)<input type="datetime-local" name="when" required></label><button>Schedule approved post</button></form>` : ""}</td></tr>`;
   }).join("");
   return layout("Posts", `
 <p><a class="btn btn-primary" href="/posts/new">New post</a></p>
@@ -1268,6 +1276,9 @@ async function handle(req: Request, env: Env,ctx?:ContinuationContext): Promise<
       try { return await handlePayfastItn(db, env, req); } finally { await db.end().catch(() => {}); }
     }
 
+    // The shared brand image is embedded here, independent of the recovery backend.
+    if (path === "/static/brand/revup-light.png") return new Response(Uint8Array.from(atob(LOGO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
+
     // Reuse the existing shared-database recovery flow, including its email,
     // expiring tokens and single-use checks. Do not invent a second reset system.
     if (isRecoveryPath(path)||isRecoveryAsset(path)) return recoveryResponse(req,env.RECOVERY_SERVICE||hostedRecoveryService(env.RECOVERY_BACKEND_ORIGIN));
@@ -1426,7 +1437,6 @@ async function handle(req: Request, env: Env,ctx?:ContinuationContext): Promise<
       if (path === "/static/brand/favicon-32.png") return new Response(Uint8Array.from(atob(FAVICON_32_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/brand/favicon-16.png") return new Response(Uint8Array.from(atob(FAVICON_16_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/brand/apple-touch-icon.png" || path === "/apple-touch-icon.png") return new Response(Uint8Array.from(atob(APPLE_TOUCH_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
-      if (path === "/static/brand/revup-light.png") return new Response(Uint8Array.from(atob(LOGO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/brand/revup-og.png" || path === "/static/brand/revup-og-v2.png") return new Response(Uint8Array.from(atob(OG_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/qrcode.js") return new Response(QRCODE_LIB, { headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "public, max-age=86400" } });
       const user = await getUser(req, db);
@@ -1716,7 +1726,6 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
       if (path === "/static/brand/favicon-16.png") return new Response(Uint8Array.from(atob(FAVICON_16_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/brand/apple-touch-icon.png" || path === "/apple-touch-icon.png") return new Response(Uint8Array.from(atob(APPLE_TOUCH_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (path === "/static/brand/revup-og.png" || path === "/static/brand/revup-og-v2.png") return new Response(Uint8Array.from(atob(OG_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
-      if (path === "/static/brand/revup-light.png") return new Response(Uint8Array.from(atob(LOGO_B64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
 
       if (path === "/onboarding") {
         if (req.method === "POST") {
@@ -2031,6 +2040,24 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
       }
       const cm = /^\/inbox\/([0-9a-f-]{36})$/.exec(path);
       if (cm) return conversationPage(db, user, mem, cm[1], env);
+
+      const schedulePost=/^\/posts\/([0-9a-f-]{36})\/schedule$/.exec(path);
+      if(schedulePost && req.method==='POST'){
+        if(mem.plan!=='business-pro'||mem.subscription_status!=='active')return html(layout('Plan required','<p>An active Business Pro plan is required to schedule posts.</p>',user),403);
+        const f=await formData(req),at=socialScheduleTime(f.when||'');
+        if(!at)return redirect('/posts?msg='+encodeURIComponent('Choose a valid future publish time in South African time, within one year.'));
+        const client=await db.connect();
+        try{
+          await client.query('BEGIN');
+          const rows=await client.query(`SELECT pp.id,pp.status,p.media_id FROM composer_platform_post pp JOIN composer_post p ON p.id=pp.post_id WHERE p.id=$1 AND p.workspace_id=$2 FOR UPDATE OF pp`,[schedulePost[1],mem.workspace_id]);
+          if(!rows.rows.length||rows.rows.some((p:any)=>p.status!=='approved')){await client.query('ROLLBACK');return redirect('/posts?msg='+encodeURIComponent('Nothing scheduled. Every connected channel must be approved first.'));}
+          if(rows.rows.some((p:any)=>p.media_id)){await client.query('ROLLBACK');return redirect('/posts?msg='+encodeURIComponent('Nothing scheduled. This saved image is not yet connected to the publishing pipeline.'));}
+          await client.query(`UPDATE composer_platform_post SET status='scheduled',scheduled_at=$1,retry_count=0,next_retry_at=NULL,publish_error='',updated_at=now() WHERE post_id=$2 AND status='approved'`,[at,schedulePost[1]]);
+          await client.query(`UPDATE composer_post SET scheduled_at=$1,updated_at=now() WHERE id=$2 AND workspace_id=$3`,[at,schedulePost[1],mem.workspace_id]);
+          await client.query(`INSERT INTO approvals_approval_action(id,post_id,platform_post_id,user_id,action,comment,created_at) VALUES($1,$2,NULL,$3,'scheduled',$4,now())`,[crypto.randomUUID(),schedulePost[1],user.id,'Scheduled for '+at]);
+          await client.query('COMMIT');return redirect('/posts?msg='+encodeURIComponent('Post scheduled. Publication is confirmed only when its status is published.'));
+        }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
+      }
 
       const sm = /^\/posts\/([0-9a-f-]{36})\/submit$/.exec(path);
       if (sm && req.method === "POST") {

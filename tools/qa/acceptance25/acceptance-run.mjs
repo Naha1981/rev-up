@@ -16,4 +16,5 @@ try {
  const {spawn}=await import('node:child_process');const server=spawn('node',[ROOT+'/tools/qa/acceptance25/bridge.mjs'],{cwd:WORK,stdio:['ignore','pipe','pipe']});await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Synthetic bridge did not become ready')),10000);server.once('error',reject);server.once('exit',code=>reject(Error('Synthetic bridge exited '+code)));server.stdout.once('data',()=>{clearTimeout(timer);resolve();});});
  try{const journey=spawnSync('node',[ROOT+'/tools/qa/acceptance25/journey.mjs'],{cwd:WORK,env,encoding:'utf8',timeout:120000});console.log(journey.stdout,journey.stderr,'journey-exit',journey.status);if(journey.status!==0)throw Error('Browser acceptance failed');}finally{server.kill();}
 
+ const recovery=spawnSync('node',[ROOT+'/tools/qa/acceptance25/browser-proof.mjs'],{cwd:WORK,env:{...env,REVUP_QA_PYTHON:process.env.REVUP_QA_PYTHON||WORK+'/pyenv312/bin/python',REVUP_QA_WORK:WORK},encoding:'utf8',timeout:90000});console.log('recovery',recovery.stdout,recovery.stderr,recovery.status);if(recovery.status!==0)throw Error('Synthetic recovery acceptance failed');
 }finally{await pg.stop();}
