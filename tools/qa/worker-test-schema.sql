@@ -4,6 +4,7 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE IF NOT EXISTS cf_sessions(token_hash text PRIMARY KEY,user_id uuid NOT NULL,device_info text NOT NULL DEFAULT '',expires_at timestamptz NOT NULL,last_seen_at timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS cf_ratelimit(key text PRIMARY KEY,count integer NOT NULL);
+CREATE TABLE IF NOT EXISTS cf_prospect_link(id uuid PRIMARY KEY,workspace_id uuid NOT NULL REFERENCES workspaces_workspace(id),slug varchar(24) NOT NULL UNIQUE,prospect_name varchar(200) NOT NULL,target_url varchar(500) NOT NULL,click_count integer NOT NULL DEFAULT 0,first_clicked_at timestamptz,last_clicked_at timestamptz,created_at timestamptz NOT NULL DEFAULT now());
 ALTER TABLE organizations_organization ADD COLUMN IF NOT EXISTS goals jsonb NOT NULL DEFAULT '[]';
 ALTER TABLE menus_item ADD COLUMN IF NOT EXISTS is_special boolean NOT NULL DEFAULT false;
 ALTER TABLE receptionist_booking ADD COLUMN IF NOT EXISTS table_label varchar(40) NOT NULL DEFAULT '';

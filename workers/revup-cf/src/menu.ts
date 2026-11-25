@@ -159,7 +159,7 @@ button{margin-top:18px;width:100%;padding:14px;border:0;border-radius:12px;backg
 <h1>${esc(bizName)}</h1>
 <p class="sub">Menu &amp; ordering</p>
 ${err ? `<p class="err">${esc(err)}</p>` : ""}
-${sent ? `<div class="sent"><h2 style="margin-top:0">Order sent</h2><p>Thanks - the restaurant has your order and will confirm it on WhatsApp shortly.</p></div>` : ""}
+${sent ? `<div class="sent"><h2 style="margin-top:0">Order sent</h2><p>Thanks - the restaurant has your order. This confirms receipt, not acceptance or payment. Please wait for the business to confirm.</p></div>` : ""}
 ${specialBanner}
 ${items.length ? orderForm : `<p class="sub">The menu is being updated - please check back soon.</p>`}
 <p class="foot">Powered by RevUp</p>

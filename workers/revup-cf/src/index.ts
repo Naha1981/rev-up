@@ -770,7 +770,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
 <label>Amount (R)<input name="amount" type="number" min="0" step="0.01" required style="width:140px"></label>
 <label>Chase on<input name="follow_up_on" type="date"></label>
 <button>Save quote</button></form>
-<p class="mut">Mark it sent when it goes out - a linked customer gets it on WhatsApp too. Chase rows highlight when the follow-up day arrives.</p></div>
+<p class="mut">Mark it sent to record your own handoff. For linked customers, WhatsApp delivery is attempted only when allowed; this status is not a delivery receipt. Chase rows highlight when the follow-up day arrives.</p></div>
 <p class="mut quote-total">Won so far: <b>R${won.toLocaleString("en-ZA", { minimumFractionDigits: 2 })}</b></p>
 <div class="card">${r.rows.length ? `<table class="action-table"><tr><th>Customer</th><th>Amount</th><th>Status</th><th></th></tr>${rows}</table>` : `<p class="mut">No quotes yet.</p>`}</div>`, user);
 }
@@ -1136,9 +1136,20 @@ ${calendarPanel(calendar,calendarConfigured(env))}
       
 }
 
+// Cookie-authenticated browser mutations must carry a same-origin Origin.
+// Public forms and signed service callbacks keep their own validation paths.
+export function mutationOriginAllowed(req:Request):boolean {
+  if(['GET','HEAD','OPTIONS'].includes(req.method))return true;
+  const u=new URL(req.url),path=u.pathname;
+  const browserAccount=['/login','/signup','/logout'].includes(path);
+  const publicService=/^\/(webhooks\/|billing\/payfast-itn$|oauth\/|mcp(?:\/|$)|api\/)/.test(path)||/^\/(f|m)\/[0-9a-f-]{36}(?:\/order)?$/.test(path)||path==='/vault/save';
+  const session=/(?:^|;\s*)cf_session=/.test(req.headers.get('cookie')||'');
+  return (!browserAccount&&(!session||publicService))||req.headers.get('origin')===u.origin;
+}
+
 export default {
   async fetch(req: Request, env: Env, ctx?:ContinuationContext): Promise<Response> {
-    const res = await handle(req, env,ctx);
+    const res = mutationOriginAllowed(req) ? await handle(req, env,ctx) : html(layout('Request not allowed','<p>Open RevUp and try again from the business screen.</p>'),403);
     return securityResponse(res, new URL(req.url).pathname);
   },
   async scheduled(_event: any, env: Env, ctx: any): Promise<void> {
@@ -2079,7 +2090,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
           const svc = await db.query(`SELECT service FROM receptionist_booking WHERE id=$1`, [b.id]);
           const remId = await scheduleServiceReminder(db, mem.workspace_id, b.id, b.contact_id, svc.rows[0]?.service || "");
           const extra = remId ? " A service reminder is scheduled too." : "";
-          return redirect("/bookings?msg=" + encodeURIComponent((evId ? "Marked done - the review check-in goes out in 15 minutes." : "Marked done. (This customer opted out of messages.)") + extra + loyaltyNote));
+          return redirect("/bookings?msg=" + encodeURIComponent((evId ? "Marked done - a review check-in is queued for after 15 minutes, subject to connection and sending checks." : "Marked done. (This customer opted out of messages.)") + extra + loyaltyNote));
         }
         if (bact[2] === "cancel" && ["requested", "confirmed"].includes(b.status)) {
           try {await calendarSync(db,env,mem.workspace_id,b,true);}
@@ -2211,7 +2222,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
       const qact = /^\/quotes\/([0-9a-f-]{36})\/(sent|won|lost)$/.exec(path);
       if (qact && req.method === "POST") {
         const out = await quoteAction(db, env, mem.workspace_id, qact[1], qact[2]);
-        return redirect("/quotes?msg=" + encodeURIComponent(out === "marked sent" ? "Marked sent (WhatsApp too, when the customer is linked and reachable)." : out === "no change" ? "That change does not apply to this quote." : `Quote ${out}.`));
+        return redirect("/quotes?msg=" + encodeURIComponent(out === "marked sent" ? "Marked sent by you. This does not confirm WhatsApp delivery." : out === "no change" ? "That change does not apply to this quote." : `Quote ${out}.`));
       }
 
       if (path === "/campaigns") {
@@ -2229,7 +2240,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
         const f = await formData(req);
         try {
           await campaignApprove(db, mem.workspace_id, capp[1], String(f.when || ""));
-          return redirect("/campaigns?msg=" + encodeURIComponent("Approved. The send starts within 15 minutes."));
+          return redirect("/campaigns?msg=" + encodeURIComponent("Approved and queued. Delivery is subject to connection, consent and sending checks."));
         } catch (e: any) { return redirect("/campaigns?msg=" + encodeURIComponent(String(e?.message || e))); }
       }
       const ccan = /^\/campaigns\/([0-9a-f-]{36})\/cancel$/.exec(path);
@@ -2308,7 +2319,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
       if (path === "/reviews/pipeline" && req.method === "POST") {
         const f = await formData(req);
         const id = await startPipeline(db, mem.workspace_id, f.contact_id || "", null);
-        return redirect("/reviews?msg=" + encodeURIComponent(id ? "Visit marked done - check-in goes out in 15 minutes." : "That customer has opted out, so nothing was scheduled."));
+        return redirect("/reviews?msg=" + encodeURIComponent(id ? "Visit marked done - a check-in is queued for after 15 minutes, subject to connection and sending checks." : "That customer has opted out, so nothing was scheduled."));
       }
 
       if (path === "/reviews/resolve" && req.method === "POST") {

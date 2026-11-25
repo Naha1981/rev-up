@@ -41,6 +41,8 @@ test('publicMenuHtml: empty menu says it is being updated, no order form', () =>
 test('publicMenuHtml: sent state shows confirmation instead of the form', () => {
   const html = publicMenuHtml('X', [{ id: 'a', name: 'Kota', price: '10.00', is_special: false, is_available: true, category_name: null }], 'ws-1', true, '');
   assert.match(html, /Order sent/);
+  assert.match(html, /receipt, not acceptance or payment/);
+  assert.ok(!html.includes('will confirm it on WhatsApp shortly'));
   assert.ok(!/<button type="submit">Send order<\/button>/.test(html));
 });
 
