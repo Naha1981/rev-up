@@ -1014,6 +1014,13 @@ export async function analyticsPage(db: Pool, user: any, mem: any): Promise<stri
 <div class="card"><h2>Review-link clicks by day</h2>${clicksByDay.rows.length ? `<table><tr><th>Day</th><th>Clicks</th></tr>${clickRows}</table>` : `<p class="mut">No clicks yet.</p>`}</div>`, user);
 }
 
+export function safeLibraryImage(mime:string,b:Uint8Array):boolean{
+ const hex=Buffer.from(b.slice(0,12)).toString('hex');
+ return (mime==='image/png'&&hex.startsWith('89504e470d0a1a0a'))||(mime==='image/jpeg'&&hex.startsWith('ffd8ff'))||(mime==='image/gif'&&(hex.startsWith('474946383761')||hex.startsWith('474946383961')))||(mime==='image/webp'&&hex.startsWith('52494646')&&hex.slice(16,24)==='57454250');
+}
+
+export function validPublishedMediaGrant(g:any,id:string,now=Date.now()):boolean{return !!g&&g.media===id&&/^[0-9a-f-]{36}$/.test(g.post||'')&&Number.isSafeInteger(g.exp)&&g.exp>now&&g.exp<=now+3600000;}
+
 export function socialScheduleTime(input:string,now=Date.now()):string|null{
  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(input))return null;
  const d=new Date(input+':00+02:00'),time=d.getTime();
@@ -1224,6 +1231,18 @@ async function handle(req: Request, env: Env,ctx?:ContinuationContext): Promise<
         await db.end().catch(() => {});
         return json({ ok: false, error: String(e).slice(0, 200) }, 500);
       }
+    }
+
+    const sharedMedia=/^\/published-media\/([0-9a-f-]{36})$/.exec(path);
+    if(sharedMedia){
+      if(req.method!=='GET')return new Response('Method not allowed',{status:405});
+      let grant:any;try{grant=JSON.parse(await decryptTenantKey(url.searchParams.get('token')||'',env));}catch{return new Response('Not found',{status:404});}
+      if(!validPublishedMediaGrant(grant,sharedMedia[1]))return new Response('Not found',{status:404});
+      const db=pool(env);try{
+        const r=await db.query(`SELECT m.mime,m.data FROM cf_media m JOIN composer_post p ON p.media_id=m.id AND p.workspace_id=m.workspace_id WHERE m.id=$1 AND p.id=$2 AND EXISTS(SELECT 1 FROM composer_platform_post pp WHERE pp.post_id=p.id AND pp.status IN ('scheduled','publishing','published'))`,[sharedMedia[1],grant.post]);
+        if(!r.rows[0])return new Response('Not found',{status:404});
+        return new Response(new Uint8Array(r.rows[0].data),{headers:{'content-type':r.rows[0].mime,'cache-control':'no-store','referrer-policy':'no-referrer'}});
+      }finally{await db.end().catch(()=>{});}
     }
 
     // ChatGPT app: OAuth 2.1 + read-only MCP server + privacy page (all public endpoints).
@@ -1811,6 +1830,7 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}
           if (Number(caps.rows[0].c) >= 25) return redirect("/media?err=" + encodeURIComponent("Library full (25 images on the free library) - delete one first."));
           if (Number(caps.rows[0].b) + file.size > 50 * 1024 * 1024) return redirect("/media?err=" + encodeURIComponent("Library storage limit reached (50 MB) - delete something first."));
           const buf = Buffer.from(await file.arrayBuffer());
+          if(!safeLibraryImage(file.type,buf))return redirect('/media?err='+encodeURIComponent('Use a valid PNG, JPEG, WebP or GIF image.'));
           await db.query(`INSERT INTO cf_media(id,workspace_id,filename,mime,size,data) VALUES($1,$2,$3,$4,$5,$6)`,
             [crypto.randomUUID(), mem.workspace_id, (file.name || "image").slice(0, 200), file.type, file.size, buf]);
           return redirect("/media?msg=" + encodeURIComponent("Image added to your library."));
@@ -1840,6 +1860,8 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
 
       const mdel = /^\/media\/([0-9a-f-]{36})\/delete$/.exec(path);
       if (mdel && req.method === "POST") {
+        const used=await db.query('SELECT 1 FROM composer_post WHERE media_id=$1 AND workspace_id=$2 LIMIT 1',[mdel[1],mem.workspace_id]);
+        if(used.rows.length)return redirect('/media?err='+encodeURIComponent('This image is attached to a saved post and cannot be deleted.'));
         await db.query(`DELETE FROM cf_media WHERE id=$1 AND workspace_id=$2`, [mdel[1], mem.workspace_id]);
         return redirect("/media?msg=" + encodeURIComponent("Image deleted."));
       }
@@ -2051,7 +2073,6 @@ ${msg ? `<p class="ok">${esc(msg)}</p>` : ""}${err ? `<p class="bad">${esc(err)}
           await client.query('BEGIN');
           const rows=await client.query(`SELECT pp.id,pp.status,p.media_id FROM composer_platform_post pp JOIN composer_post p ON p.id=pp.post_id WHERE p.id=$1 AND p.workspace_id=$2 FOR UPDATE OF pp`,[schedulePost[1],mem.workspace_id]);
           if(!rows.rows.length||rows.rows.some((p:any)=>p.status!=='approved')){await client.query('ROLLBACK');return redirect('/posts?msg='+encodeURIComponent('Nothing scheduled. Every connected channel must be approved first.'));}
-          if(rows.rows.some((p:any)=>p.media_id)){await client.query('ROLLBACK');return redirect('/posts?msg='+encodeURIComponent('Nothing scheduled. This saved image is not yet connected to the publishing pipeline.'));}
           await client.query(`UPDATE composer_platform_post SET status='scheduled',scheduled_at=$1,retry_count=0,next_retry_at=NULL,publish_error='',updated_at=now() WHERE post_id=$2 AND status='approved'`,[at,schedulePost[1]]);
           await client.query(`UPDATE composer_post SET scheduled_at=$1,updated_at=now() WHERE id=$2 AND workspace_id=$3`,[at,schedulePost[1],mem.workspace_id]);
           await client.query(`INSERT INTO approvals_approval_action(id,post_id,platform_post_id,user_id,action,comment,created_at) VALUES($1,$2,NULL,$3,'scheduled',$4,now())`,[crypto.randomUUID(),schedulePost[1],user.id,'Scheduled for '+at]);

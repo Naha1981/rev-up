@@ -736,6 +736,13 @@ class PublishEngine:
             if media_type:
                 media_items.append({"type": media_type, "url": url})
 
+        # Worker-native library image. A short-lived, post-bound encrypted grant
+        # lets the publishing provider fetch only this scheduled attachment.
+        from apps.publisher.native_media import native_media_item
+        native = native_media_item(platform_post.post_id)
+        if native:
+            media_items.append(native)
+
         slug = zernio_slug_for(account.platform)
         with ZernioClient() as client:
             outcome = client.create_post(
